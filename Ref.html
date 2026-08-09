@@ -1,0 +1,564 @@
+<!--
+  ============================================================================
+  Visits Log  —  Dataverse HTML Web Resource
+  ----------------------------------------------------------------------------
+  Table (logical)  : cr301_visit   (entity set auto-resolved from metadata)
+  ----------------------------------------------------------------------------
+  Field mapping:
+    • Visit Type   ← cr301_visittype   (choice: Single / Double)
+    • Company      ← cr301_account     (LOOKUP → cr301_accounts, Insurance only)
+    • Company Code ← read from the selected account (cr301_accountcode)
+    • Task Owner   ← cr301_agent       (LOOKUP → cr301_agent, cfm_iscollection=true)
+    • Task Owner 2 ← 2nd agent lookup  (auto-discovered; used on Double visit)
+    • Visit Date   ← cr301_visitdate
+    • Category     ← cfm_category      (global choice: Collection Category)
+                     Partially Closed 766340000 · Closed 766340001 · Open 766340002
+    • Revisit Date ← cfm_revisitdate   (optional)
+    • Comments     ← cr301_notes
+  All entity-set names + lookup nav properties are auto-resolved from metadata.
+  ============================================================================
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Visits Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<style>
+  :root{
+    --brown:#2b160a; --gold:#a5845b; --cream:#f7f4ee;
+    --ink:#2b160a; --muted:#8a7a6c; --line:#e7ded2;
+    --card:#ffffff; --bg:#f7f4ee;
+    --ok:#2f7d5b; --okbg:#e6f3ec;
+    --warn:#b06a1f; --warnbg:#fbeede;
+    --bad:#b03636; --badbg:#f8e6e6;
+    --info:#2f5d7d; --infobg:#e6eef3;
+    --shadow:0 1px 2px rgba(43,22,10,.06),0 8px 24px rgba(43,22,10,.06);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;font-size:14px}
+  .wrap{padding:20px 24px;max-width:1400px;margin:0 auto}
+  .head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+  .title{font-family:'Outfit',sans-serif;font-weight:700;font-size:24px;letter-spacing:-.02em;margin:0}
+  .sub{color:var(--muted);font-size:13px;margin-top:3px}
+  .actions{display:flex;gap:8px;flex-shrink:0}
+  .btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 14px;border-radius:9px;font-family:'Outfit',sans-serif;font-weight:600;font-size:13px;cursor:pointer;transition:.15s;white-space:nowrap}
+  .btn:hover{background:#fbf8f2;border-color:var(--gold)}
+  .btn-primary{background:var(--brown);color:#fff;border-color:var(--brown)}
+  .btn-primary:hover{background:#3c2110;border-color:#3c2110}
+  .btn-ghost{background:transparent}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow)}
+  .kpi .lab{color:var(--muted);font-size:12px;font-weight:500;display:flex;align-items:center;gap:7px}
+  .kpi .lab i{color:var(--gold)}
+  .kpi .val{font-family:'Outfit',sans-serif;font-weight:700;font-size:26px;margin-top:6px;letter-spacing:-.02em}
+
+  .bar{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;box-shadow:var(--shadow);margin-bottom:14px}
+  .search{flex:1;min-width:220px;position:relative}
+  .search i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
+  .search input{width:100%;padding:9px 12px 9px 34px;border:1px solid var(--line);border-radius:9px;font-family:'Inter';font-size:13px;background:#fbf8f2}
+  .search input:focus{outline:none;border-color:var(--gold);background:#fff}
+  select.f{padding:9px 12px;border:1px solid var(--line);border-radius:9px;font-family:'Inter';font-size:13px;background:#fbf8f2;cursor:pointer;min-width:150px}
+  select.f:focus{outline:none;border-color:var(--gold)}
+
+  .tablewrap{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+  table{width:100%;border-collapse:collapse}
+  thead th{background:#fbf8f2;color:var(--muted);text-transform:uppercase;font-size:11px;letter-spacing:.06em;font-weight:600;text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);white-space:nowrap}
+  tbody td{padding:13px 16px;border-bottom:1px solid var(--line);font-size:13.5px;vertical-align:top}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:#fbf8f2;cursor:pointer}
+  .owner{font-family:'Outfit',sans-serif;font-weight:600}
+  .company{font-family:'Outfit',sans-serif;font-weight:600}
+  .code{font-family:'JetBrains Mono',monospace;color:var(--gold);font-size:12.5px}
+  .muted{color:var(--muted)}
+  .notes{color:var(--muted);max-width:280px;white-space:normal;line-height:1.4}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:600;font-family:'Outfit'}
+  .cat-open{background:var(--infobg);color:var(--info)}
+  .cat-partial{background:var(--warnbg);color:var(--warn)}
+  .cat-closed{background:var(--okbg);color:var(--ok)}
+  .cat-none{background:#eee;color:#999}
+  .vt{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
+  .vt.double{color:var(--gold);font-weight:600}
+
+  .state{padding:48px 20px;text-align:center;color:var(--muted)}
+  .state i{font-size:28px;color:var(--line);margin-bottom:10px;display:block}
+  .skel{height:14px;background:linear-gradient(90deg,#f0e9df 25%,#f7f2ea 50%,#f0e9df 75%);background-size:200% 100%;animation:sh 1.2s infinite;border-radius:5px}
+  @keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+  .foot{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;color:var(--muted);font-size:12.5px;flex-wrap:wrap;gap:10px}
+  .pg{display:flex;gap:4px;align-items:center}
+  .pg button{border:1px solid var(--line);background:#fff;padding:6px 10px;border-radius:7px;cursor:pointer;font-family:'Inter';font-size:12px}
+  .pg button:disabled{opacity:.4;cursor:default}
+  .pg button.active{background:var(--brown);color:#fff;border-color:var(--brown)}
+
+  .scrim{position:fixed;inset:0;background:rgba(43,22,10,.4);opacity:0;pointer-events:none;transition:.2s;z-index:40}
+  .scrim.on{opacity:1;pointer-events:auto}
+  .drawer{position:fixed;top:0;right:0;height:100%;width:440px;max-width:92vw;background:#fff;box-shadow:-8px 0 40px rgba(43,22,10,.18);transform:translateX(100%);transition:transform .24s cubic-bezier(.4,0,.2,1);z-index:50;display:flex;flex-direction:column}
+  .drawer.on{transform:translateX(0)}
+  .dhead{padding:20px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+  .dhead h2{margin:0;font-family:'Outfit';font-weight:700;font-size:19px;display:flex;align-items:center;gap:9px}
+  .dclose{border:none;background:none;font-size:18px;color:var(--muted);cursor:pointer;padding:4px}
+  .dbody{padding:22px;overflow-y:auto;flex:1}
+  .fld{margin-bottom:16px}
+  .fld label{display:block;font-size:12.5px;font-weight:600;color:var(--brown);margin-bottom:6px}
+  .fld input,.fld select,.fld textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-family:'Inter';font-size:14px;background:#fbf8f2}
+  .fld textarea{resize:vertical;min-height:74px}
+  .fld input:focus,.fld select:focus,.fld textarea:focus{outline:none;border-color:var(--gold);background:#fff}
+  .fld input[readonly]{background:#f2ece3;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:13px}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px}
+  .hint b{color:var(--brown)}
+  .ro-wrap{background:#f7f2ea;border:1px solid var(--line);border-radius:9px;padding:10px 12px}
+  .ro-wrap .rl{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+  .ro-wrap .rv{font-family:'JetBrains Mono',monospace;font-size:13px;margin-top:3px}
+  .dfoot{padding:16px 22px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+  .err{background:var(--badbg);color:var(--bad);padding:9px 12px;border-radius:8px;font-size:12.5px;margin-bottom:14px;display:none}
+  .err.on{display:block}
+  .hidden{display:none}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--brown);color:#fff;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:500;opacity:0;pointer-events:none;transition:.25s;z-index:60}
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  @media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div>
+      <h1 class="title">Visits Log</h1>
+      <div class="sub">Recorded visits — Task Owner · Company · Visit Date · Category · Visit Type · Revisit · Comments</div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="btnAdd"><i class="fa-solid fa-plus"></i> Add Visit</button>
+      <button class="btn" id="btnExport"><i class="fa-solid fa-download"></i> Export</button>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="lab"><i class="fa-solid fa-clipboard-check"></i> Total Visits</div><div class="val" id="kTotal">—</div></div>
+    <div class="kpi"><div class="lab"><i class="fa-solid fa-building"></i> Unique Companies</div><div class="val" id="kCompanies">—</div></div>
+    <div class="kpi"><div class="lab"><i class="fa-solid fa-door-open"></i> Open</div><div class="val" id="kOpen">—</div></div>
+    <div class="kpi"><div class="lab"><i class="fa-solid fa-circle-check"></i> Closed</div><div class="val" id="kClosed">—</div></div>
+  </div>
+
+  <div class="bar">
+    <div class="search"><i class="fa-solid fa-magnifying-glass"></i>
+      <input id="q" placeholder="Search owner, company or notes…" /></div>
+    <select class="f" id="fCat">
+      <option value="">All Categories</option>
+      <option value="766340002">Open</option>
+      <option value="766340000">Partially Closed</option>
+      <option value="766340001">Closed</option>
+    </select>
+    <select class="f" id="fType">
+      <option value="">All Types</option>
+      <option value="single">Single visit</option>
+      <option value="double">Double visit</option>
+    </select>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr>
+        <th>Task Owner</th><th>Task Owner 2</th><th>Company</th><th>Visit Date</th>
+        <th>Category</th><th>Type</th><th>Revisit</th><th>Comments</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="foot">
+      <span id="count">—</span>
+      <div class="pg" id="pager"></div>
+      <select class="f" id="pageSize" style="min-width:90px">
+        <option value="15">15</option><option value="25">25</option>
+        <option value="50">50</option><option value="9999">All</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer">
+  <div class="dhead"><h2 id="dTitle"><i class="fa-solid fa-plus" style="color:var(--gold);font-size:16px"></i> Add Visit</h2>
+    <button class="dclose" id="dClose"><i class="fa-solid fa-xmark"></i></button></div>
+  <div class="dbody">
+    <div class="err" id="dErr"></div>
+
+    <div class="fld"><label>Company Name</label>
+      <select id="fAccount"><option value="">— Select company —</option></select></div>
+
+    <div class="fld"><div class="ro-wrap"><div class="rl">Company Code</div><div class="rv" id="fCode">—</div></div></div>
+
+    <div class="fld"><label>Task Owner</label>
+      <select id="fOwner"><option value="">— Select agent —</option></select></div>
+
+    <div class="fld"><label>Visit Date</label>
+      <input id="fDate" type="date" /></div>
+
+    <div class="fld"><label>Category</label>
+      <select id="fCatIn">
+        <option value="766340002">Open</option>
+        <option value="766340000">Partially Closed</option>
+        <option value="766340001">Closed</option>
+      </select></div>
+
+    <div class="fld"><label>Visit Type</label>
+      <select id="fVType">
+        <option value="single">Single visit</option>
+        <option value="double">Double visit</option>
+      </select></div>
+
+    <div class="fld hidden" id="owner2Wrap"><label>Task Owner 2</label>
+      <select id="fOwner2"><option value="">— Second agent —</option></select>
+      <div class="hint">The visit is counted as achieved for <b>both</b> task owners.</div></div>
+
+    <div class="fld"><label>Revisit Date <span class="muted">(optional)</span></label>
+      <input id="fRevisit" type="date" /></div>
+
+    <div class="fld"><label>Comments</label>
+      <textarea id="fNotes" placeholder="What was discussed / agreed / next steps…"></textarea></div>
+  </div>
+  <div class="dfoot">
+    <button class="btn btn-ghost" id="dCancel">Cancel</button>
+    <button class="btn btn-primary" id="dSave">Save Visit</button>
+  </div>
+</aside>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ======================= CONFIG ======================= */
+var API=(typeof Xrm!=="undefined"&&Xrm.Utility)
+  ? Xrm.Utility.getGlobalContext().getClientUrl()+"/api/data/v9.2/"
+  : "https://org319b4ea9.crm4.dynamics.com/api/data/v9.2/";
+
+var LOGICAL="cr301_visit";
+var SET="cr301_visits";                 // auto-resolved
+var TYPE_INSURANCE=983080002;           // cr301_accounttype Insurance
+
+/* Visit type choice: values auto-detected below; assumed order Single/Double.
+   Adjust VT_SINGLE / VT_DOUBLE if your cr301_visittype uses other values.    */
+var VT_SINGLE=100000000, VT_DOUBLE=100000001;
+
+/* Field logical names */
+var F={
+  id:"cr301_visitid",
+  vtype:"cr301_visittype",
+  accountVal:"_cr301_account_value",
+  agentVal:"_cr301_agent_value",
+  agent2Val:null,                       // 2nd agent lookup value (auto-discovered)
+  vdate:"cr301_visitdate",
+  category:"cfm_category",
+  revisit:"cfm_revisitdate",
+  notes:"cr301_notes",
+  tag:"cfm_tagename"                    // choice; Collection = 766340000
+};
+var TAG_COLLECTION=766340000;
+
+/* Nav properties (auto-discovered) */
+var NAV={ account:"cr301_Account", agent:"cr301_Agent", agent2:null };
+
+/* ======================= STATE ======================= */
+var DATA=[], VIEW=[], page=1, editId=null;
+var ACCOUNTS=[], AGENTS=[];
+var $=function(s){return document.querySelector(s)};
+function headers(){return {
+  "OData-MaxVersion":"4.0","OData-Version":"4.0",
+  "Accept":"application/json","Content-Type":"application/json; charset=utf-8",
+  "Prefer":'odata.include-annotations="*"'};}
+
+/* ======================= METADATA RESOLUTION ======================= */
+var META_READY=null;
+function resolveMeta(){
+  if(META_READY) return META_READY;
+  var setUrl=API+"EntityDefinitions(LogicalName='"+LOGICAL+"')?$select=EntitySetName,PrimaryIdAttribute";
+  var relUrl=API+"EntityDefinitions(LogicalName='"+LOGICAL+"')/ManyToOneRelationships"
+           +"?$select=ReferencingAttribute,ReferencingEntityNavigationPropertyName,ReferencedEntity";
+  META_READY=Promise.all([
+    fetch(setUrl,{headers:headers()}).then(okJson),
+    fetch(relUrl,{headers:headers()}).then(okJson)
+  ]).then(function(res){
+    var def=res[0], rels=(res[1].value||[]);
+    if(def.EntitySetName){ SET=def.EntitySetName; }
+    if(def.PrimaryIdAttribute){ F.id=def.PrimaryIdAttribute; }
+    console.log("✓ Visit entity set:",SET,"| id:",F.id);
+    console.log("Visit M:1 relationships:",rels.map(function(x){return x.ReferencingAttribute+" → "+x.ReferencingEntityNavigationPropertyName+" ("+x.ReferencedEntity+")";}));
+    // account nav
+    var ra=rels.filter(function(x){return x.ReferencingAttribute==="cr301_account";})[0];
+    if(ra) NAV.account=ra.ReferencingEntityNavigationPropertyName;
+    // agent lookups → cr301_agent. First = Task Owner, second = Task Owner 2
+    var agentRels=rels.filter(function(x){return (x.ReferencedEntity||"")==="cr301_agent";});
+    // primary agent = the one on attribute cr301_agent
+    var a1=agentRels.filter(function(x){return x.ReferencingAttribute==="cr301_agent";})[0]||agentRels[0];
+    if(a1) NAV.agent=a1.ReferencingEntityNavigationPropertyName;
+    // secondary agent = any other agent lookup
+    var a2=agentRels.filter(function(x){return x.ReferencingAttribute!=="cr301_agent";})[0];
+    if(a2){ NAV.agent2=a2.ReferencingEntityNavigationPropertyName; F.agent2Val="_"+a2.ReferencingAttribute+"_value"; }
+    console.log("✓ Navs → account:",NAV.account,"| agent:",NAV.agent,"| agent2:",NAV.agent2,"| agent2Val:",F.agent2Val);
+    // detect visit type choice values
+    return detectVisitType();
+  }).catch(function(e){ console.warn("resolveMeta failed; using defaults",e); });
+  return META_READY;
+}
+function detectVisitType(){
+  var url=API+"EntityDefinitions(LogicalName='"+LOGICAL+"')/Attributes(LogicalName='"+F.vtype+"')"
+        +"/Microsoft.Dynamics.CRM.PicklistAttributeMetadata?$expand=OptionSet($select=Options)";
+  return fetch(url,{headers:headers()}).then(okJson).then(function(d){
+    var opts=(d.OptionSet&&d.OptionSet.Options)||[];
+    var map=opts.map(function(o){
+      var lbl=(o.Label&&o.Label.UserLocalizedLabel&&o.Label.UserLocalizedLabel.Label)||"";
+      return {v:o.Value,l:lbl.toLowerCase()};
+    });
+    console.log("Visit type options:",map);
+    var s=map.filter(function(o){return o.l.indexOf("single")>=0;})[0];
+    var db=map.filter(function(o){return o.l.indexOf("double")>=0;})[0];
+    if(s) VT_SINGLE=s.v; if(db) VT_DOUBLE=db.v;
+    // fallback: if labels unclear, take first two in order
+    if(!s&&map[0]) VT_SINGLE=map[0].v;
+    if(!db&&map[1]) VT_DOUBLE=map[1].v;
+    console.log("✓ Visit type → single:",VT_SINGLE,"double:",VT_DOUBLE);
+  }).catch(function(e){ console.warn("detectVisitType failed; using",VT_SINGLE,VT_DOUBLE,e); });
+}
+function okJson(r){ if(!r.ok) return r.text().then(function(t){throw new Error(r.status+": "+t)}); return r.json(); }
+
+/* ======================= PICKERS ======================= */
+function loadAccounts(){
+  var url=API+"cr301_accounts?$select=cr301_acccountname,cr301_accountcode"
+        +"&$filter=cr301_accounttype eq "+TYPE_INSURANCE
+        +"&$orderby=cr301_acccountname asc&$top=1000";
+  return fetch(url,{headers:headers()}).then(okJson).then(function(j){
+    ACCOUNTS=(j.value||[]).map(function(a){return {id:a.cr301_accountid,name:a.cr301_acccountname||"(no name)",code:a.cr301_accountcode||""};});
+    var sel=$("#fAccount");
+    sel.innerHTML='<option value="">— Select company —</option>'+ACCOUNTS.map(function(a){
+      return '<option value="'+a.id+'" data-code="'+esc(a.code)+'">'+esc(a.name)+'</option>';}).join("");
+  }).catch(function(e){console.warn("loadAccounts",e);});
+}
+function loadAgents(){
+  var url=API+"cr301_agents?$select=cr301_agentid,cr301_newcolumn"
+        +"&$filter=cfm_iscollection eq true&$orderby=cr301_newcolumn asc&$top=1000";
+  return fetch(url,{headers:headers()}).then(okJson).then(function(j){
+    AGENTS=(j.value||[]).map(function(a){return {id:a.cr301_agentid,name:a.cr301_newcolumn||"(agent)"};});
+    var opt='<option value="">— Select agent —</option>'+AGENTS.map(function(a){return '<option value="'+a.id+'">'+esc(a.name)+'</option>';}).join("");
+    $("#fOwner").innerHTML=opt;
+    $("#fOwner2").innerHTML='<option value="">— Second agent —</option>'+AGENTS.map(function(a){return '<option value="'+a.id+'">'+esc(a.name)+'</option>';}).join("");
+  }).catch(function(e){console.warn("loadAgents",e);});
+}
+
+/* ======================= LOAD GRID ======================= */
+function load(){
+  renderSkeleton();
+  resolveMeta().then(function(){
+    var exp=NAV.account+"($select=cr301_acccountname,cr301_accountcode),"
+           +NAV.agent+"($select=cr301_newcolumn)";
+    if(NAV.agent2) exp+=","+NAV.agent2+"($select=cr301_newcolumn)";
+    var sel=[F.id,F.vtype,F.vdate,F.category,F.revisit,F.notes,F.accountVal,F.agentVal];
+    if(F.agent2Val) sel.push(F.agent2Val);
+    var flt="&$filter="+F.tag+" eq "+TAG_COLLECTION;
+    var url=API+SET+"?$select="+sel.join(",")+"&$expand="+exp+flt+"&$orderby="+F.vdate+" desc";
+    return fetch(url,{headers:headers()}).then(okJson)
+      .then(function(j){ DATA=(j.value||[]).map(norm); applyFilters(); refreshKpis(); })
+      .catch(function(e){
+        console.warn("Expand failed, retry flat:",e);
+        var url2=API+SET+"?$select="+sel.join(",")+flt+"&$orderby="+F.vdate+" desc";
+        return fetch(url2,{headers:headers()}).then(okJson)
+          .then(function(j){ DATA=(j.value||[]).map(norm); applyFilters(); refreshKpis(); });
+      });
+  }).catch(showError);
+}
+
+function norm(r){
+  var acc=r[NAV.account]||{};
+  var ag=r[NAV.agent]||{};
+  var ag2=(NAV.agent2&&r[NAV.agent2])||{};
+  var vt=r[F.vtype];
+  return {
+    id:r[F.id],
+    owner:ag.cr301_newcolumn||r[F.agentVal+"@OData.Community.Display.V1.FormattedValue"]||"—",
+    owner2:ag2.cr301_newcolumn||(F.agent2Val?r[F.agent2Val+"@OData.Community.Display.V1.FormattedValue"]:"")||"",
+    company:acc.cr301_acccountname||r[F.accountVal+"@OData.Community.Display.V1.FormattedValue"]||"—",
+    code:acc.cr301_accountcode||"",
+    date:r[F.vdate]||"",
+    catVal:r[F.category],
+    cat:r[F.category+"@OData.Community.Display.V1.FormattedValue"]||"",
+    isDouble:(vt===VT_DOUBLE),
+    revisit:r[F.revisit]||"",
+    notes:r[F.notes]||"",
+    _accId:r[F.accountVal]||"", _agId:r[F.agentVal]||"", _ag2Id:(F.agent2Val?r[F.agent2Val]:"")||""
+  };
+}
+
+/* ======================= RENDER ======================= */
+function renderSkeleton(){
+  var h="";for(var i=0;i<6;i++){h+='<tr>';for(var c=0;c<8;c++)h+='<td><div class="skel"></div></td>';h+='</tr>';}
+  $("#rows").innerHTML=h;
+}
+function showError(e){
+  $("#rows").innerHTML='<tr><td colspan="8"><div class="state"><i class="fa-solid fa-triangle-exclamation"></i>Could not load visits.<br><small>'+esc(e.message||e)+'</small></div></td></tr>';
+}
+function fmtDate(s){ if(!s)return ""; var d=new Date(s); if(isNaN(d))return s; return d.toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"}); }
+function catChip(v,lbl){
+  var cls="cat-none",txt=lbl||"—";
+  if(v===766340002){cls="cat-open";txt=lbl||"Open";}
+  else if(v===766340000){cls="cat-partial";txt=lbl||"Partially Closed";}
+  else if(v===766340001){cls="cat-closed";txt=lbl||"Closed";}
+  return '<span class="chip '+cls+'">'+esc(txt)+'</span>';
+}
+function draw(){
+  var sz=parseInt($("#pageSize").value,10);
+  var start=(page-1)*sz, slice=VIEW.slice(start,start+sz);
+  if(!slice.length){
+    $("#rows").innerHTML='<tr><td colspan="8"><div class="state"><i class="fa-solid fa-inbox"></i>No visits match your filters.</div></td></tr>';
+  } else {
+    $("#rows").innerHTML=slice.map(function(v){
+      return '<tr data-id="'+v.id+'">'+
+        '<td class="owner">'+esc(v.owner)+'</td>'+
+        '<td>'+(v.owner2?'<span class="owner">'+esc(v.owner2)+'</span>':'<span class="muted">—</span>')+'</td>'+
+        '<td><div class="company">'+esc(v.company)+'</div>'+(v.code?'<div class="code">'+esc(v.code)+'</div>':'')+'</td>'+
+        '<td>'+esc(fmtDate(v.date))+'</td>'+
+        '<td>'+catChip(v.catVal,v.cat)+'</td>'+
+        '<td>'+(v.isDouble?'<span class="vt double"><i class="fa-solid fa-users"></i> Double</span>':'<span class="vt"><i class="fa-solid fa-user"></i> Single</span>')+'</td>'+
+        '<td>'+(v.revisit?esc(fmtDate(v.revisit)):'<span class="muted">—</span>')+'</td>'+
+        '<td><div class="notes">'+(v.notes?esc(v.notes):'<span class="muted">—</span>')+'</div></td>'+
+      '</tr>';
+    }).join("");
+    Array.prototype.forEach.call(document.querySelectorAll("#rows tr[data-id]"),function(tr){
+      tr.onclick=function(){openDrawer(tr.getAttribute("data-id"))};
+    });
+  }
+  $("#count").textContent=VIEW.length+" visit"+(VIEW.length!==1?"s":"");
+  drawPager(sz);
+}
+function drawPager(sz){
+  var pages=Math.max(1,Math.ceil(VIEW.length/sz)),h="";
+  h+='<button '+(page<=1?'disabled':'')+' data-p="'+(page-1)+'">‹</button>';
+  for(var p=1;p<=pages;p++){ if(p===1||p===pages||Math.abs(p-page)<=1){
+    h+='<button class="'+(p===page?'active':'')+'" data-p="'+p+'">'+p+'</button>';
+  } else if(Math.abs(p-page)===2){ h+='<span style="padding:0 4px">…</span>'; } }
+  h+='<button '+(page>=pages?'disabled':'')+' data-p="'+(page+1)+'">›</button>';
+  $("#pager").innerHTML=h;
+  Array.prototype.forEach.call(document.querySelectorAll("#pager button[data-p]"),function(b){
+    b.onclick=function(){page=parseInt(b.getAttribute("data-p"),10);draw();};
+  });
+}
+function refreshKpis(){
+  $("#kTotal").textContent=DATA.length;
+  var comp={};DATA.forEach(function(v){if(v._accId)comp[v._accId]=1;});
+  $("#kCompanies").textContent=Object.keys(comp).length;
+  $("#kOpen").textContent=DATA.filter(function(v){return v.catVal===766340002;}).length;
+  $("#kClosed").textContent=DATA.filter(function(v){return v.catVal===766340001;}).length;
+}
+
+/* ======================= FILTER ======================= */
+function applyFilters(){
+  var q=($("#q").value||"").toLowerCase(), fc=$("#fCat").value, ft=$("#fType").value;
+  VIEW=DATA.filter(function(v){
+    if(q && (v.owner+" "+v.owner2+" "+v.company+" "+v.code+" "+v.notes).toLowerCase().indexOf(q)<0) return false;
+    if(fc && String(v.catVal)!==fc) return false;
+    if(ft==="single" && v.isDouble) return false;
+    if(ft==="double" && !v.isDouble) return false;
+    return true;
+  });
+  page=1; draw();
+}
+
+/* ======================= DRAWER ======================= */
+function toggleOwner2(){
+  var dbl=$("#fVType").value==="double";
+  $("#owner2Wrap").classList.toggle("hidden",!dbl);
+}
+function openDrawer(id){
+  editId=id||null; $("#dErr").classList.remove("on");
+  if(editId){
+    var v=DATA.filter(function(x){return x.id===editId;})[0]||{};
+    $("#dTitle").innerHTML='<i class="fa-solid fa-pen" style="color:var(--gold);font-size:15px"></i> Edit Visit';
+    $("#fAccount").value=v._accId||"";
+    syncCode();
+    $("#fOwner").value=v._agId||"";
+    $("#fDate").value=(v.date||"").substring(0,10);
+    $("#fCatIn").value=String(v.catVal||"766340002");
+    $("#fVType").value=v.isDouble?"double":"single";
+    $("#fOwner2").value=v._ag2Id||"";
+    $("#fRevisit").value=(v.revisit||"").substring(0,10);
+    $("#fNotes").value=v.notes||"";
+  } else {
+    $("#dTitle").innerHTML='<i class="fa-solid fa-plus" style="color:var(--gold);font-size:16px"></i> Add Visit';
+    $("#fAccount").value=""; $("#fCode").textContent="—";
+    $("#fOwner").value=""; $("#fDate").value=new Date().toISOString().substring(0,10);
+    $("#fCatIn").value="766340002"; $("#fVType").value="single";
+    $("#fOwner2").value=""; $("#fRevisit").value=""; $("#fNotes").value="";
+  }
+  toggleOwner2();
+  $("#scrim").classList.add("on"); $("#drawer").classList.add("on");
+}
+function closeDrawer(){ $("#scrim").classList.remove("on"); $("#drawer").classList.remove("on"); }
+function syncCode(){
+  var o=$("#fAccount").selectedOptions[0];
+  $("#fCode").textContent=(o&&o.getAttribute("data-code"))||"—";
+}
+
+function save(){
+  var accId=$("#fAccount").value, ownerId=$("#fOwner").value;
+  if(!accId){ derr("Company is required."); return; }
+  if(!ownerId){ derr("Task Owner is required."); return; }
+  var dbl=$("#fVType").value==="double";
+  if(dbl && !$("#fOwner2").value){ derr("Task Owner 2 is required for a double visit."); return; }
+  $("#dSave").disabled=true;
+  resolveMeta().then(function(){
+    var body={};
+    body[NAV.account+"@odata.bind"]="/cr301_accounts("+accId+")";
+    body[NAV.agent+"@odata.bind"]="/cr301_agents("+ownerId+")";
+    body[F.vtype]=dbl?VT_DOUBLE:VT_SINGLE;
+    body[F.vdate]=$("#fDate").value?new Date($("#fDate").value).toISOString():null;
+    body[F.category]=parseInt($("#fCatIn").value,10);
+    body[F.tag]=TAG_COLLECTION;   // always tag new/edited visits as Collection
+    var rv=$("#fRevisit").value; body[F.revisit]=rv?new Date(rv).toISOString():null;
+    body[F.notes]=$("#fNotes").value.trim()||null;
+    // Task Owner 2
+    if(NAV.agent2){
+      if(dbl && $("#fOwner2").value) body[NAV.agent2+"@odata.bind"]="/cr301_agents("+$("#fOwner2").value+")";
+      else if(editId) body[NAV.agent2+"@odata.bind"]=null;
+    }
+    console.log("Saving visit. Body:",JSON.stringify(body));
+    var opts={method:editId?"PATCH":"POST",headers:headers(),body:JSON.stringify(body)};
+    var url=API+SET+(editId?"("+editId+")":"");
+    return fetch(url,opts).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t)});});
+  })
+  .then(function(){ $("#dSave").disabled=false; closeDrawer(); toast(editId?"Visit updated":"Visit recorded"); load(); })
+  .catch(function(e){ $("#dSave").disabled=false; console.error("Save failed:",e); derr(parseErr(e)); });
+}
+function derr(m){ $("#dErr").textContent=m; $("#dErr").classList.add("on"); }
+function parseErr(e){ try{var j=JSON.parse(e.message);return (j.error&&j.error.message)||e.message;}catch(_){return e.message;} }
+
+/* ======================= EXPORT ======================= */
+function exportCsv(){
+  var rows=[["Task Owner","Task Owner 2","Company","Company Code","Visit Date","Category","Visit Type","Revisit Date","Comments"]];
+  VIEW.forEach(function(v){rows.push([v.owner,v.owner2,v.company,v.code,fmtDate(v.date),v.cat,v.isDouble?"Double":"Single",fmtDate(v.revisit),v.notes]);});
+  var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(",");}).join("\n");
+  var b=new Blob([csv],{type:"text/csv"}),u=URL.createObjectURL(b),l=document.createElement("a");
+  l.href=u;l.download="visits_log.csv";l.click();URL.revokeObjectURL(u);
+}
+
+/* ======================= UTIL / WIRE ======================= */
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+var tt;function toast(m){var el=$("#toast");el.textContent=m;el.classList.add("on");clearTimeout(tt);tt=setTimeout(function(){el.classList.remove("on")},2200);}
+
+$("#btnAdd").onclick=function(){openDrawer(null)};
+$("#btnExport").onclick=exportCsv;
+$("#dClose").onclick=closeDrawer; $("#dCancel").onclick=closeDrawer; $("#scrim").onclick=closeDrawer;
+$("#dSave").onclick=save;
+$("#fAccount").onchange=syncCode;
+$("#fVType").onchange=toggleOwner2;
+$("#q").oninput=applyFilters; $("#fCat").onchange=applyFilters; $("#fType").onchange=applyFilters;
+$("#pageSize").onchange=function(){page=1;draw();};
+$("#pageSize").value="15";
+
+resolveMeta();
+loadAccounts();
+loadAgents();
+load();
+</script>
+</body>
+</html>

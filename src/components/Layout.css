@@ -1,0 +1,70 @@
+.acc-shell{display:flex;min-height:100vh}
+
+/* Sidebar */
+.acc-sidebar{width:230px;flex-shrink:0;background:var(--shell-bg);
+  background:linear-gradient(180deg,var(--shell-bg),var(--shell-bg-2));
+  color:var(--shell-text);display:flex;flex-direction:column;
+  position:sticky;top:0;height:100vh;transition:width .18s ease;z-index:70}
+.acc-sb-brand{display:flex;align-items:center;justify-content:space-between;
+  padding:18px 18px 16px;border-bottom:1px solid var(--shell-line)}
+.acc-sb-brand .acc-logo{display:flex;align-items:center;gap:10px;overflow:hidden}
+.acc-sb-brand .acc-logo i{color:var(--shell-accent);font-size:18px;flex-shrink:0}
+.acc-sb-brand .acc-logo span{font-family:'Outfit',sans-serif;font-weight:700;
+  font-size:15.5px;color:var(--shell-text-strong);line-height:1.15;white-space:nowrap}
+.acc-sb-toggle{background:rgba(255,255,255,.06);border:none;color:var(--shell-text);
+  width:28px;height:28px;border-radius:7px;cursor:pointer;font-size:12px;flex-shrink:0}
+.acc-sb-toggle:hover{background:rgba(255,255,255,.12)}
+.acc-sb-nav{list-style:none;margin:0;padding:10px 10px;flex:1;overflow-y:auto;overflow-x:hidden}
+.acc-sb-nav li{margin-bottom:2px}
+.acc-sb-nav a{display:flex;align-items:center;gap:11px;padding:10px 12px;
+  border-radius:8px;color:var(--shell-text);text-decoration:none;
+  font-size:13.2px;font-weight:500;border-left:3px solid transparent;
+  transition:.15s;white-space:nowrap}
+.acc-sb-nav a i{width:16px;text-align:center;font-size:13px;color:var(--shell-muted);flex-shrink:0}
+.acc-sb-nav a:hover{background:rgba(255,255,255,.06);color:var(--shell-text-strong)}
+.acc-sb-nav a.active{background:var(--shell-active-bg);color:var(--shell-text-strong);
+  font-weight:600;border-left-color:var(--shell-accent)}
+.acc-sb-nav a.active i{color:var(--shell-accent)}
+
+/* Collapsed (desktop icon rail) */
+@media(min-width:761px){
+  .acc-sidebar.collapsed{width:72px}
+  .acc-sidebar.collapsed .acc-sb-brand{padding:18px 0;justify-content:center;gap:10px}
+  .acc-sidebar.collapsed .acc-logo span{display:none}
+  .acc-sidebar.collapsed .acc-sb-nav a{justify-content:center;padding:12px 0}
+  .acc-sidebar.collapsed .acc-sb-label{display:none}
+}
+
+/* Top bar */
+.acc-topbar{height:50px;background:var(--topbar-bg);display:flex;align-items:center;
+  justify-content:space-between;padding:0 20px;flex-shrink:0;
+  border-bottom:1px solid rgba(255,255,255,.06);position:sticky;top:0;z-index:30}
+.acc-tb-left{display:flex;align-items:center;gap:12px;color:rgba(255,255,255,.85);font-size:13px}
+.acc-tb-burger{display:none;background:transparent;border:none;color:#fff;font-size:16px;
+  cursor:pointer;padding:4px}
+.acc-tb-title{font-family:'Outfit',sans-serif;font-weight:600;font-size:14.5px;color:#fff}
+.acc-tb-right{display:flex;align-items:center;gap:10px}
+.acc-tb-avatar{width:30px;height:30px;border-radius:50%;background:var(--shell-accent);
+  color:#1b1108;display:flex;align-items:center;justify-content:center;
+  font-family:'Outfit';font-weight:700;font-size:12.5px;flex-shrink:0}
+.acc-tb-user{display:flex;flex-direction:column;line-height:1.2;align-items:flex-end}
+.acc-tb-user b{color:#fff;font-size:12.5px;font-weight:600}
+.acc-tb-user small{color:rgba(255,255,255,.45);font-size:10.5px}
+
+.acc-content-col{flex:1;min-width:0;display:flex;flex-direction:column}
+.acc-main{flex:1;min-width:0}
+
+/* Mobile sidebar overlay */
+.acc-scrim-mobile{position:fixed;inset:0;background:rgba(13,32,24,.45);opacity:0;
+  pointer-events:none;transition:.2s;z-index:65}
+@media(max-width:760px){
+  .acc-scrim-mobile.on{opacity:1;pointer-events:auto}
+  .acc-sidebar{position:fixed;left:0;top:0;width:230px;transform:translateX(-100%);
+    transition:transform .2s}
+  .acc-sidebar.collapsed{width:230px}
+  .acc-sidebar.collapsed .acc-sb-brand{padding:18px 18px 16px;justify-content:space-between}
+  .acc-sidebar.collapsed .acc-logo span,.acc-sidebar.collapsed .acc-sb-label{display:inline}
+  .acc-sidebar.collapsed .acc-sb-nav a{justify-content:flex-start;padding:10px 12px}
+  .acc-sidebar.mobile-open{transform:translateX(0)}
+  .acc-tb-burger{display:inline-flex;align-items:center}
+}

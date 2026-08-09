@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(sort -u -t: -k3)",
+      "Bash(awk -F'\"' '{print $2}')",
+      "Bash(mkdir -p \"c:\\\\Users\\\\abdelwahed.ahmed\\\\Collection\\\\src\\\\components\")",
+      "Bash(npx eslint *)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\abdelwahed.ahmed\\Collection\\src"
+    ]
+  }
+}
