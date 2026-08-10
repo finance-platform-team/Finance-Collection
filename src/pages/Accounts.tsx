@@ -3,26 +3,30 @@ import { getClient } from '@microsoft/power-apps/data';
 import { dataSourcesInfo } from '../../.power/schemas/appschemas/dataSourcesInfo';
 import { Cr301_accountsService } from '../generated/services/Cr301_accountsService';
 import type { Cr301_accountsBase, Cr301_accountscr301_accounttype } from '../generated/models/Cr301_accountsModel';
+import { Cr301_accounttypesService } from '../generated/services/Cr301_accounttypesService';
 import { operationErrorMessage } from '../lib/errors';
 import './Accounts.css';
 
 const TYPE_INSURANCE: Cr301_accountscr301_accounttype = 983080002;
+const TYPE_DIRECT: Cr301_accountscr301_accounttype = 766340001;
+const ACCOUNT_TYPE_OPTIONS: { value: Cr301_accountscr301_accounttype; label: string }[] = [
+  { value: TYPE_INSURANCE, label: 'Insurance' },
+  { value: TYPE_DIRECT, label: 'Direct' },
+];
 
 /**
- * Classification is the _cr301_accountclassification_value LOOKUP (→ cr301_category,
- * logical name; entity set "cr301_categories"). cr301_category was never added as a
- * connected data source for this Code App (no generated model/service exists for it),
- * so it's queried through the generic Dataverse client. If that table isn't reachable
- * at runtime, the picker degrades to a "load failed" option.
+ * Classification is the _cr301_accountclassification_value LOOKUP → cr301_accounttype
+ * (logical name; entity set "cr301_accounttypes"). Id field cr301_accounttypeid,
+ * label field cr301_newcolumn (holds A/B/C).
  */
-const CLASS_LOOKUP_TABLE = 'cr301_categories';
+const CLASS_LOOKUP_TABLE = 'cr301_accounttypes';
 const CLASS_VALUE_FIELD = '_cr301_accountclassification_value';
 const CLASS_NAV = 'cr301_AccountClassification';
 const ACCOUNTS_TABLE = 'cr301_accounts';
 
 interface RawAccountType {
-  cr301_categoryid: string;
-  cr301_title?: string;
+  cr301_accounttypeid: string;
+  cr301_newcolumn?: string;
 }
 
 interface ClassOption {
@@ -36,6 +40,7 @@ interface AccountRow {
   code: string;
   clsId: string;
   cls: string;
+  type: number;
   typeName: string;
   target: number;
   actual: number;
@@ -89,6 +94,7 @@ export default function AccountsPage() {
   const [formName, setFormName] = useState('');
   const [formCode, setFormCode] = useState('');
   const [formClsId, setFormClsId] = useState('');
+  const [formAccountType, setFormAccountType] = useState(String(TYPE_INSURANCE));
   const [formTarget, setFormTarget] = useState('2');
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -112,15 +118,14 @@ export default function AccountsPage() {
 
   async function loadClasses() {
     try {
-      const client = getClient(dataSourcesInfo);
-      const result = await client.retrieveMultipleRecordsAsync<RawAccountType>(CLASS_LOOKUP_TABLE, {
-        select: ['cr301_categoryid', 'cr301_title'],
+      const result = await Cr301_accounttypesService.getAll({
+        select: ['cr301_accounttypeid', 'cr301_newcolumn'],
       });
       if (!result.success) {
         throw new Error(operationErrorMessage(result.error, 'Could not load classifications.'));
       }
-      const rows: ClassOption[] = (result.data || [])
-        .map((c) => ({ id: c.cr301_categoryid, label: (c.cr301_title || '').trim() }))
+      const rows: ClassOption[] = ((result.data || []) as unknown as RawAccountType[])
+        .map((c) => ({ id: c.cr301_accounttypeid, label: (c.cr301_newcolumn || '').trim() }))
         .filter((c) => c.id)
         .sort((a, b) => a.label.localeCompare(b.label));
       setClasses(rows);
@@ -145,8 +150,8 @@ export default function AccountsPage() {
           'cr301_monthactualvisits',
           '_cr301_accountclassification_value',
         ],
-        filter: `cr301_accounttype eq ${TYPE_INSURANCE}`,
-        orderBy: ['cr301_acccountname'],
+        filter: `cr301_accounttype eq ${TYPE_INSURANCE} or cr301_accounttype eq ${TYPE_DIRECT}`,
+        orderBy: ['createdon desc'],
       });
       if (!result.success) {
         throw new Error(operationErrorMessage(result.error, 'Could not load accounts.'));
@@ -157,6 +162,7 @@ export default function AccountsPage() {
         code: r.cr301_accountcode || '—',
         clsId: r._cr301_accountclassification_value || '',
         cls: formattedValue(r, '_cr301_accountclassification_value').trim().toUpperCase().charAt(0),
+        type: r.cr301_accounttype ?? TYPE_INSURANCE,
         typeName: (formattedValue(r, 'cr301_accounttype') || 'Insurance').trim(),
         target: r.cfm_visittargetcollection ?? 0,
         actual: r.cr301_monthactualvisits ?? 0,
@@ -324,12 +330,14 @@ export default function AccountsPage() {
       setFormName(row.name === '—' ? '' : row.name);
       setFormCode(row.code === '—' ? '' : row.code);
       setFormClsId(row.clsId || '');
+      setFormAccountType(String(row.type || TYPE_INSURANCE));
       setFormTarget(String(row.target || 0));
     } else {
       setEditId(null);
       setFormName('');
       setFormCode('');
       setFormClsId('');
+      setFormAccountType(String(TYPE_INSURANCE));
       setFormTarget('2');
     }
     setDrawerOpen(true);
@@ -390,7 +398,7 @@ export default function AccountsPage() {
       const body: Partial<Omit<Cr301_accountsBase, 'cr301_accountid'>> = {
         cr301_acccountname: name,
         cr301_accountcode: formCode.trim() || null,
-        cr301_accounttype: TYPE_INSURANCE,
+        cr301_accounttype: (parseInt(formAccountType, 10) || TYPE_INSURANCE) as Cr301_accountscr301_accounttype,
         cfm_visittargetcollection: parseInt(formTarget, 10) || 0,
       } as Partial<Omit<Cr301_accountsBase, 'cr301_accountid'>>;
 
@@ -448,7 +456,7 @@ export default function AccountsPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'accounts_insurance.csv';
+    link.download = 'accounts.csv';
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -471,7 +479,7 @@ export default function AccountsPage() {
         <div className="acc-head">
           <div>
             <h1 className="acc-title">Accounts</h1>
-            <div className="acc-sub">Insurance account master — classification, type and visit coverage</div>
+            <div className="acc-sub">Insurance &amp; Direct account master — classification, type and visit coverage</div>
           </div>
           <div className="acc-actions">
             <button className="acc-btn" onClick={exportCsv}>
@@ -590,7 +598,7 @@ export default function AccountsPage() {
                   <td colSpan={7}>
                     <div className="acc-state">
                       <i className="fa-solid fa-inbox"></i>
-                      No insurance accounts match your filters.
+                      No accounts match your filters.
                     </div>
                   </td>
                 </tr>
@@ -707,10 +715,13 @@ export default function AccountsPage() {
           </div>
           <div className="acc-fld">
             <label>Account Type</label>
-            <div className="acc-typebadge">
-              <i className="fa-solid fa-shield-heart"></i> Insurance
-            </div>
-            <div className="acc-hint">All accounts created here are set as Insurance automatically.</div>
+            <select value={formAccountType} onChange={(e) => setFormAccountType(e.target.value)}>
+              {ACCOUNT_TYPE_OPTIONS.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="acc-fld">
             <label>Account Target Visit</label>

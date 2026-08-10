@@ -12,6 +12,13 @@ export const dataSourcesInfo = {
     "dataSourceType": "Dataverse",
     "apis": {}
   },
+  "cr301_accounttypes": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr301_accounttypeid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
   "cr301_agents": {
     "tableId": "",
     "version": "",

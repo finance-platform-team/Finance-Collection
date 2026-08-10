@@ -38,6 +38,11 @@
           "entitySetName": "cr301_categories",
           "logicalName": "cr301_category",
           "isHidden": false
+        },
+        "accounttypes": {
+          "entitySetName": "cr301_accounttypes",
+          "logicalName": "cr301_accounttype",
+          "isHidden": false
         }
       },
       "environmentVariableName": ""

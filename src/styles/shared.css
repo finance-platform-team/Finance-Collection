@@ -142,3 +142,17 @@ select.acc-f:focus{outline:none;border-color:var(--gold)}
 .acc-combo-empty{padding:10px;color:var(--muted);font-size:12.5px;text-align:center}
 
 @media(max-width:900px){.acc-kpis{grid-template-columns:repeat(2,1fr)}}
+
+/* Custom scrollbars — slim brand-colored pill instead of the OS default */
+*{scrollbar-width:thin;scrollbar-color:rgba(165,132,91,.45) transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background-color:rgba(165,132,91,.35);border-radius:20px;
+  border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background-color:rgba(165,132,91,.6)}
+::-webkit-scrollbar-corner{background:transparent}
+
+/* Dark shell (sidebar) gets a lighter thumb so it stays visible on the dark background */
+.acc-sidebar{scrollbar-color:rgba(255,255,255,.28) transparent}
+.acc-sidebar ::-webkit-scrollbar-thumb{background-color:rgba(255,255,255,.22)}
+.acc-sidebar ::-webkit-scrollbar-thumb:hover{background-color:rgba(255,255,255,.4)}

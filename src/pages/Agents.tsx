@@ -87,7 +87,7 @@ export default function AgentsPage() {
         Cr301_agentsService.getAll({
           select: ['cr301_agentid', 'cr301_newcolumn', '_cr301_agent_value'],
           filter: COLLECTION_FILTER,
-          orderBy: ['cr301_newcolumn'],
+          orderBy: ['createdon desc'],
         }),
       ]);
       if (!result.success) {

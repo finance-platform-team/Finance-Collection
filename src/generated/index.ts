@@ -6,6 +6,7 @@
 // Models
 export * as CommonModels from './models/CommonModels';
 export * as Cr301_accountsModel from './models/Cr301_accountsModel';
+export * as Cr301_accounttypesModel from './models/Cr301_accounttypesModel';
 export * as Cr301_agentsModel from './models/Cr301_agentsModel';
 export * as Cr301_categoriesModel from './models/Cr301_categoriesModel';
 export * as Cr301_visitsModel from './models/Cr301_visitsModel';
@@ -13,6 +14,7 @@ export * as SystemusersModel from './models/SystemusersModel';
 
 // Services
 export * from './services/Cr301_accountsService';
+export * from './services/Cr301_accounttypesService';
 export * from './services/Cr301_agentsService';
 export * from './services/Cr301_categoriesService';
 export * from './services/Cr301_visitsService';
