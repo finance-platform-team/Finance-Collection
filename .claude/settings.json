@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./node_modules/.bin/power-apps add-data-source *)",
+      "Bash(npx -y -p playwright node probe2.js __TRACKED_VAR__/accounts-probe.png)",
+      "Bash(npm run *)",
+      "Bash(node -e ' *)"
+    ]
+  }
+}

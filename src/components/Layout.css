@@ -1,0 +1,111 @@
+.acc-shell{display:flex;min-height:100vh}
+
+/* Sidebar */
+.acc-sidebar{width:230px;flex-shrink:0;background:var(--shell-bg);
+  background:linear-gradient(180deg,var(--shell-bg),var(--shell-bg-2));
+  color:var(--shell-text);display:flex;flex-direction:column;
+  position:sticky;top:0;height:100vh;transition:width .18s ease;z-index:70}
+.acc-sb-brand{display:flex;align-items:center;justify-content:space-between;
+  padding:18px 18px 16px;border-bottom:1px solid var(--shell-line)}
+.acc-sb-brand .acc-logo{display:flex;align-items:center;gap:10px;overflow:hidden}
+.acc-sb-brand .acc-logo i{color:var(--shell-accent);font-size:18px;flex-shrink:0}
+.acc-sb-brand .acc-logo span{font-family:'Outfit',sans-serif;font-weight:700;
+  font-size:15.5px;color:var(--shell-text-strong);line-height:1.15;white-space:nowrap}
+.acc-sb-toggle{background:rgba(255,255,255,.06);border:none;color:var(--shell-text);
+  width:28px;height:28px;border-radius:7px;cursor:pointer;font-size:12px;flex-shrink:0}
+.acc-sb-toggle:hover{background:rgba(255,255,255,.12)}
+.acc-sb-nav{list-style:none;margin:0;padding:10px 10px;flex:1;overflow-y:auto;overflow-x:hidden}
+.acc-sb-nav li{margin-bottom:2px}
+.acc-sb-nav a{display:flex;align-items:center;gap:11px;padding:10px 12px;
+  border-radius:8px;color:var(--shell-text);text-decoration:none;
+  font-size:13.2px;font-weight:500;border-left:3px solid transparent;
+  transition:.15s;white-space:nowrap}
+.acc-sb-nav a i{width:16px;text-align:center;font-size:13px;color:var(--shell-muted);flex-shrink:0}
+.acc-sb-nav a:hover{background:rgba(255,255,255,.06);color:var(--shell-text-strong)}
+.acc-sb-nav a.active{background:var(--shell-active-bg);color:var(--shell-text-strong);
+  font-weight:600;border-left-color:var(--shell-accent)}
+.acc-sb-nav a.active i{color:var(--shell-accent)}
+
+/* Sidebar footer — region switcher + global Light/Dark theme switch, always pinned below the nav list */
+.acc-sb-foot{padding:12px 10px;border-top:1px solid var(--shell-line)}
+.acc-sb-region-btn{display:flex;align-items:center;gap:11px;width:100%;padding:10px 12px;margin-bottom:8px;
+  background:rgba(255,255,255,.04);border:1px solid var(--shell-line);border-radius:8px;color:var(--shell-text);
+  font-size:12.5px;font-weight:500;cursor:pointer;transition:.15s;white-space:nowrap}
+.acc-sb-region-btn i{width:16px;text-align:center;font-size:13px;color:var(--shell-accent);flex-shrink:0}
+.acc-sb-region-btn:hover{background:rgba(255,255,255,.08);color:var(--shell-text-strong)}
+@media(min-width:761px){
+  .acc-sidebar.collapsed .acc-sb-region-btn{justify-content:center;padding:10px 0}
+}
+.theme-switch{display:flex;border:1px solid var(--shell-line);border-radius:8px;overflow:hidden}
+.theme-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;
+  background:rgba(255,255,255,.04);border:none;color:var(--shell-muted);cursor:pointer;
+  padding:9px 6px;font-size:12.5px;font-weight:500;transition:.15s;white-space:nowrap}
+.theme-btn + .theme-btn{border-left:1px solid var(--shell-line)}
+.theme-btn:hover{background:rgba(255,255,255,.08);color:var(--shell-text-strong)}
+.theme-btn.active{background:var(--shell-accent);color:#1b1108}
+
+/* Collapsed (desktop icon rail) */
+@media(min-width:761px){
+  .acc-sidebar.collapsed{width:72px}
+  .acc-sidebar.collapsed .acc-sb-brand{padding:18px 0;justify-content:center;gap:10px}
+  .acc-sidebar.collapsed .acc-logo span{display:none}
+  .acc-sidebar.collapsed .acc-sb-nav a{justify-content:center;padding:12px 0}
+  .acc-sidebar.collapsed .acc-sb-label{display:none}
+  .acc-sidebar.collapsed .theme-switch{flex-direction:column}
+  .acc-sidebar.collapsed .theme-btn + .theme-btn{border-left:none;border-top:1px solid var(--shell-line)}
+  .acc-sidebar.collapsed .theme-btn-label{display:none}
+}
+
+.acc-content-col{flex:1;min-width:0;display:flex;flex-direction:column}
+.acc-main{flex:1;min-width:0}
+
+/* Mobile sidebar overlay */
+.acc-scrim-mobile{position:fixed;inset:0;background:rgba(13,32,24,.45);opacity:0;
+  pointer-events:none;transition:.2s;z-index:65}
+
+/* Floating menu button — the only way to open the sidebar on tablet/phone widths,
+   since it's off-canvas there until toggled. Hidden on desktop, where the sidebar
+   is always visible. */
+.acc-mobile-menu-btn{display:none}
+
+/* Region select modal — shown on first load until a region is chosen, reopenable
+   from the sidebar's region button */
+.region-scrim{position:fixed;inset:0;background:rgba(43,22,10,.5);display:flex;
+  align-items:center;justify-content:center;z-index:200;padding:20px}
+.region-modal{background:var(--card);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.3);
+  max-width:460px;width:100%;padding:28px 26px;text-align:left}
+.region-modal-icon{width:44px;height:44px;border-radius:12px;background:var(--goldbg);color:var(--gold);
+  display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:14px}
+.region-modal h2{margin:0 0 8px;font-family:'Outfit',sans-serif;font-weight:700;font-size:19px;color:var(--ink)}
+.region-modal p{margin:0 0 20px;color:var(--muted);font-size:13px;line-height:1.5}
+.region-options{display:flex;flex-direction:column;gap:10px}
+.region-opt{display:flex;align-items:center;gap:14px;text-align:left;background:var(--bg);
+  border:1px solid var(--line);border-radius:12px;padding:14px 16px;cursor:pointer;transition:.15s}
+.region-opt:hover{border-color:var(--gold)}
+.region-opt.sel{border-color:var(--gold);background:var(--goldbg)}
+.region-opt-code{flex-shrink:0;width:42px;height:42px;border-radius:10px;background:var(--card);
+  border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+  font-family:'JetBrains Mono',monospace;font-weight:700;font-size:12px;color:var(--gold)}
+.region-opt-text{display:flex;flex-direction:column;gap:2px}
+.region-opt-text b{font-family:'Outfit',sans-serif;font-weight:600;font-size:14px;color:var(--ink)}
+.region-opt-text small{color:var(--muted);font-size:12px}
+@media(max-width:520px){
+  .region-modal{padding:22px 18px}
+}
+
+@media(max-width:760px){
+  .acc-scrim-mobile.on{opacity:1;pointer-events:auto}
+  .acc-sidebar{position:fixed;left:0;top:0;width:230px;transform:translateX(-100%);
+    transition:transform .2s}
+  .acc-sidebar.collapsed{width:230px}
+  .acc-sidebar.collapsed .acc-sb-brand{padding:18px 18px 16px;justify-content:space-between}
+  .acc-sidebar.collapsed .acc-logo span,.acc-sidebar.collapsed .acc-sb-label{display:inline}
+  .acc-sidebar.collapsed .acc-sb-nav a{justify-content:flex-start;padding:10px 12px}
+  .acc-sidebar.mobile-open{transform:translateX(0)}
+
+  .acc-mobile-menu-btn{display:flex;align-items:center;justify-content:center;
+    position:fixed;top:14px;left:14px;width:40px;height:40px;border-radius:10px;
+    background:var(--shell-bg-2);color:#fff;border:1px solid var(--shell-line);
+    box-shadow:0 4px 14px rgba(0,0,0,.25);font-size:16px;cursor:pointer;z-index:66}
+  .acc-mobile-menu-btn:hover{background:var(--shell-active-bg)}
+}

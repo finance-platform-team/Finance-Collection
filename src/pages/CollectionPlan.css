@@ -1,0 +1,164 @@
+/* Local tokens for the Company Type pill only — everything else (KPI cards, buttons,
+   inputs, drawer, table chrome) now comes from the shared component classes in
+   shared.css, so every page repaints identically for the global Light/Dark toggle. */
+.cp-page{
+  --cp-green-text: #3f5c3c;
+  --cp-green-bg: #eef2ea;
+  --cp-green-border: #d7e0d1;
+  --cp-gold-text: #8a6a44;
+  --cp-gold-bg: #faf4ea;
+  --cp-gold-border: #ecdcc2;
+  --cp-gray-text: #5b5b57;
+  --cp-gray-bg: #f1f1ef;
+  --cp-gray-border: #e2e2df;
+  max-width:none;
+}
+
+/* Table container itself is the shared .tbl-shell/.tbl-hdr from shared.css (same card
+   used by Accounts/Agents/Visits) — only the filter bar's own layout is page-specific. */
+.cp-filter-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex:1;min-width:0}
+.cp-search{min-width:200px;flex:1 1 220px;max-width:300px}
+.cp-count{font-family:'Inter',sans-serif;font-weight:500;font-size:12px;color:var(--muted);
+  display:flex;align-items:center;gap:6px;white-space:nowrap}
+.cp-count i{color:var(--gold)}
+.cp-count strong{color:var(--ink);font-weight:600}
+
+.cp-toggle{font-family:'Inter',sans-serif;font-weight:500;font-size:13px;color:var(--muted);
+  background:var(--card);border:1px solid var(--line);cursor:pointer;padding:8px 14px;border-radius:8px;
+  display:inline-flex;align-items:center;gap:7px;transition:all .15s;white-space:nowrap}
+.cp-toggle:hover{border-color:var(--hover-border)}
+.cp-toggle.active{background:var(--brown);color:#fff;border-color:var(--brown)}
+.cp-clear{font-family:'Inter',sans-serif;font-weight:500;font-size:12px;color:var(--muted);
+  background:none;border:none;cursor:pointer;padding:6px 10px;border-radius:8px;
+  display:inline-flex;align-items:center;gap:5px;transition:all .15s;white-space:nowrap}
+.cp-clear:hover{color:var(--bad);background:var(--badbg)}
+
+/* Wide grouped table — full column set, original order */
+.cp-tbl-scroll{overflow:auto;max-height:70vh;position:relative}
+.cp-tbl{width:100%;border-collapse:separate;border-spacing:0;min-width:2500px}
+.cp-tbl thead{position:sticky;top:0;z-index:5}
+.cp-tbl thead tr.cp-head-row th{background:#fbf8f2;color:var(--muted);font-weight:500;
+  font-size:12px;padding:11px 13px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line)}
+.cp-tbl thead tr.cp-head-row th.cp-numeric{text-align:right}
+.cp-tbl thead th.cp-group-end{border-right:1px solid var(--line)}
+
+.cp-tbl tbody td{padding:11px 13px;border-bottom:.5px solid var(--line);
+  font-size:13px;color:var(--ink);vertical-align:middle;white-space:nowrap;background:var(--card);transition:background .12s}
+.cp-tbl tbody tr.cp-row{cursor:pointer}
+.cp-tbl tbody tr.cp-row:hover td{background:#fbf8f2}
+.cp-tbl tbody td.cp-group-end{border-right:1px solid var(--line)}
+.cp-tbl tbody td.cp-numeric{text-align:right}
+
+.cp-col-id{font-family:'JetBrains Mono',monospace;color:var(--gold);font-size:12.5px}
+.cp-col-bold{font-family:'Outfit',sans-serif;font-weight:500}
+.cp-col-amt{font-variant-numeric:tabular-nums;color:var(--ink)}
+.cp-col-pos{font-variant-numeric:tabular-nums;font-weight:500;color:var(--cp-green-text)}
+.cp-col-neg{font-variant-numeric:tabular-nums;font-weight:500;color:var(--bad)}
+.cp-dim{color:var(--muted)}
+.cp-chip-miss{color:var(--muted);font-style:italic;font-size:12px}
+
+/* Customer Class badge — reuses the shared .acc-cls family (shared.css), just widened
+   for two-character labels (A+/B+/C+) */
+.cp-cls-badge{width:auto;min-width:24px;height:24px;padding:0 6px}
+
+/* Type badge — Government/Petroleum = green, Banks = gold, everything else = neutral gray */
+.cp-type-badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;
+  font-size:12px;font-weight:500;white-space:nowrap}
+.cp-type-green{background:var(--cp-green-bg);color:var(--cp-green-text)}
+.cp-type-gold{background:var(--cp-gold-bg);color:var(--cp-gold-text)}
+.cp-type-gray{background:var(--cp-gray-bg);color:var(--cp-gray-text)}
+
+.cp-stick-col{position:sticky;left:0;z-index:2;box-shadow:2px 0 4px rgba(43,22,10,.05)}
+.cp-tbl thead tr.cp-group-row th.cp-stick-col{z-index:6;background:#f3ead9}
+.cp-tbl thead tr.cp-head-row th.cp-stick-col{z-index:6;background:#fbf8f2}
+.cp-tbl tbody td.cp-stick-col{background:var(--card)}
+.cp-tbl tbody tr.cp-row:hover td.cp-stick-col{background:#fbf8f2}
+
+.cp-tbl tfoot{position:sticky;bottom:0;z-index:4}
+.cp-tbl tfoot td{font-weight:500;color:var(--ink);border-top:2px solid var(--gold);padding:12px 13px;background:#fbf8f2}
+.cp-tbl tfoot td.cp-stick-col{z-index:5;background:#fbf8f2}
+
+.cp-flag-none{color:var(--muted);text-align:left !important}
+
+.cp-skel-row td{padding:14px 13px}
+
+/* Editable Task Owner / Supervisor — searchable picker trigger */
+.cp-edit-wrap{display:inline-block;border-radius:8px;transition:background .15s,opacity .15s}
+.cp-edit-wrap.cp-cell-saving{opacity:.6}
+.cp-edit-wrap.cp-cell-saved{background:var(--okbg)}
+.cp-edit-wrap.cp-cell-error{background:var(--badbg)}
+.cp-user-pick{display:inline-flex;align-items:center;justify-content:space-between;gap:8px;
+  width:100%;min-width:150px;max-width:210px;background:var(--card);border:1px solid var(--line);
+  border-radius:8px;padding:7px 10px;font-family:'Inter',sans-serif;font-weight:500;font-size:13px;
+  color:var(--ink);cursor:pointer;text-align:left;transition:all .15s}
+.cp-user-pick:hover{border-color:var(--gold)}
+.cp-user-pick:focus, .cp-user-pick.open{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(165,132,91,.15)}
+.cp-user-pick:disabled{cursor:wait;opacity:.6}
+.cp-user-pick-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cp-user-pick-caret{font-size:9px;color:var(--muted);flex-shrink:0}
+
+/* Searchable picker popover (portal to document.body, fixed-positioned near its trigger) */
+.cp-picker{position:fixed;z-index:9999;background:var(--card);border:1px solid var(--line);border-radius:10px;
+  box-shadow:0 12px 32px rgba(0,0,0,.16);overflow:hidden;min-width:240px}
+.cp-picker-search{display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--bg)}
+.cp-picker-search i{color:var(--muted);font-size:12px}
+.cp-picker-search input{border:none;outline:none;background:transparent;width:100%;font-size:13px;color:var(--ink)}
+.cp-picker-list{max-height:280px;overflow-y:auto;padding:5px}
+.cp-picker-opt{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;
+  background:transparent;border:none;border-radius:8px;padding:8px 10px;font-size:13px;color:var(--ink);
+  cursor:pointer;text-align:left;transition:background .12s}
+.cp-picker-opt:hover{background:#fbf3e6}
+.cp-picker-opt.sel{background:var(--cp-gold-bg);color:var(--cp-gold-text);font-weight:500}
+.cp-picker-opt.cp-picker-clear{color:var(--muted);border-bottom:1px solid var(--line);border-radius:0;margin-bottom:4px}
+.cp-picker-opt.cp-picker-clear:hover{background:var(--badbg);color:var(--bad)}
+.cp-picker-opt i{font-size:10px;flex-shrink:0}
+.cp-picker-opt-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cp-picker-empty{padding:14px 10px;text-align:center;color:var(--muted);font-size:12.5px}
+
+/* Pagination */
+.cp-pagination{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;
+  border-top:1px solid var(--line);background:var(--bg);gap:16px;flex-wrap:wrap}
+.cp-page-size{display:flex;align-items:center;gap:8px;font-family:'Inter',sans-serif;font-weight:500;
+  font-size:12px;color:var(--muted);white-space:nowrap}
+.cp-page-size select.acc-f{padding:6px 26px 6px 12px;min-width:0}
+.cp-page-info{font-family:'Inter',sans-serif;font-weight:500;font-size:12px;color:var(--muted);white-space:nowrap}
+.cp-page-info strong{color:var(--ink);font-weight:600}
+
+/* Slide-in detail panel — reuses .acc-drawer, dialled back to weight 500 for this page only */
+.cp-detail .acc-dhead h2{font-weight:500;font-size:17px}
+.cp-detail-name{font-family:'Outfit',sans-serif}
+.cp-detail-sub{color:var(--muted);font-size:12.5px;margin-bottom:20px}
+.cp-detail-section{margin-bottom:22px}
+.cp-detail-section:last-child{margin-bottom:0}
+.cp-detail-section-title{font-family:'Outfit',sans-serif;font-weight:500;font-size:11px;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--gold);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.cp-detail-grid{display:grid;gap:14px}
+.cp-detail-grid-2{grid-template-columns:1fr 1fr}
+.cp-detail-grid-3{grid-template-columns:repeat(3,1fr)}
+.cp-stat{min-width:0}
+.cp-stat-label{font-size:11px;color:var(--muted);margin-bottom:3px}
+.cp-stat-value{font-family:'JetBrains Mono',monospace;font-size:13.5px;font-weight:500;color:var(--ink)}
+.cp-stat-pos{color:var(--cp-green-text)}
+.cp-flag-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;
+  background:var(--badbg);color:var(--bad);font-size:12px;font-weight:500;font-family:'Inter',sans-serif}
+.cp-field label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}
+
+@media(max-width:700px){
+  .cp-detail-grid-2, .cp-detail-grid-3{grid-template-columns:1fr 1fr}
+}
+
+/* Dark theme — the token redefinitions live globally in shared.css (:root[data-theme="dark"]),
+   this page only needs its own Company Type pill tokens and a couple of literal (non-token)
+   colors redeclared. */
+:root[data-theme="dark"] .cp-page{
+  --cp-green-text:#9ecb9a; --cp-green-bg:rgba(63,92,60,.22); --cp-green-border:rgba(129,168,120,.35);
+  --cp-gold-text:#d9b98c; --cp-gold-bg:rgba(165,132,91,.2); --cp-gold-border:rgba(165,132,91,.4);
+  --cp-gray-text:#b9b6ac; --cp-gray-bg:rgba(255,255,255,.06); --cp-gray-border:rgba(255,255,255,.14);
+}
+:root[data-theme="dark"] .cp-tbl thead tr.cp-head-row th{background:#232820}
+:root[data-theme="dark"] .cp-tbl thead th.cp-stick-col{background:#232820}
+:root[data-theme="dark"] .cp-tbl tfoot td,
+:root[data-theme="dark"] .cp-tbl tfoot td.cp-stick-col{background:#232820}
+:root[data-theme="dark"] .cp-tbl tbody tr.cp-row:hover td,
+:root[data-theme="dark"] .cp-tbl tbody tr.cp-row:hover td.cp-stick-col{background:#262c20}
+:root[data-theme="dark"] .cp-picker-opt:hover{background:#262c20}

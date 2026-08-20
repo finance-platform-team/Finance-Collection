@@ -1,0 +1,86 @@
+{
+  "version": "1.0",
+  "appId": "5cb9918f-d7fc-4314-9f56-af665040fcc0",
+  "appDisplayName": "Collection",
+  "region": "prod",
+  "appType": "CodeApp",
+  "environmentId": "9ce6fb09-5b63-e9f4-9185-b707b4b3425e",
+  "description": " ",
+  "buildPath": "./dist",
+  "buildEntryPoint": "index.html",
+  "localAppUrl": "http://localhost:3000",
+  "logoPath": "Default",
+  "connectionReferences": {},
+  "databaseReferences": {
+    "default.cds": {
+      "dataSources": {
+        "accounts": {
+          "entitySetName": "cr301_accounts",
+          "logicalName": "cr301_account",
+          "isHidden": false
+        },
+        "agents": {
+          "entitySetName": "cr301_agents",
+          "logicalName": "cr301_agent",
+          "isHidden": false
+        },
+        "users": {
+          "entitySetName": "systemusers",
+          "logicalName": "systemuser",
+          "isHidden": false
+        },
+        "visits": {
+          "entitySetName": "cr301_visits",
+          "logicalName": "cr301_visit",
+          "isHidden": false
+        },
+        "categories": {
+          "entitySetName": "cr301_categories",
+          "logicalName": "cr301_category",
+          "isHidden": false
+        },
+        "accounttypes": {
+          "entitySetName": "cr301_accounttypes",
+          "logicalName": "cr301_accounttype",
+          "isHidden": false
+        },
+        "aragings": {
+          "entitySetName": "cfm_aragings",
+          "logicalName": "cfm_araging",
+          "isHidden": false
+        },
+        "businesspartners": {
+          "entitySetName": "cfm_insurancecompanies",
+          "logicalName": "cfm_insurancecompany",
+          "isHidden": false
+        },
+        "dailycollections": {
+          "entitySetName": "cfm_dailycollections",
+          "logicalName": "cfm_dailycollection",
+          "isHidden": false
+        },
+        "collectionmonthallocations": {
+          "entitySetName": "cfm_collectionmonthallocations",
+          "logicalName": "cfm_collectionmonthallocation",
+          "isHidden": false
+        },
+        "disputemanagements": {
+          "entitySetName": "ar_disputemanagements",
+          "logicalName": "ar_disputemanagement",
+          "isHidden": false
+        },
+        "disputemanagementupdates": {
+          "entitySetName": "cfm_disputemanagementupdateses",
+          "logicalName": "cfm_disputemanagementupdates",
+          "isHidden": false
+        },
+        "slas": {
+          "entitySetName": "cfm_slas",
+          "logicalName": "cfm_sla",
+          "isHidden": false
+        }
+      },
+      "environmentVariableName": ""
+    }
+  }
+}

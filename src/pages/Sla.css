@@ -1,0 +1,13 @@
+/* SLA reuses the shared container/kpi/drawer/combo/toast classes from shared.css,
+   plus Dispute Management's filter-bar/category-bar/table shell (dm-*) so it
+   repaints identically for the global Light/Dark toggle. Only the Tag pill
+   colors and the small manager/escalation sub-text are specific to this page. */
+
+.sla-pill{display:inline-flex;align-items:center;gap:5px;font-family:'Outfit',sans-serif;font-weight:600;
+  font-size:11px;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.sla-tag-collection{background:var(--goldbg);color:var(--brown)}
+.sla-tag-ar{background:var(--infobg);color:var(--info)}
+.sla-tag-ap{background:var(--warnbg);color:var(--warn)}
+
+.sla-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.sla-wrap{white-space:normal;max-width:220px}

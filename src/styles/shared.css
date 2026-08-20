@@ -1,0 +1,339 @@
+*,*::before,*::after{box-sizing:border-box}
+:root{
+  --brown:#2b160a; --gold:#a5845b; --cream:#f7f4ee;
+  --ink:#2b160a; --muted:#8a7a6c; --line:#e7ded2;
+  --card:#ffffff; --bg:#f7f4ee;
+  --ok:#2f7d5b; --okbg:#e6f3ec;
+  --warn:#b06a1f; --warnbg:#fbeede;
+  --bad:#b03636; --badbg:#f8e6e6;
+  --info:#2f5d7d; --infobg:#e6eef3;
+  --goldbg:#f5ead6;
+  --shadow:0 1px 2px rgba(43,22,10,.06),0 8px 24px rgba(43,22,10,.06);
+  /* Hover tokens — one source of truth for every row/button/filter hover across
+     pages. Light mode washes toward canvas; dark mode overrides these (below) to
+     a subtle lighten instead, so hovered text/badges never sit on a light patch. */
+  --hover-bg:#fbf8f2;
+  --hover-border:var(--gold);
+  --hover-btn-primary:#3c2110;
+
+  --shell-bg:#0d2018;
+  --shell-bg-2:#132c22;
+  --shell-line:rgba(255,255,255,.08);
+  --shell-text:rgba(255,255,255,.72);
+  --shell-text-strong:#ffffff;
+  --shell-muted:rgba(255,255,255,.45);
+  --shell-active-bg:rgba(255,255,255,.10);
+  --shell-accent:#c9a06b;
+  --topbar-bg:#081611;
+}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+  font-family:'Inter',system-ui,sans-serif;font-size:14px;height:100%;
+  display:block;min-width:0;place-items:unset}
+#root{max-width:none;margin:0;padding:0;text-align:left}
+
+.acc-wrap{padding:20px 24px;width:100%}
+
+/* Page header */
+.acc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+.acc-title{font-family:'Outfit',sans-serif;font-weight:700;font-size:24px;letter-spacing:-.02em;margin:0}
+.acc-sub{color:var(--muted);font-size:13px;margin-top:3px}
+.acc-actions{display:flex;gap:8px;align-items:center;flex-shrink:0}
+.acc-btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);
+  background:var(--card);color:var(--ink);padding:9px 14px;border-radius:9px;
+  font-family:'Outfit',sans-serif;font-weight:600;font-size:13px;cursor:pointer;
+  transition:.15s;white-space:nowrap}
+.acc-btn:hover{background:var(--hover-bg);border-color:var(--hover-border)}
+.acc-btn-primary{background:var(--brown);color:#fff;border-color:var(--brown)}
+.acc-btn-primary:hover{background:var(--hover-btn-primary);border-color:var(--hover-btn-primary)}
+.acc-btn-ghost{background:transparent}
+
+/* Shared KPI card — icon-top row, big value, muted context line below. Every page
+   (Collection Plan, Accounts, Agents, Visits) uses this same component. */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+.kpi-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;
+  transition:transform .15s ease,box-shadow .15s ease}
+.kpi-card:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
+.kpi-card.kpi-ok{background:var(--okbg)}
+.kpi-card.kpi-warn{background:var(--warnbg)}
+.kpi-card.kpi-gold{background:var(--goldbg)}
+.kpi-card.kpi-info{background:var(--infobg)}
+.kpi-card.kpi-danger{background:var(--badbg)}
+.kpi-clickable{cursor:pointer}
+.kpi-top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.kpi-icon{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-size:11px;flex-shrink:0}
+.kpi-icon-gold{background:var(--goldbg);color:var(--gold)}
+.kpi-icon-ok{background:var(--okbg);color:var(--ok)}
+.kpi-icon-warn{background:var(--warnbg);color:var(--warn)}
+.kpi-icon-info{background:var(--infobg);color:var(--info)}
+.kpi-icon-danger{background:var(--badbg);color:var(--bad)}
+.kpi-label{font-family:'Outfit',sans-serif;font-weight:500;font-size:11px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted)}
+.kpi-value{font-family:'Outfit',sans-serif;font-weight:500;font-size:22px;color:var(--ink);letter-spacing:-.01em}
+.kpi-context{font-size:12px;color:var(--muted);margin-top:4px;min-height:15px}
+@media(max-width:700px){.kpi-grid{grid-template-columns:repeat(2,1fr)}}
+
+/* Unified container — every page's filter bar lives inside the table's own header
+   (one card), not as a separate card floating above it. */
+.tbl-shell{background:var(--card);border:1px solid var(--line);border-radius:12px;
+  box-shadow:var(--shadow);overflow:hidden}
+.tbl-hdr{padding:12px 16px;border-bottom:1px solid var(--line);background:var(--card);
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:space-between}
+.acc-search{flex:1;min-width:220px;position:relative}
+.acc-search i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
+.acc-search input{width:100%;padding:9px 12px 9px 34px;border:1px solid var(--line);
+  border-radius:9px;font-family:'Inter';font-size:13px;background:#fbf8f2;box-sizing:border-box;color:var(--ink)}
+.acc-search input:focus{outline:none;border-color:var(--gold);background:#fff}
+select.acc-f{padding:9px 12px;border:1px solid var(--line);border-radius:9px;
+  font-family:'Inter';font-size:13px;background:#fbf8f2;color:var(--ink);cursor:pointer;min-width:150px}
+select.acc-f:hover{border-color:var(--hover-border)}
+select.acc-f:focus{outline:none;border-color:var(--gold)}
+
+/* Table — nests inside .tbl-shell, so it no longer carries its own border/shadow/radius */
+.acc-tablewrap{overflow-x:auto}
+.acc-tablewrap table{width:100%;border-collapse:collapse}
+.acc-tablewrap thead th{background:#fbf8f2;color:var(--muted);
+  font-size:12px;letter-spacing:.02em;font-weight:600;text-align:left;
+  padding:12px 16px;border-bottom:1px solid var(--line);white-space:nowrap}
+.acc-tablewrap thead th.acc-num{text-align:right}
+.acc-tablewrap tbody td{padding:13px 16px;border-bottom:1px solid var(--line);font-size:13.5px}
+.acc-tablewrap tbody tr:last-child td{border-bottom:none}
+.acc-tablewrap tbody tr.acc-row:hover{background:var(--hover-bg);cursor:pointer}
+.acc-name{font-family:'Outfit',sans-serif;font-weight:600}
+.acc-code{font-family:'JetBrains Mono',monospace;color:var(--gold);font-size:12.5px}
+.acc-tablewrap td.acc-num{text-align:right;font-variant-numeric:tabular-nums}
+
+/* Shared classification badge / type chip / flag dot — used by Accounts and Collection Plan */
+.acc-cls{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;
+  border-radius:6px;font-weight:700;font-size:12px;font-family:'Outfit'}
+.acc-cls-A{background:var(--okbg);color:var(--ok)}
+.acc-cls-B{background:var(--warnbg);color:var(--warn)}
+.acc-cls-C{background:var(--badbg);color:var(--bad)}
+.acc-cls-none{background:#eee;color:#999}
+.acc-typ{display:inline-flex;align-items:center;gap:6px;color:var(--brown);font-weight:500}
+.acc-cover{display:inline-flex;align-items:center;gap:6px}
+.acc-dot{width:8px;height:8px;border-radius:50%}
+.acc-dot.acc-ok{background:var(--ok)}.acc-dot.acc-warn{background:var(--warn)}.acc-dot.acc-bad{background:var(--bad)}
+
+/* States */
+.acc-state{padding:48px 20px;text-align:center;color:var(--muted)}
+.acc-state i{font-size:28px;color:var(--line);margin-bottom:10px;display:block}
+.acc-skel{height:14px;background:linear-gradient(90deg,#f0e9df 25%,#f7f2ea 50%,#f0e9df 75%);
+  background-size:200% 100%;animation:acc-sh 1.2s infinite;border-radius:5px}
+@keyframes acc-sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* Footer */
+.acc-foot{display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;color:var(--muted);font-size:12.5px;flex-wrap:wrap;gap:10px}
+.acc-pg{display:flex;gap:4px;align-items:center}
+.acc-pg button{border:1px solid var(--line);background:#fff;color:var(--ink);padding:6px 10px;
+  border-radius:7px;cursor:pointer;font-family:'Inter';font-size:12px}
+.acc-pg button:disabled{opacity:.4;cursor:default}
+.acc-pg button.active{background:var(--brown);color:#fff;border-color:var(--brown)}
+
+/* Drawer */
+.acc-scrim{position:fixed;inset:0;background:rgba(43,22,10,.4);opacity:0;
+  pointer-events:none;transition:.2s;z-index:40}
+.acc-scrim.on{opacity:1;pointer-events:auto}
+.acc-drawer{position:fixed;top:0;right:0;height:100%;width:420px;max-width:92vw;
+  background:#fff;box-shadow:-8px 0 40px rgba(43,22,10,.18);
+  transform:translateX(100%);transition:transform .24s cubic-bezier(.4,0,.2,1);
+  z-index:50;display:flex;flex-direction:column}
+.acc-drawer.on{transform:translateX(0)}
+.acc-dhead{padding:20px 22px;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between}
+.acc-dhead h2{margin:0;font-family:'Outfit';font-weight:700;font-size:19px;
+  display:flex;align-items:center;gap:9px}
+.acc-dclose{border:none;background:none;font-size:18px;color:var(--muted);cursor:pointer;padding:4px}
+.acc-dbody{padding:22px;overflow-y:auto;flex:1}
+.acc-fld{margin-bottom:16px;position:relative}
+.acc-fld label{display:block;font-size:12.5px;font-weight:600;color:var(--brown);margin-bottom:6px}
+.acc-fld input,.acc-fld select,.acc-fld textarea{width:100%;padding:10px 12px;border:1px solid var(--line);
+  border-radius:9px;font-family:'Inter';font-size:14px;background:#fbf8f2;color:var(--ink);box-sizing:border-box}
+.acc-fld textarea{resize:vertical;min-height:74px;font-family:'Inter'}
+.acc-fld input:focus,.acc-fld select:focus,.acc-fld textarea:focus{outline:none;border-color:var(--gold);background:#fff}
+.acc-fld input:disabled{color:var(--muted);cursor:not-allowed}
+.acc-hint{font-size:12px;color:var(--muted);margin-top:6px}
+.acc-hint b{color:var(--brown)}
+.acc-typebadge{display:inline-flex;align-items:center;gap:7px;background:var(--okbg);
+  color:var(--ok);padding:8px 12px;border-radius:9px;font-weight:600;font-size:13px}
+.acc-ro-wrap{background:#f7f2ea;border:1px solid var(--line);border-radius:9px;padding:10px 12px}
+.acc-ro-wrap .acc-ro-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+.acc-ro-wrap .acc-ro-value{font-family:'JetBrains Mono',monospace;font-size:13px;margin-top:3px}
+.acc-dfoot{padding:16px 22px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+.acc-err{background:var(--badbg);color:var(--bad);padding:9px 12px;border-radius:8px;
+  font-size:12.5px;margin-bottom:14px;display:none}
+.acc-err.on{display:block}
+
+/* Documents (SharePoint upload/list/delete) — shared by any drawer that lists,
+   uploads to, or deletes from a SharePoint folder via the docs Power Automate flow. */
+.dc-docs-sec{margin-top:16px}
+.dc-docs-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.dc-docs-title{font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--muted);display:flex;align-items:center;gap:6px}
+.dc-docs-title i{color:var(--gold)}
+.dc-docs-count{color:var(--ink);font-weight:600;text-transform:none;letter-spacing:0}
+.dc-docs-upload-btn{position:relative;overflow:hidden;background:transparent;border:1px dashed var(--line);
+  color:var(--gold);padding:6px 12px;border-radius:8px;font-family:'Outfit',sans-serif;font-weight:600;
+  font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+.dc-docs-upload-btn:hover{background:var(--goldbg);border-style:solid}
+.dc-docs-upload-btn input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+.dc-docs-list{display:flex;flex-direction:column;gap:8px}
+.dc-docs-empty{padding:16px;text-align:center;color:var(--muted);font-size:12px;display:flex;
+  flex-direction:column;align-items:center;gap:6px}
+.dc-doc-uploading{display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--line);
+  border-radius:10px;background:var(--goldbg);font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;color:var(--gold)}
+.dc-doc-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);
+  border-radius:10px;background:var(--card)}
+.dc-doc-ico{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;background:var(--bg);color:var(--muted);font-size:14px}
+.dc-doc-ico-pdf{background:var(--badbg);color:var(--bad)}
+.dc-doc-ico-img{background:var(--infobg);color:var(--info)}
+.dc-doc-ico-doc{background:var(--infobg);color:var(--info)}
+.dc-doc-ico-xls{background:var(--okbg);color:var(--ok)}
+.dc-doc-meta{flex:1;min-width:0}
+.dc-doc-name{font-family:'Outfit',sans-serif;font-weight:600;font-size:12.5px;color:var(--ink);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dc-doc-sub{font-size:10.5px;color:var(--muted)}
+.dc-doc-act{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.dc-doc-act a,.dc-doc-act button{background:transparent;border:none;color:var(--muted);cursor:pointer;
+  padding:6px 8px;border-radius:8px;font-size:12px;display:inline-flex;align-items:center}
+.dc-doc-act a:hover{color:var(--gold);background:var(--goldbg)}
+.dc-doc-act button:hover{color:var(--bad);background:var(--badbg)}
+.dc-docs-note{margin-top:8px;font-size:11px;color:var(--muted)}
+.acc-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--brown);color:#fff;padding:12px 20px;border-radius:10px;font-size:13px;
+  font-weight:500;opacity:0;pointer-events:none;transition:.25s;z-index:60}
+.acc-toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* List-page filter bar / category pill bar / table shell — shared by any page built
+   like Dispute Management or SLA (a search+filter row, a Tag/Category pill bar, a
+   plain data table where rows open a drawer on click). */
+.dm-filter-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex:1;min-width:0}
+.dm-search{min-width:220px;flex:1 1 260px;max-width:340px}
+.dm-count{font-family:'Inter',sans-serif;font-weight:500;font-size:12px;color:var(--muted);
+  display:flex;align-items:center;gap:6px;white-space:nowrap}
+.dm-count i{color:var(--gold)}
+.dm-count strong{color:var(--ink);font-weight:600}
+
+.dm-category-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 16px;
+  border-bottom:1px solid var(--line)}
+.dm-category-label{font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--muted);margin-right:4px}
+.dm-cat-pill{font-family:'Inter',sans-serif;font-weight:500;font-size:12.5px;color:var(--ink);
+  background:var(--card);border:1px solid var(--line);cursor:pointer;padding:6px 14px;border-radius:999px;
+  transition:.15s;white-space:nowrap}
+.dm-cat-pill:hover{border-color:var(--gold)}
+.dm-cat-pill.active{background:var(--brown);color:#fff;border-color:var(--brown)}
+
+.dm-tablewrap{overflow-x:auto}
+.dm-tablewrap table{width:100%;border-collapse:collapse;min-width:1200px}
+.dm-tablewrap thead th{background:#fbf8f2;color:var(--muted);text-transform:uppercase;
+  font-size:11px;letter-spacing:.06em;font-weight:600;text-align:left;
+  padding:12px 16px;border-bottom:1px solid var(--line);white-space:nowrap}
+.dm-tablewrap thead th.dm-numeric{text-align:right}
+.dm-tablewrap tbody td{padding:10px 16px;border-bottom:1px solid var(--line);font-size:13.5px;white-space:nowrap;
+  vertical-align:middle;position:relative}
+.dm-tablewrap tbody tr:last-child td{border-bottom:none}
+.dm-tablewrap tbody tr.dm-row{cursor:pointer}
+.dm-tablewrap tbody tr.dm-row:hover td{background:var(--hover-bg,#fbf8f2)}
+.dm-tablewrap td.dm-numeric{text-align:right;font-variant-numeric:tabular-nums}
+.dm-company{font-family:'Outfit',sans-serif;font-weight:600}
+
+.dm-req{color:var(--bad)}
+.dm-fld-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.dm-fld-row .acc-fld{margin-bottom:0}
+
+/* Searchable picker (combobox) */
+.acc-combo{position:relative}
+.acc-combo-list{position:absolute;top:calc(100% + 4px);left:0;right:0;max-height:220px;
+  overflow-y:auto;background:#fff;border:1px solid var(--line);border-radius:9px;
+  box-shadow:var(--shadow);z-index:5;padding:4px}
+.acc-combo-item{padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13px}
+.acc-combo-item:hover,.acc-combo-item.hi{background:var(--hover-bg)}
+.acc-combo-item small{display:block;color:var(--muted);font-size:11.5px;margin-top:1px}
+.acc-combo-empty{padding:10px;color:var(--muted);font-size:12.5px;text-align:center}
+
+/* Custom scrollbars — slim brand-colored pill instead of the OS default */
+*{scrollbar-width:thin;scrollbar-color:rgba(165,132,91,.45) transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background-color:rgba(165,132,91,.35);border-radius:20px;
+  border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background-color:rgba(165,132,91,.6)}
+::-webkit-scrollbar-corner{background:transparent}
+
+/* Dark shell (sidebar) gets a lighter thumb so it stays visible on the dark background */
+.acc-sidebar{scrollbar-color:rgba(255,255,255,.28) transparent}
+.acc-sidebar ::-webkit-scrollbar-thumb{background-color:rgba(255,255,255,.22)}
+.acc-sidebar ::-webkit-scrollbar-thumb:hover{background-color:rgba(255,255,255,.4)}
+
+/* =========================================================================
+   Dark theme — one global Light/Dark switch (sidebar footer, see Layout.tsx)
+   sets data-theme="dark" on <html>. Redeclaring the brand tokens here means
+   every component above that already reads var(--ink)/var(--card)/etc.
+   repaints automatically; only hardcoded (non-token) colors below need an
+   explicit override.
+   ========================================================================= */
+:root[data-theme="dark"]{
+  --brown:#c9a06b;
+  --gold:#b89268;
+  --ink:#ece7dc;
+  --muted:#9a9488;
+  --line:#33392f;
+  --card:#20251d;
+  --bg:#181c16;
+  --cream:#181c16;
+  --goldbg:rgba(165,132,91,.2);
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 8px 24px rgba(0,0,0,.35);
+  --ok:#7fbf85; --okbg:rgba(63,92,60,.28);
+  --warn:#dba25b; --warnbg:rgba(176,106,31,.24);
+  --bad:#e2807f; --badbg:rgba(176,54,54,.26);
+  --info:#82bce0; --infobg:rgba(47,93,125,.26);
+  /* Dark-mode hover tokens: a translucent lighten (slightly lighter than --card/
+     --bg) instead of light mode's canvas wash — keeps hovered text/badges readable
+     instead of sitting on a light patch. */
+  --hover-bg:rgba(255,255,255,.06);
+  --hover-border:var(--gold);
+  --hover-btn-primary:#d9b98c;
+}
+:root[data-theme="dark"] *{scrollbar-color:rgba(184,146,104,.35) transparent}
+:root[data-theme="dark"] ::-webkit-scrollbar-thumb{background-color:rgba(184,146,104,.3)}
+
+:root[data-theme="dark"] .acc-btn{background:var(--card);color:var(--ink);border-color:var(--line)}
+:root[data-theme="dark"] .acc-btn-primary{background:var(--brown);color:#20251d;border-color:var(--brown)}
+
+:root[data-theme="dark"] .acc-search input,
+:root[data-theme="dark"] .acc-fld input,
+:root[data-theme="dark"] .acc-fld select,
+:root[data-theme="dark"] .acc-fld textarea,
+:root[data-theme="dark"] select.acc-f{background:#1c2118;color:var(--ink);border-color:var(--line)}
+:root[data-theme="dark"] .acc-search input::placeholder{color:#78715f}
+:root[data-theme="dark"] .acc-search input:focus,
+:root[data-theme="dark"] .acc-fld input:focus,
+:root[data-theme="dark"] .acc-fld select:focus,
+:root[data-theme="dark"] .acc-fld textarea:focus{background:#232920}
+
+:root[data-theme="dark"] .acc-tablewrap thead th{background:#232820}
+:root[data-theme="dark"] .dm-tablewrap thead th{background:var(--card)}
+:root[data-theme="dark"] .acc-cls-none{background:rgba(255,255,255,.08);color:#b9b6ac}
+
+:root[data-theme="dark"] .acc-drawer{background:var(--card)}
+:root[data-theme="dark"] .acc-ro-wrap{background:#1c2118;border-color:var(--line)}
+:root[data-theme="dark"] .acc-combo-list{background:var(--card);border-color:var(--line)}
+:root[data-theme="dark"] .acc-skel{background:linear-gradient(90deg,#262c20 25%,#2f362a 50%,#262c20 75%)}
+
+:root[data-theme="dark"] .acc-pg button{background:var(--card);border-color:var(--line);color:var(--ink)}
+:root[data-theme="dark"] .acc-pg button.active{background:var(--brown);color:#20251d;border-color:var(--brown)}
+
+/* Tinted KPI cards are dark-mode SELECTED, not an automatic light-mode flip: each
+   variant already gets its own translucent step (--okbg/--warnbg/--goldbg/--infobg/
+   --badbg, redeclared above) that reads as a colored card on the dark surface, using
+   the page's own --ink/--muted for text. A matching colored border keeps the tint
+   legible against --card so, e.g., "gold" (brand accent) and "warn" (caution) stay
+   visually distinct instead of collapsing into near-identical pale pastels. */
+:root[data-theme="dark"] .kpi-card.kpi-ok{border-color:rgba(127,191,133,.35)}
+:root[data-theme="dark"] .kpi-card.kpi-warn{border-color:rgba(219,162,91,.35)}
+:root[data-theme="dark"] .kpi-card.kpi-gold{border-color:rgba(184,146,104,.35)}
+:root[data-theme="dark"] .kpi-card.kpi-info{border-color:rgba(130,188,224,.35)}
+:root[data-theme="dark"] .kpi-card.kpi-danger{border-color:rgba(226,128,127,.35)}

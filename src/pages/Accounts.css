@@ -1,0 +1,13 @@
+/* .acc-cls / .acc-typ / .acc-cover / .acc-dot now live in shared.css (also used by
+   Collection Plan) — not restated here, since a duplicate at equal specificity loaded
+   after shared.css would win the cascade and silently defeat its dark-mode overrides. */
+
+.acc-check{width:36px;text-align:center}
+.acc-check input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:var(--brown)}
+
+.acc-bulkbar{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  background:#fbf3e6;border:1px solid var(--gold);border-radius:12px;padding:10px 16px;
+  margin-bottom:14px;font-size:13px;color:var(--brown)}
+.acc-bulkbar strong{font-family:'Outfit',sans-serif;font-weight:700}
+.acc-bulkbar-actions{display:flex;gap:8px;flex-shrink:0}
+:root[data-theme="dark"] .acc-bulkbar{background:rgba(165,132,91,.15)}

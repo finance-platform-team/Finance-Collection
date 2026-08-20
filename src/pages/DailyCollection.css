@@ -1,0 +1,148 @@
+/* Daily Collection reuses the app's shared container/kpi/drawer classes (tbl-shell,
+   kpi-grid, acc-drawer, acc-combo, acc-toast — see shared.css) so it repaints the
+   same as every other page for the global Light/Dark toggle. Only what's genuinely
+   specific to this page (status pills, allocation cards, the sum-check banner) lives
+   here. */
+
+/* Wider drawer — the allocation cards need more room than the default 420px. */
+.dc-drawer{width:520px}
+
+/* Filter bar */
+.dc-filter-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex:1;min-width:0}
+.dc-search{min-width:200px;flex:1 1 220px;max-width:280px}
+.dc-toggle{font-family:'Inter',sans-serif;font-weight:500;font-size:13px;color:var(--muted);
+  background:var(--card);border:1px solid var(--line);cursor:pointer;padding:8px 14px;border-radius:8px;
+  display:inline-flex;align-items:center;gap:7px;transition:all .15s;white-space:nowrap}
+.dc-toggle:hover{border-color:var(--hover-border)}
+.dc-toggle.active{background:var(--brown);color:#fff;border-color:var(--brown)}
+.dc-count{font-family:'Inter',sans-serif;font-weight:500;font-size:12px;color:var(--muted);
+  display:flex;align-items:center;gap:6px;white-space:nowrap}
+.dc-count i{color:var(--gold)}
+.dc-count strong{color:var(--ink);font-weight:600}
+
+/* Table */
+.dc-tablewrap{overflow-x:auto}
+.dc-tablewrap table{width:100%;border-collapse:collapse;min-width:1180px}
+.dc-tablewrap thead th{background:#fbf8f2;color:var(--muted);
+  font-size:12px;letter-spacing:.02em;font-weight:600;text-align:left;
+  padding:12px 16px;border-bottom:1px solid var(--line);white-space:nowrap}
+.dc-tablewrap thead th.dc-numeric{text-align:right}
+.dc-tablewrap tbody td{padding:12px 16px;border-bottom:1px solid var(--line);font-size:13.5px;white-space:nowrap;
+  transition:background-color .16s ease,border-left-color .16s ease}
+.dc-tablewrap tbody tr:last-child td{border-bottom:none}
+.dc-tablewrap tbody td:first-child{border-left:3px solid transparent}
+
+/* Refined row hover — light tint, a gold accent bar on the leading cell, and a
+   subtle lift instead of the old flat background swap. */
+.dc-tablewrap tbody tr.dc-row{transition:transform .16s ease,box-shadow .16s ease}
+.dc-tablewrap tbody tr.dc-row:hover{position:relative;transform:translateY(-1px);box-shadow:0 4px 14px rgba(43,22,10,.10)}
+.dc-tablewrap tbody tr.dc-row:hover td{background:rgba(165,132,91,.06);cursor:pointer}
+.dc-tablewrap tbody tr.dc-row:hover td:first-child{border-left-color:var(--gold)}
+
+.dc-tablewrap tbody tr.dc-row-rejected td{background:var(--badbg)}
+.dc-tablewrap tbody tr.dc-row-rejected:hover td{background:var(--badbg)}
+.dc-tablewrap tbody tr.dc-row-rejected:hover td:first-child{border-left-color:var(--bad)}
+
+:root[data-theme="dark"] .dc-tablewrap tbody tr.dc-row:hover{box-shadow:0 4px 14px rgba(0,0,0,.4)}
+:root[data-theme="dark"] .dc-tablewrap tbody tr.dc-row:hover td{background:rgba(255,255,255,.035)}
+.dc-tablewrap td.dc-numeric{text-align:right;font-variant-numeric:tabular-nums}
+.dc-ref{font-family:'JetBrains Mono',monospace;color:var(--gold);font-size:12.5px}
+.dc-company{font-family:'Outfit',sans-serif;font-weight:600}
+.dc-code{font-family:'JetBrains Mono',monospace;color:var(--gold);font-size:12.5px}
+.dc-amt{font-variant-numeric:tabular-nums;color:var(--ink)}
+.dc-createdby{font-size:12px;color:var(--ink);display:inline-flex;align-items:center;gap:5px}
+.dc-createdby i{color:var(--muted);font-size:10px}
+.dc-createdon{font-size:11px;color:var(--muted)}
+.dc-muted{color:var(--muted)}
+
+/* Pills (entity / method / status) */
+.dc-pill{display:inline-flex;align-items:center;gap:5px;font-family:'Outfit',sans-serif;font-weight:600;
+  font-size:11px;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.dc-pill-entity{background:var(--goldbg);color:var(--brown);border:1px solid var(--line)}
+.dc-pill-method{background:var(--infobg);color:var(--info)}
+.dc-pill-pending{background:var(--goldbg);color:var(--gold)}
+.dc-pill-awaiting{background:var(--warnbg);color:var(--warn)}
+.dc-pill-approved{background:var(--okbg);color:var(--ok)}
+.dc-pill-allocated{background:var(--infobg);color:var(--info)}
+.dc-pill-bank{background:var(--warnbg);color:var(--warn)}
+.dc-pill-rejected{background:var(--badbg);color:var(--bad)}
+.dc-pill-rejected-strong{background:var(--bad);color:#fff}
+.dc-lock-ico{color:var(--gold);margin-right:6px}
+.dc-reject-ico{color:var(--bad);margin-right:6px}
+
+/* Paired field rows in the drawer (date+method, net+reference) */
+.dc-fld-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.dc-fld-row .acc-fld{margin-bottom:0}
+.dc-req{color:var(--bad)}
+
+/* Pagination — same shape as Collection Plan's, kept page-local to avoid depending
+   on another page's CSS file being loaded. */
+.dc-pagination{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;
+  border-top:1px solid var(--line);background:var(--bg);gap:16px;flex-wrap:wrap}
+.dc-page-size{display:flex;align-items:center;gap:8px;font-family:'Inter',sans-serif;font-weight:500;
+  font-size:12px;color:var(--muted);white-space:nowrap}
+.dc-page-size select.acc-f{padding:6px 26px 6px 12px;min-width:0}
+.dc-page-info{font-family:'Inter',sans-serif;font-weight:500;font-size:12px;color:var(--muted);white-space:nowrap}
+.dc-page-info strong{color:var(--ink);font-weight:600}
+
+/* Company combobox (drawer) — reuses .acc-combo/.acc-combo-list from shared.css */
+.dc-co-wrap{position:relative;margin-bottom:14px}
+.dc-co-hint{font-size:10px;font-weight:500;color:var(--muted);text-transform:none;letter-spacing:0;margin-left:6px}
+.dc-co-panel{background:var(--bg);border:1px dashed var(--line);border-radius:9px;padding:12px 14px;
+  margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dc-co-panel.empty{grid-template-columns:1fr;text-align:center;color:var(--muted);font-size:12.5px}
+.dc-co-panel .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin-bottom:2px}
+.dc-co-panel .v{font-family:'Outfit',sans-serif;font-weight:600;font-size:13px;color:var(--ink)}
+
+/* Allocation cards */
+.dc-alloc-hdr{display:flex;align-items:center;justify-content:space-between;margin:18px 0 8px}
+.dc-alloc-title{font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--muted);display:flex;align-items:center;gap:6px}
+.dc-alloc-title i{color:var(--gold)}
+.dc-alloc-add{background:transparent;border:1px dashed var(--line);color:var(--gold);padding:6px 12px;
+  border-radius:8px;font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:5px}
+.dc-alloc-add:hover{background:var(--goldbg);border-style:solid}
+.dc-alloc-add:disabled{opacity:.5;cursor:default}
+.dc-alloc-list{display:flex;flex-direction:column;gap:12px}
+.dc-alloc-card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.dc-alloc-card-hdr{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--bg);border-bottom:1px solid var(--line)}
+.dc-alloc-card-hdr select{flex:1;padding:7px 10px;border:1px solid var(--line);border-radius:8px;
+  background:var(--card);font-family:'Outfit',sans-serif;font-weight:600;font-size:13px;color:var(--ink);cursor:pointer}
+.dc-alloc-del{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:6px 8px;border-radius:8px;font-size:12px}
+.dc-alloc-del:hover{color:var(--bad);background:var(--badbg)}
+.dc-alloc-card-body{padding:11px 12px;display:grid;grid-template-columns:1fr 1fr;gap:9px 10px}
+.dc-alloc-fg{display:flex;flex-direction:column;gap:4px}
+.dc-alloc-fg-lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;white-space:nowrap}
+.dc-alloc-fg-lbl .auto{font-style:italic;font-weight:500;color:var(--dim,var(--muted));margin-left:3px;text-transform:none;letter-spacing:0}
+.dc-alloc-inp{padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--card);
+  font-family:'JetBrains Mono',monospace;font-weight:600;font-size:12px;color:var(--ink);text-align:right;
+  outline:none;width:100%;box-sizing:border-box}
+.dc-alloc-inp:focus{border-color:var(--gold)}
+.dc-alloc-inp:disabled{background:var(--bg);color:var(--muted);cursor:not-allowed}
+.dc-alloc-inp.readonly{background:var(--goldbg);color:var(--gold);font-weight:700}
+.dc-alloc-fg.wide{grid-column:span 2}
+.dc-alloc-readonly-note{padding:20px;text-align:center;color:var(--muted);font-size:12px}
+
+/* Σ allocations vs Collected Net */
+.dc-sum-pill{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;
+  border-radius:10px;margin-top:10px;font-family:'Outfit',sans-serif;font-weight:600;font-size:12.5px;gap:10px;flex-wrap:wrap}
+.dc-sum-pill.ok{background:var(--okbg);color:var(--ok)}
+.dc-sum-pill.bad{background:var(--badbg);color:var(--bad)}
+.dc-sum-pill .amounts{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px;white-space:nowrap}
+
+/* Documents (SharePoint upload/list/delete) — moved to shared.css: this section
+   is reused by more than one page's file-attachment drawer. */
+
+/* Notes / banners (proof link, lock reason, rejection reason) */
+.dc-note{margin-top:16px;padding:11px 13px;border-radius:10px;display:flex;gap:9px;align-items:flex-start;
+  font-size:12px;color:var(--muted);background:var(--bg);border:1px dashed var(--line)}
+.dc-note i{margin-top:1px}
+.dc-note.warn{background:var(--warnbg);color:var(--warn);border-style:solid;border-color:transparent}
+.dc-note.bad{background:var(--badbg);color:var(--bad);border-style:solid;border-color:transparent}
+.dc-note a{color:var(--gold);font-weight:600;text-decoration:underline}
+
+@media(max-width:600px){
+  .dc-alloc-card-body{grid-template-columns:1fr}
+  .dc-alloc-fg.wide{grid-column:span 1}
+}
