@@ -1,0 +1,2150 @@
+{
+  "name": "hr_employee",
+  "title": "Employees",
+  "schema": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "x-ms-dataverse-entity": true,
+      "x-ms-dataverse-entityset": "hr_employees",
+      "x-ms-dataverse-primary-id": "hr_employeeid",
+      "x-ms-dataverse-primary-name": "hr_id",
+      "properties": {
+        "cr18c_directmanager": {
+          "type": "string",
+          "title": "Direct Manager",
+          "x-ms-dataverse-attribute": "cr18c_directmanager",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "cr18c_DirectManager"
+        },
+        "cr18c_directmanagername": {
+          "type": "string",
+          "title": "cr18c_directmanagername",
+          "x-ms-dataverse-attribute": "cr18c_directmanagername",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "cr18c_DirectManagerName",
+          "x-ms-read-only": true,
+          "maxLength": 850
+        },
+        "cr603_organizationstructure": {
+          "type": "string",
+          "title": "Organization Structure",
+          "x-ms-dataverse-attribute": "cr603_organizationstructure",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "cr603_OrganizationStructure",
+          "required": true
+        },
+        "cr603_organizationstructurename": {
+          "type": "string",
+          "title": "cr603_organizationstructurename",
+          "x-ms-dataverse-attribute": "cr603_organizationstructurename",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "cr603_OrganizationStructureName",
+          "x-ms-read-only": true,
+          "maxLength": 850
+        },
+        "createdby": {
+          "type": "string",
+          "title": "Created By",
+          "x-ms-dataverse-attribute": "createdby",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "CreatedBy",
+          "x-ms-read-only": true
+        },
+        "createdbyname": {
+          "type": "string",
+          "title": "createdbyname",
+          "x-ms-dataverse-attribute": "createdbyname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "CreatedByName",
+          "x-ms-read-only": true,
+          "maxLength": 100
+        },
+        "createdbyyominame": {
+          "type": "string",
+          "title": "createdbyyominame",
+          "x-ms-dataverse-attribute": "createdbyyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "CreatedByYomiName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "createdon": {
+          "type": "string",
+          "title": "Created On",
+          "x-ms-dataverse-attribute": "createdon",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "CreatedOn",
+          "x-ms-read-only": true
+        },
+        "createdonbehalfby": {
+          "type": "string",
+          "title": "Created By (Delegate)",
+          "x-ms-dataverse-attribute": "createdonbehalfby",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "CreatedOnBehalfBy",
+          "x-ms-read-only": true
+        },
+        "createdonbehalfbyname": {
+          "type": "string",
+          "title": "createdonbehalfbyname",
+          "x-ms-dataverse-attribute": "createdonbehalfbyname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "CreatedOnBehalfByName",
+          "x-ms-read-only": true,
+          "maxLength": 100
+        },
+        "createdonbehalfbyyominame": {
+          "type": "string",
+          "title": "createdonbehalfbyyominame",
+          "x-ms-dataverse-attribute": "createdonbehalfbyyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "CreatedOnBehalfByYomiName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "hr_addresponseflage": {
+          "type": "string",
+          "title": "addResponseFlage",
+          "x-ms-dataverse-attribute": "hr_addresponseflage",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_addResponseFlage",
+          "maxLength": 100
+        },
+        "hr_address": {
+          "type": "string",
+          "title": "Address",
+          "x-ms-dataverse-attribute": "hr_address",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_Address",
+          "maxLength": 100
+        },
+        "hr_administrativemanagercode": {
+          "type": "string",
+          "title": "Administrative Manager Code",
+          "x-ms-dataverse-attribute": "hr_administrativemanagercode",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_AdministrativeManagerCode",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_administrativemanagername": {
+          "type": "string",
+          "title": "Administrative Manager Name",
+          "x-ms-dataverse-attribute": "hr_administrativemanagername",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_AdministrativeManagerName",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_adtitle": {
+          "type": "string",
+          "title": "AD Title",
+          "x-ms-dataverse-attribute": "hr_adtitle",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_ADTitle",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_adupdate": {
+          "type": "string",
+          "title": "AD Update",
+          "x-ms-dataverse-attribute": "hr_adupdate",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "hr_ADUpdate"
+        },
+        "hr_allergies": {
+          "type": "string",
+          "title": "Allergies",
+          "x-ms-dataverse-attribute": "hr_allergies",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_Allergies",
+          "maxLength": 100
+        },
+        "hr_alsenddate": {
+          "type": "string",
+          "title": "ALS Start Date",
+          "x-ms-dataverse-attribute": "hr_alsenddate",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "hr_ALSEndDate"
+        },
+        "hr_anyprevioussurgeries": {
+          "type": "string",
+          "title": "Any Previous Surgeries",
+          "x-ms-dataverse-attribute": "hr_anyprevioussurgeries",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_AnyPreviousSurgeries",
+          "maxLength": 100
+        },
+        "hr_applygosi": {
+          "type": "string",
+          "title": "Apply Gosi",
+          "x-ms-dataverse-attribute": "hr_applygosi",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "hr_ApplyGosi",
+          "enum": [
+            "No",
+            "Yes"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "6ae35533-c9c3-f011-bbd3-7ced8d0cef8a",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Apply Gosi",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "hr_applygosiname": {
+          "type": "string",
+          "title": "hr_applygosiname",
+          "x-ms-dataverse-attribute": "hr_applygosiname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_applygosiName",
+          "x-ms-read-only": true
+        },
+        "hr_auto_increment_id": {
+          "type": "string",
+          "title": "Employee_ID",
+          "x-ms-dataverse-attribute": "hr_auto_increment_id",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_auto_Increment_ID",
+          "maxLength": 100
+        },
+        "hr_background": {
+          "type": "string",
+          "title": "Background",
+          "x-ms-dataverse-attribute": "hr_background",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "hr_Background",
+          "enum": [
+            "Pharmacist",
+            "Dentist",
+            "Engineer"
+          ],
+          "x-ms-enum-values": [
+            123140000,
+            123140001,
+            123140002
+          ],
+          "Color": [
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "3c05c37b-0a63-f011-bec2-6045bdf37b46",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Background",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "hr_backgroundname": {
+          "type": "string",
+          "title": "hr_backgroundname",
+          "x-ms-dataverse-attribute": "hr_backgroundname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_backgroundName",
+          "x-ms-read-only": true
+        },
+        "hr_bankaccount": {
+          "type": "string",
+          "title": "Bank Account",
+          "x-ms-dataverse-attribute": "hr_bankaccount",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_BankAccount",
+          "maxLength": 100
+        },
+        "hr_bankaccountname": {
+          "type": "string",
+          "title": "Bank Account Name",
+          "x-ms-dataverse-attribute": "hr_bankaccountname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_BankAccountName",
+          "required": true,
+          "maxLength": 100
+        },
+        "hr_birthdate": {
+          "type": "string",
+          "title": "Birth Date ",
+          "x-ms-dataverse-attribute": "hr_birthdate",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "hr_BirthDate",
+          "required": true
+        },
+        "hr_blacklisted": {
+          "type": "string",
+          "title": "Black Listed",
+          "x-ms-dataverse-attribute": "hr_blacklisted",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "hr_BlackListed",
+          "enum": [
+            "Yes",
+            "No"
+          ],
+          "x-ms-enum-values": [
+            123140000,
+            123140001
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "84bd5776-1163-f011-bec2-6045bdf37b46",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Black Listed",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "hr_blacklistedname": {
+          "type": "string",
+          "title": "hr_blacklistedname",
+          "x-ms-dataverse-attribute": "hr_blacklistedname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_blacklistedName",
+          "x-ms-read-only": true
+        },
+        "hr_bloodtype": {
+          "type": "string",
+          "title": "Blood Type",
+          "x-ms-dataverse-attribute": "hr_bloodtype",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_BloodType",
+          "maxLength": 100
+        },
+        "hr_blsenddate": {
+          "type": "string",
+          "title": "BLS End Date",
+          "x-ms-dataverse-attribute": "hr_blsenddate",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "hr_BLSEndDate"
+        },
+        "hr_businessunit": {
+          "type": "string",
+          "title": "Business Unit",
+          "x-ms-dataverse-attribute": "hr_businessunit",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "hr_BusinessUnit",
+          "required": true
+        },
+        "hr_businessunitname": {
+          "type": "string",
+          "title": "hr_businessunitname",
+          "x-ms-dataverse-attribute": "hr_businessunitname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_BusinessUnitName",
+          "x-ms-read-only": true,
+          "maxLength": 160
+        },
+        "hr_certification1": {
+          "type": "string",
+          "title": "Certification 1",
+          "x-ms-dataverse-attribute": "hr_certification1",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_Certification1",
+          "maxLength": 100
+        },
+        "hr_certification2": {
+          "type": "string",
+          "title": "Certification 2",
+          "x-ms-dataverse-attribute": "hr_certification2",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_Certification2",
+          "maxLength": 100
+        },
+        "hr_chronicillness": {
+          "type": "string",
+          "title": "Chronic Illness",
+          "x-ms-dataverse-attribute": "hr_chronicillness",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_ChronicIllness",
+          "maxLength": 100
+        },
+        "hr_company": {
+          "type": "string",
+          "title": "Company",
+          "x-ms-dataverse-attribute": "hr_company",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_Company",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_contractflag": {
+          "type": "string",
+          "title": "Contract Flag",
+          "x-ms-dataverse-attribute": "hr_contractflag",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_ContractFlag",
+          "maxLength": 100
+        },
+        "hr_costcenter": {
+          "type": "string",
+          "title": "Cost Center",
+          "x-ms-dataverse-attribute": "hr_costcenter",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_CostCenter",
+          "maxLength": 100
+        },
+        "hr_currenthrcode": {
+          "type": "string",
+          "title": "Current HR Code",
+          "x-ms-dataverse-attribute": "hr_currenthrcode",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_CurrentHRCode",
+          "maxLength": 100
+        },
+        "hr_datamigration": {
+          "type": "string",
+          "title": "Data Migration",
+          "x-ms-dataverse-attribute": "hr_datamigration",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "hr_DataMigration",
+          "enum": [
+            "No",
+            "Yes"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "1ad9ea5b-0ba8-f011-bbd2-7ced8d0cef8a",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Data Migration",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "hr_datamigrationname": {
+          "type": "string",
+          "title": "hr_datamigrationname",
+          "x-ms-dataverse-attribute": "hr_datamigrationname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_datamigrationName",
+          "x-ms-read-only": true
+        },
+        "hr_dateofupdateforupdateflow": {
+          "type": "string",
+          "title": "Date of Update for update flow",
+          "x-ms-dataverse-attribute": "hr_dateofupdateforupdateflow",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "hr_DateofUpdateforupdateflow"
+        },
+        "hr_dateofupdateinorganizationstructure": {
+          "type": "string",
+          "title": "Date of Update in Organization Structure",
+          "x-ms-dataverse-attribute": "hr_dateofupdateinorganizationstructure",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "hr_DateofUpdateinOrganizationStructure"
+        },
+        "hr_daybirthdate": {
+          "type": "string",
+          "title": "Day (Birthdate)",
+          "x-ms-dataverse-attribute": "hr_daybirthdate",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "hr_DayBirthdate",
+          "x-ms-read-only": true
+        },
+        "hr_degree": {
+          "type": "string",
+          "title": "Degree",
+          "x-ms-dataverse-attribute": "hr_degree",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "hr_Degree",
+          "enum": [
+            "High School",
+            "Bachelor",
+            "Master"
+          ],
+          "x-ms-enum-values": [
+            123140000,
+            123140001,
+            123140002
+          ],
+          "Color": [
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "7de97be0-0a63-f011-bec2-6045bdf37b46",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Degree",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "hr_degreename": {
+          "type": "string",
+          "title": "hr_degreename",
+          "x-ms-dataverse-attribute": "hr_degreename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_degreeName",
+          "x-ms-read-only": true
+        },
+        "hr_department": {
+          "type": "string",
+          "title": "Department",
+          "x-ms-dataverse-attribute": "hr_department",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_Department",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_departmentsector": {
+          "type": "string",
+          "title": "Department Sector",
+          "x-ms-dataverse-attribute": "hr_departmentsector",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_DepartmentSector",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_effectivedate": {
+          "type": "string",
+          "title": "Effective Date",
+          "x-ms-dataverse-attribute": "hr_effectivedate",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "hr_EffectiveDate",
+          "required": true
+        },
+        "hr_email": {
+          "type": "string",
+          "title": "Private Email",
+          "x-ms-dataverse-attribute": "hr_email",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_Email",
+          "maxLength": 100
+        },
+        "hr_employeeid": {
+          "type": "string",
+          "title": "Employee",
+          "x-ms-dataverse-attribute": "hr_employeeid",
+          "x-ms-dataverse-type": "UniqueidentifierType",
+          "x-ms-schema-name": "hr_EmployeeId",
+          "x-ms-dataverse-primary-id": true,
+          "required": true,
+          "x-ms-keyType": "primary"
+        },
+        "hr_employeeimage": {
+          "type": "string",
+          "title": "Employee Image",
+          "x-ms-dataverse-attribute": "hr_employeeimage",
+          "x-ms-dataverse-type": "ImageType",
+          "x-ms-schema-name": "hr_EmployeeImage"
+        },
+        "hr_employeeimage_timestamp": {
+          "type": "string",
+          "title": "hr_employeeimage_timestamp",
+          "x-ms-dataverse-attribute": "hr_employeeimage_timestamp",
+          "x-ms-dataverse-type": "BigIntType",
+          "x-ms-schema-name": "hr_EmployeeImage_Timestamp",
+          "x-ms-read-only": true
+        },
+        "hr_employeeimage_url": {
+          "type": "string",
+          "title": "hr_employeeimage_url",
+          "x-ms-dataverse-attribute": "hr_employeeimage_url",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_EmployeeImage_URL",
+          "x-ms-read-only": true,
+          "maxLength": 200
+        },
+        "hr_employeeimageid": {
+          "type": "string",
+          "title": "hr_employeeimageid",
+          "x-ms-dataverse-attribute": "hr_employeeimageid",
+          "x-ms-dataverse-type": "UniqueidentifierType",
+          "x-ms-schema-name": "hr_EmployeeImageId",
+          "x-ms-read-only": true
+        },
+        "hr_employeenumber": {
+          "type": "string",
+          "title": "Employee Number",
+          "x-ms-dataverse-attribute": "hr_employeenumber",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_EmployeeNumber",
+          "maxLength": 100
+        },
+        "hr_employeestatus": {
+          "type": "string",
+          "title": "Employee Status",
+          "x-ms-dataverse-attribute": "hr_employeestatus",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "hr_EmployeeStatus",
+          "enum": [
+            "In Service 🟢",
+            "Resigned 🔴",
+            "Terminated 🔴",
+            "On Replacement"
+          ],
+          "x-ms-enum-values": [
+            123140000,
+            123140002,
+            123140003,
+            123140004
+          ],
+          "Color": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "8edc8fd0-3876-434a-bfd8-f10e45c5df62",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Employee Status ",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "hr_employeestatusname": {
+          "type": "string",
+          "title": "hr_employeestatusname",
+          "x-ms-dataverse-attribute": "hr_employeestatusname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_employeestatusName",
+          "x-ms-read-only": true
+        },
+        "hr_employmentstatus": {
+          "type": "string",
+          "title": "Employment Status",
+          "x-ms-dataverse-attribute": "hr_employmentstatus",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "hr_EmploymentStatus",
+          "enum": [
+            "Full-time",
+            "Part-time"
+          ],
+          "x-ms-enum-values": [
+            989230000,
+            989230001
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "84ff186e-0b2f-f011-8c4e-6045bd9cb0ae",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Employment Status ",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "hr_employmentstatusname": {
+          "type": "string",
+          "title": "hr_employmentstatusname",
+          "x-ms-dataverse-attribute": "hr_employmentstatusname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_employmentstatusName",
+          "x-ms-read-only": true
+        },
+        "hr_firstarabicname": {
+          "type": "string",
+          "title": "First Arabic Name",
+          "x-ms-dataverse-attribute": "hr_firstarabicname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_FirstArabicName",
+          "required": true,
+          "maxLength": 100
+        },
+        "hr_firstname": {
+          "type": "string",
+          "title": "First Name",
+          "x-ms-dataverse-attribute": "hr_firstname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_FirstName",
+          "required": true,
+          "maxLength": 100
+        },
+        "hr_fourtharabicname": {
+          "type": "string",
+          "title": "Last Arabic Name",
+          "x-ms-dataverse-attribute": "hr_fourtharabicname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_FourthArabicName",
+          "required": true,
+          "maxLength": 100
+        },
+        "hr_fullarabicname": {
+          "type": "string",
+          "title": "Full Arabic Name",
+          "x-ms-dataverse-attribute": "hr_fullarabicname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_FullArabicName",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_fullname": {
+          "type": "string",
+          "title": "Full Name",
+          "x-ms-dataverse-attribute": "hr_fullname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_FullName",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_function": {
+          "type": "string",
+          "title": "Function",
+          "x-ms-dataverse-attribute": "hr_function",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_Function",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_functioncategory": {
+          "type": "string",
+          "title": "Function Category",
+          "x-ms-dataverse-attribute": "hr_functioncategory",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_FunctionCategory",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_gender": {
+          "type": "string",
+          "title": "Gender",
+          "x-ms-dataverse-attribute": "hr_gender",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "hr_Gender",
+          "required": true,
+          "enum": [
+            "Male",
+            "Female",
+            "Both"
+          ],
+          "x-ms-enum-values": [
+            989230000,
+            989230001,
+            769380001
+          ],
+          "Color": [
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "8087c3ea-092f-f011-8c4e-6045bd9cb0ae",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Gender",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "hr_gendername": {
+          "type": "string",
+          "title": "hr_gendername",
+          "x-ms-dataverse-attribute": "hr_gendername",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_genderName",
+          "x-ms-read-only": true
+        },
+        "hr_hiredate": {
+          "type": "string",
+          "title": "Hire Date",
+          "x-ms-dataverse-attribute": "hr_hiredate",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "hr_HireDate",
+          "required": true
+        },
+        "hr_holdername": {
+          "type": "string",
+          "title": "Holder Name",
+          "x-ms-dataverse-attribute": "hr_holdername",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_HolderName",
+          "required": true,
+          "maxLength": 100
+        },
+        "hr_hrcostcenter": {
+          "type": "string",
+          "title": "HR Cost Center",
+          "x-ms-dataverse-attribute": "hr_hrcostcenter",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "hr_HRCostCenter",
+          "required": true,
+          "enum": [
+            "Egypt operation",
+            "Management Contract",
+            "Remote",
+            "La-Santi",
+            "AMP",
+            "AES",
+            "AHBS",
+            "Africa",
+            "ATS",
+            "Homecare",
+            "Advertising & Production",
+            "VD",
+            "KSA Operation"
+          ],
+          "x-ms-enum-values": [
+            123140000,
+            123140001,
+            123140002,
+            123140003,
+            123140004,
+            123140005,
+            123140006,
+            123140007,
+            123140008,
+            123140009,
+            123140010,
+            123140011,
+            123140012
+          ],
+          "Color": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "be17d55e-b06f-f111-ab0c-000d3ac2559d",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "HR System-HR Cost Center",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "hr_hrcostcentername": {
+          "type": "string",
+          "title": "hr_hrcostcentername",
+          "x-ms-dataverse-attribute": "hr_hrcostcentername",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_hrcostcenterName",
+          "x-ms-read-only": true
+        },
+        "hr_id": {
+          "type": "string",
+          "title": "HR-Code",
+          "x-ms-dataverse-attribute": "hr_id",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_ID",
+          "x-ms-dataverse-primary-name": true,
+          "required": true,
+          "maxLength": 850
+        },
+        "hr_identificationnumber": {
+          "type": "string",
+          "title": "Identification Type",
+          "x-ms-dataverse-attribute": "hr_identificationnumber",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "hr_IdentificationNumber",
+          "required": true,
+          "enum": [
+            "Passport Number",
+            "National ID",
+            "IQAMA Number"
+          ],
+          "x-ms-enum-values": [
+            123140000,
+            123140001,
+            123140002
+          ],
+          "Color": [
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "171252cb-6de5-f011-8407-7ced8d0cef8a",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Identification Number",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "hr_identificationnumbername": {
+          "type": "string",
+          "title": "hr_identificationnumbername",
+          "x-ms-dataverse-attribute": "hr_identificationnumbername",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_identificationnumberName",
+          "x-ms-read-only": true
+        },
+        "hr_idsystem": {
+          "type": "string",
+          "title": "ID-System",
+          "x-ms-dataverse-attribute": "hr_idsystem",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_IDSystem",
+          "maxLength": 100
+        },
+        "hr_institution": {
+          "type": "string",
+          "title": "Institution",
+          "x-ms-dataverse-attribute": "hr_institution",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_Institution",
+          "maxLength": 100
+        },
+        "hr_institutionof2nddegree": {
+          "type": "string",
+          "title": "Institution Of 2nd degree",
+          "x-ms-dataverse-attribute": "hr_institutionof2nddegree",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "hr_InstitutionOf2nddegree",
+          "enum": [
+            "High School",
+            "Bachelor",
+            "Master"
+          ],
+          "x-ms-enum-values": [
+            123140000,
+            123140001,
+            123140002
+          ],
+          "Color": [
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "7de97be0-0a63-f011-bec2-6045bdf37b46",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Degree",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "hr_institutionof2nddegreename": {
+          "type": "string",
+          "title": "hr_institutionof2nddegreename",
+          "x-ms-dataverse-attribute": "hr_institutionof2nddegreename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_institutionof2nddegreeName",
+          "x-ms-read-only": true
+        },
+        "hr_insurancecode": {
+          "type": "string",
+          "title": "Insurance Code",
+          "x-ms-dataverse-attribute": "hr_insurancecode",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_InsuranceCode",
+          "required": true,
+          "maxLength": 100
+        },
+        "hr_insurancestartdate": {
+          "type": "string",
+          "title": "Insurance Start Date",
+          "x-ms-dataverse-attribute": "hr_insurancestartdate",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "hr_InsuranceStartDate",
+          "required": true
+        },
+        "hr_iqamanumber": {
+          "type": "string",
+          "title": "IQAMA Number",
+          "x-ms-dataverse-attribute": "hr_iqamanumber",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_IQAMANumber",
+          "required": true,
+          "maxLength": 100
+        },
+        "hr_isactive": {
+          "type": "string",
+          "title": "Contract Active",
+          "x-ms-dataverse-attribute": "hr_isactive",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_isActive",
+          "maxLength": 100
+        },
+        "hr_isinsured": {
+          "type": "string",
+          "title": "isInsured",
+          "x-ms-dataverse-attribute": "hr_isinsured",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "hr_isInsured",
+          "required": true,
+          "enum": [
+            "Yes",
+            "No",
+            "External Insurance"
+          ],
+          "x-ms-enum-values": [
+            123140000,
+            123140001,
+            123140002
+          ],
+          "Color": [
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "cb79f48f-287c-f011-b4cc-6045bdf37b46",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "isInsured",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "hr_isinsuredname": {
+          "type": "string",
+          "title": "hr_isinsuredname",
+          "x-ms-dataverse-attribute": "hr_isinsuredname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_isinsuredName",
+          "x-ms-read-only": true
+        },
+        "hr_isintern": {
+          "type": "string",
+          "title": "IsIntern",
+          "x-ms-dataverse-attribute": "hr_isintern",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "hr_IsIntern",
+          "enum": [
+            "No",
+            "Yes"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "511b6bdd-01ce-f011-8544-7ced8d0cef8a",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "IsIntern",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "hr_isinternname": {
+          "type": "string",
+          "title": "hr_isinternname",
+          "x-ms-dataverse-attribute": "hr_isinternname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_isinternName",
+          "x-ms-read-only": true
+        },
+        "hr_jobtype": {
+          "type": "string",
+          "title": "Job Type",
+          "x-ms-dataverse-attribute": "hr_jobtype",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_JobType",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_lastname": {
+          "type": "string",
+          "title": "Last Name",
+          "x-ms-dataverse-attribute": "hr_lastname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_LastName",
+          "required": true,
+          "maxLength": 100
+        },
+        "hr_level": {
+          "type": "string",
+          "title": "Level",
+          "x-ms-dataverse-attribute": "hr_level",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "hr_Level",
+          "x-ms-read-only": true
+        },
+        "hr_major": {
+          "type": "string",
+          "title": "Major",
+          "x-ms-dataverse-attribute": "hr_major",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_Major",
+          "maxLength": 100
+        },
+        "hr_mappingofpositionnameforexperience": {
+          "type": "string",
+          "title": "Mapping of Position Name for Experience",
+          "x-ms-dataverse-attribute": "hr_mappingofpositionnameforexperience",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_MappingofPositionNameforExperience",
+          "maxLength": 100
+        },
+        "hr_maritalstatus": {
+          "type": "string",
+          "title": "Marital Status",
+          "x-ms-dataverse-attribute": "hr_maritalstatus",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "hr_MaritalStatus",
+          "required": true,
+          "enum": [
+            "Single",
+            "Married",
+            "Divorced",
+            "Widowed"
+          ],
+          "x-ms-enum-values": [
+            989230000,
+            989230001,
+            989230002,
+            989230003
+          ],
+          "Color": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "4c8eb393-0a2f-f011-8c4e-6045bd9cb0ae",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "MaritalStatus",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "hr_maritalstatusname": {
+          "type": "string",
+          "title": "hr_maritalstatusname",
+          "x-ms-dataverse-attribute": "hr_maritalstatusname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_maritalstatusName",
+          "x-ms-read-only": true
+        },
+        "hr_maxeffectiveday": {
+          "type": "string",
+          "title": "Max Effective Day",
+          "x-ms-dataverse-attribute": "hr_maxeffectiveday",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "hr_MaxEffectiveDay",
+          "x-ms-read-only": true
+        },
+        "hr_maxeffectiveday_date": {
+          "type": "string",
+          "title": "Max Effective Day (Last Updated On)",
+          "x-ms-dataverse-attribute": "hr_maxeffectiveday_date",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "hr_MaxEffectiveDay_Date",
+          "x-ms-read-only": true
+        },
+        "hr_maxeffectiveday_state": {
+          "type": "string",
+          "title": "Max Effective Day (State)",
+          "x-ms-dataverse-attribute": "hr_maxeffectiveday_state",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "hr_MaxEffectiveDay_State",
+          "x-ms-read-only": true
+        },
+        "hr_maxlastdateofcontract": {
+          "type": "string",
+          "title": "Max Last Date of Contract",
+          "x-ms-dataverse-attribute": "hr_maxlastdateofcontract",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "hr_MaxLastDateofContract",
+          "x-ms-read-only": true
+        },
+        "hr_maxlastdateofcontract_date": {
+          "type": "string",
+          "title": "Max Last Date of Contract (Last Updated On)",
+          "x-ms-dataverse-attribute": "hr_maxlastdateofcontract_date",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "hr_MaxLastDateofContract_Date",
+          "x-ms-read-only": true
+        },
+        "hr_maxlastdateofcontract_state": {
+          "type": "string",
+          "title": "Max Last Date of Contract (State)",
+          "x-ms-dataverse-attribute": "hr_maxlastdateofcontract_state",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "hr_MaxLastDateofContract_State",
+          "x-ms-read-only": true
+        },
+        "hr_monthbirthdate": {
+          "type": "string",
+          "title": "Month(Birthdate)",
+          "x-ms-dataverse-attribute": "hr_monthbirthdate",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "hr_MonthBirthdate",
+          "x-ms-read-only": true
+        },
+        "hr_nationality": {
+          "type": "string",
+          "title": "Nationality",
+          "x-ms-dataverse-attribute": "hr_nationality",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "hr_Nationality",
+          "required": true
+        },
+        "hr_nationalityname": {
+          "type": "string",
+          "title": "hr_nationalityname",
+          "x-ms-dataverse-attribute": "hr_nationalityname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_NationalityName",
+          "x-ms-read-only": true,
+          "maxLength": 850
+        },
+        "hr_numberofhrcode": {
+          "type": "string",
+          "title": "Number of HR-Code",
+          "x-ms-dataverse-attribute": "hr_numberofhrcode",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_NumberofHRCode",
+          "maxLength": 100
+        },
+        "hr_officelocation": {
+          "type": "string",
+          "title": "Office Location",
+          "x-ms-dataverse-attribute": "hr_officelocation",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "hr_OfficeLocation",
+          "required": true,
+          "enum": [
+            "AHQ Villa",
+            "AHQ Piero",
+            "CHQ",
+            "ERS",
+            "AHBS",
+            "AAC",
+            "ARC",
+            "SMH",
+            "ASH",
+            "ASSH",
+            "ENG",
+            "AMH",
+            "AMC",
+            "AMX",
+            "AKW",
+            "AHJ",
+            "ALW",
+            "GEO",
+            "MKR",
+            "SNB"
+          ],
+          "x-ms-enum-values": [
+            123140000,
+            123140001,
+            123140002,
+            123140003,
+            123140004,
+            123140005,
+            123140006,
+            123140007,
+            123140008,
+            123140009,
+            123140010,
+            123140011,
+            123140012,
+            123140013,
+            123140014,
+            123140015,
+            123140016,
+            123140017,
+            123140018,
+            123140019
+          ],
+          "Color": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "439a41b7-d9d8-f011-8544-7ced8d0cef8a",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "HR System-Office Location",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "hr_officelocationname": {
+          "type": "string",
+          "title": "hr_officelocationname",
+          "x-ms-dataverse-attribute": "hr_officelocationname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_officelocationName",
+          "x-ms-read-only": true
+        },
+        "hr_orgastructurestatus": {
+          "type": "string",
+          "title": "Organization Structure Status",
+          "x-ms-dataverse-attribute": "hr_orgastructurestatus",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "hr_OrgaStructureStatus",
+          "x-ms-read-only": true,
+          "enum": [
+            "Hold",
+            "Closed"
+          ],
+          "x-ms-enum-values": [
+            123140000,
+            123140001
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "23874525-aba9-f011-bbd2-7ced8d0cef8a",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "HR System-Org Status",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "hr_orgastructurestatusname": {
+          "type": "string",
+          "title": "hr_orgastructurestatusname",
+          "x-ms-dataverse-attribute": "hr_orgastructurestatusname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_orgastructurestatusName",
+          "x-ms-read-only": true
+        },
+        "hr_ownerhrteam": {
+          "type": "string",
+          "title": "Owner-HR Team",
+          "x-ms-dataverse-attribute": "hr_ownerhrteam",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_OwnerHRTeam",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_passportnumber": {
+          "type": "string",
+          "title": "Passport Number",
+          "x-ms-dataverse-attribute": "hr_passportnumber",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_PassportNumber",
+          "maxLength": 100
+        },
+        "hr_percentageofsn": {
+          "type": "string",
+          "title": "Percentage of S.N",
+          "x-ms-dataverse-attribute": "hr_percentageofsn",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "hr_PercentageofSN",
+          "enum": [
+            "No",
+            "Yes"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "a8c10bae-288f-f011-b4cc-6045bdf37b46",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Percentage of S.N",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "hr_percentageofsnname": {
+          "type": "string",
+          "title": "hr_percentageofsnname",
+          "x-ms-dataverse-attribute": "hr_percentageofsnname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_percentageofsnName",
+          "x-ms-read-only": true
+        },
+        "hr_phone": {
+          "type": "string",
+          "title": "Phone ",
+          "x-ms-dataverse-attribute": "hr_phone",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_Phone",
+          "maxLength": 100
+        },
+        "hr_placeofbirth": {
+          "type": "string",
+          "title": "Place of Birth",
+          "x-ms-dataverse-attribute": "hr_placeofbirth",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_PlaceofBirth",
+          "maxLength": 100
+        },
+        "hr_position": {
+          "type": "string",
+          "title": "Position",
+          "x-ms-dataverse-attribute": "hr_position",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_Position",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_position_type": {
+          "type": "string",
+          "title": "Position_Type",
+          "x-ms-dataverse-attribute": "hr_position_type",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "hr_Position_Type",
+          "enum": [
+            "Acting as",
+            "Deputy",
+            "Junior",
+            "Mid",
+            "Mid Level 1",
+            "Mid Level 2",
+            "Mid Level 3",
+            "Senior",
+            "Senior Level 1",
+            "Senior Level 2",
+            "Senior Level 3",
+            "Level 1",
+            "Level 2",
+            "Level 3"
+          ],
+          "x-ms-enum-values": [
+            123140000,
+            123140001,
+            123140002,
+            123140003,
+            123140004,
+            123140005,
+            123140006,
+            123140007,
+            123140008,
+            123140009,
+            123140010,
+            123140011,
+            123140012,
+            123140013
+          ],
+          "Color": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "d3928169-dd92-f011-b4cb-6045bd8cce39",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Position_Type",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "hr_position_typename": {
+          "type": "string",
+          "title": "hr_position_typename",
+          "x-ms-dataverse-attribute": "hr_position_typename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_position_typeName",
+          "x-ms-read-only": true
+        },
+        "hr_positionname": {
+          "type": "string",
+          "title": "Position Name",
+          "x-ms-dataverse-attribute": "hr_positionname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_PositionName",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_probationstatus": {
+          "type": "string",
+          "title": "Probation Status",
+          "x-ms-dataverse-attribute": "hr_probationstatus",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "hr_ProbationStatus",
+          "enum": [
+            "Active",
+            "Completed",
+            "Extended"
+          ],
+          "x-ms-enum-values": [
+            123140000,
+            123140001,
+            123140002
+          ],
+          "Color": [
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "bba638fb-0f63-f011-bec2-6045bdf37b46",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Probation Status",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "hr_probationstatusname": {
+          "type": "string",
+          "title": "hr_probationstatusname",
+          "x-ms-dataverse-attribute": "hr_probationstatusname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_probationstatusName",
+          "x-ms-read-only": true
+        },
+        "hr_qualification": {
+          "type": "string",
+          "title": "Qualifications",
+          "x-ms-dataverse-attribute": "hr_qualification",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_Qualification",
+          "maxLength": 100
+        },
+        "hr_reasonoflayoff": {
+          "type": "string",
+          "title": "Reason Of Layoff",
+          "x-ms-dataverse-attribute": "hr_reasonoflayoff",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_ReasonOfLayoff",
+          "maxLength": 100
+        },
+        "hr_region": {
+          "type": "string",
+          "title": "Region",
+          "x-ms-dataverse-attribute": "hr_region",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "hr_Region"
+        },
+        "hr_regionname": {
+          "type": "string",
+          "title": "hr_regionname",
+          "x-ms-dataverse-attribute": "hr_regionname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_RegionName",
+          "x-ms-read-only": true,
+          "maxLength": 850
+        },
+        "hr_rejectedorpending": {
+          "type": "string",
+          "title": "Rejected or pending ",
+          "x-ms-dataverse-attribute": "hr_rejectedorpending",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "hr_Rejectedorpending",
+          "x-ms-read-only": true
+        },
+        "hr_rejectedorpending_date": {
+          "type": "string",
+          "title": "Rejected or pending  (Last Updated On)",
+          "x-ms-dataverse-attribute": "hr_rejectedorpending_date",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "hr_Rejectedorpending_Date",
+          "x-ms-read-only": true
+        },
+        "hr_rejectedorpending_state": {
+          "type": "string",
+          "title": "Rejected or pending  (State)",
+          "x-ms-dataverse-attribute": "hr_rejectedorpending_state",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "hr_Rejectedorpending_State",
+          "x-ms-read-only": true
+        },
+        "hr_religion": {
+          "type": "string",
+          "title": "Religion",
+          "x-ms-dataverse-attribute": "hr_religion",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "hr_Religion",
+          "required": true,
+          "enum": [
+            "Muslim",
+            "Christian",
+            "Other"
+          ],
+          "x-ms-enum-values": [
+            123140000,
+            123140001,
+            123140002
+          ],
+          "Color": [
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "01c49467-0763-f011-bec2-6045bdf37b46",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Religion",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "hr_religionname": {
+          "type": "string",
+          "title": "hr_religionname",
+          "x-ms-dataverse-attribute": "hr_religionname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_religionName",
+          "x-ms-read-only": true
+        },
+        "hr_secondarabicname": {
+          "type": "string",
+          "title": "Second Arabic Name",
+          "x-ms-dataverse-attribute": "hr_secondarabicname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_SecondArabicName",
+          "required": true,
+          "maxLength": 100
+        },
+        "hr_secondname": {
+          "type": "string",
+          "title": "Second Name",
+          "x-ms-dataverse-attribute": "hr_secondname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_SecondName",
+          "required": true,
+          "maxLength": 100
+        },
+        "hr_secounddegree": {
+          "type": "string",
+          "title": "Secound Degree",
+          "x-ms-dataverse-attribute": "hr_secounddegree",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_SecoundDegree",
+          "maxLength": 100
+        },
+        "hr_section": {
+          "type": "string",
+          "title": "Section",
+          "x-ms-dataverse-attribute": "hr_section",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_Section",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_senioritystatus": {
+          "type": "string",
+          "title": "Seniority Status",
+          "x-ms-dataverse-attribute": "hr_senioritystatus",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "hr_senioritystatus",
+          "enum": [
+            "Junior",
+            "Senior",
+            "Mid Level",
+            "Specialist"
+          ],
+          "x-ms-enum-values": [
+            123140000,
+            123140001,
+            123140002,
+            123140003
+          ],
+          "Color": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "9ffcb277-162c-426e-a5df-a83fc5d2f3c7",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Seniority Status",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "hr_senioritystatusname": {
+          "type": "string",
+          "title": "hr_senioritystatusname",
+          "x-ms-dataverse-attribute": "hr_senioritystatusname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_senioritystatusName",
+          "x-ms-read-only": true
+        },
+        "hr_setexperiencefortheemployee": {
+          "type": "string",
+          "title": "Set Experience for the employee.",
+          "x-ms-dataverse-attribute": "hr_setexperiencefortheemployee",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "hr_SetExperiencefortheemployee",
+          "required": true,
+          "enum": [
+            "Yes",
+            "No"
+          ],
+          "x-ms-enum-values": [
+            123140000,
+            123140001
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "ad89fe2f-46ea-f011-8407-7ced8d0cef8a",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Set Experience for the employee.",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "hr_setexperiencefortheemployeename": {
+          "type": "string",
+          "title": "hr_setexperiencefortheemployeename",
+          "x-ms-dataverse-attribute": "hr_setexperiencefortheemployeename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_setexperiencefortheemployeeName",
+          "x-ms-read-only": true
+        },
+        "hr_ssn": {
+          "type": "string",
+          "title": "National ID",
+          "x-ms-dataverse-attribute": "hr_ssn",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_SSN",
+          "required": true,
+          "maxLength": 14
+        },
+        "hr_startdateinposition": {
+          "type": "string",
+          "title": "Start Date in Position",
+          "x-ms-dataverse-attribute": "hr_startdateinposition",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "hr_StartDateinPosition",
+          "x-ms-read-only": true
+        },
+        "hr_stateofdisclaimer": {
+          "type": "string",
+          "title": "Disclaimer Status",
+          "x-ms-dataverse-attribute": "hr_stateofdisclaimer",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_StateofDisclaimer",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_statusoflayoff": {
+          "type": "string",
+          "title": "Status Of Layoff",
+          "x-ms-dataverse-attribute": "hr_statusoflayoff",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_StatusOfLayoff",
+          "maxLength": 100
+        },
+        "hr_subsection": {
+          "type": "string",
+          "title": "Sub Section",
+          "x-ms-dataverse-attribute": "hr_subsection",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_SubSection",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_thirdarabicname": {
+          "type": "string",
+          "title": "Third Arabic Name",
+          "x-ms-dataverse-attribute": "hr_thirdarabicname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_ThirdArabicName",
+          "required": true,
+          "maxLength": 100
+        },
+        "hr_thirdname": {
+          "type": "string",
+          "title": "Third Name",
+          "x-ms-dataverse-attribute": "hr_thirdname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_ThirdName",
+          "required": true,
+          "maxLength": 100
+        },
+        "hr_user": {
+          "type": "string",
+          "title": "User",
+          "x-ms-dataverse-attribute": "hr_user",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "hr_User"
+        },
+        "hr_userbu_fx": {
+          "type": "string",
+          "title": "User BU",
+          "x-ms-dataverse-attribute": "hr_userbu_fx",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_UserBU_Fx",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_useremail": {
+          "type": "string",
+          "title": "User Email",
+          "x-ms-dataverse-attribute": "hr_useremail",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_UserEmail",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_username": {
+          "type": "string",
+          "title": "hr_username",
+          "x-ms-dataverse-attribute": "hr_username",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_UserName",
+          "x-ms-read-only": true,
+          "maxLength": 200
+        },
+        "hr_usertitle_fx": {
+          "type": "string",
+          "title": "User Title",
+          "x-ms-dataverse-attribute": "hr_usertitle_fx",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_UserTitle_Fx",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "hr_useryominame": {
+          "type": "string",
+          "title": "hr_useryominame",
+          "x-ms-dataverse-attribute": "hr_useryominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "hr_UserYomiName",
+          "x-ms-read-only": true,
+          "maxLength": 200
+        },
+        "hr_workinghours": {
+          "type": "string",
+          "title": "Working Hours",
+          "x-ms-dataverse-attribute": "hr_workinghours",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "hr_WorkingHours",
+          "enum": [
+            "8",
+            "9",
+            "12",
+            "24"
+          ],
+          "x-ms-enum-values": [
+            123140000,
+            123140001,
+            123140002,
+            123140003
+          ],
+          "Color": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "bebe17bf-1f63-f011-bec2-6045bdf37b46",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "HR System-Working Hours",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "hr_workinghoursname": {
+          "type": "string",
+          "title": "hr_workinghoursname",
+          "x-ms-dataverse-attribute": "hr_workinghoursname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "hr_workinghoursName",
+          "x-ms-read-only": true
+        },
+        "hr_yearofgraduation": {
+          "type": "string",
+          "title": "Year of Graduation",
+          "x-ms-dataverse-attribute": "hr_yearofgraduation",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "hr_YearofGraduation"
+        },
+        "hr_yearsofexperience": {
+          "type": "string",
+          "title": "Years of Experience",
+          "x-ms-dataverse-attribute": "hr_yearsofexperience",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "hr_YearsofExperience"
+        },
+        "importsequencenumber": {
+          "type": "string",
+          "title": "Import Sequence Number",
+          "x-ms-dataverse-attribute": "importsequencenumber",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "ImportSequenceNumber"
+        },
+        "man_keyperson": {
+          "type": "string",
+          "title": "Key Person",
+          "x-ms-dataverse-attribute": "man_keyperson",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "man_KeyPerson",
+          "enum": [
+            "false",
+            "true"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            "#ff5959",
+            "#6bff6e"
+          ],
+          "x-ms-optionsetmetadataid": "0c7a5515-779c-f111-b8db-00224882d001",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Key Person",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "man_keypersonname": {
+          "type": "string",
+          "title": "man_keypersonname",
+          "x-ms-dataverse-attribute": "man_keypersonname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "man_keypersonName",
+          "x-ms-read-only": true
+        },
+        "modifiedby": {
+          "type": "string",
+          "title": "Modified By",
+          "x-ms-dataverse-attribute": "modifiedby",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "ModifiedBy",
+          "x-ms-read-only": true
+        },
+        "modifiedbyname": {
+          "type": "string",
+          "title": "modifiedbyname",
+          "x-ms-dataverse-attribute": "modifiedbyname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ModifiedByName",
+          "x-ms-read-only": true,
+          "maxLength": 100
+        },
+        "modifiedbyyominame": {
+          "type": "string",
+          "title": "modifiedbyyominame",
+          "x-ms-dataverse-attribute": "modifiedbyyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ModifiedByYomiName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "modifiedon": {
+          "type": "string",
+          "title": "Modified On",
+          "x-ms-dataverse-attribute": "modifiedon",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "ModifiedOn",
+          "x-ms-read-only": true
+        },
+        "modifiedonbehalfby": {
+          "type": "string",
+          "title": "Modified By (Delegate)",
+          "x-ms-dataverse-attribute": "modifiedonbehalfby",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "ModifiedOnBehalfBy",
+          "x-ms-read-only": true
+        },
+        "modifiedonbehalfbyname": {
+          "type": "string",
+          "title": "modifiedonbehalfbyname",
+          "x-ms-dataverse-attribute": "modifiedonbehalfbyname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ModifiedOnBehalfByName",
+          "x-ms-read-only": true,
+          "maxLength": 100
+        },
+        "modifiedonbehalfbyyominame": {
+          "type": "string",
+          "title": "modifiedonbehalfbyyominame",
+          "x-ms-dataverse-attribute": "modifiedonbehalfbyyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ModifiedOnBehalfByYomiName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "overriddencreatedon": {
+          "type": "string",
+          "title": "Record Created On",
+          "x-ms-dataverse-attribute": "overriddencreatedon",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "OverriddenCreatedOn"
+        },
+        "ownerid": {
+          "type": "string",
+          "title": "Owner",
+          "x-ms-dataverse-attribute": "ownerid",
+          "x-ms-dataverse-type": "OwnerType",
+          "x-ms-schema-name": "OwnerId",
+          "required": true
+        },
+        "owneridname": {
+          "type": "string",
+          "title": "owneridname",
+          "x-ms-dataverse-attribute": "owneridname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "OwnerIdName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "owneridtype": {
+          "type": "string",
+          "title": "owneridtype",
+          "x-ms-dataverse-attribute": "owneridtype",
+          "x-ms-dataverse-type": "EntityNameType",
+          "x-ms-schema-name": "OwnerIdType",
+          "required": true
+        },
+        "owneridyominame": {
+          "type": "string",
+          "title": "owneridyominame",
+          "x-ms-dataverse-attribute": "owneridyominame",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "OwnerIdYomiName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "owningbusinessunit": {
+          "type": "string",
+          "title": "Owning Business Unit",
+          "x-ms-dataverse-attribute": "owningbusinessunit",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "OwningBusinessUnit",
+          "x-ms-read-only": true
+        },
+        "owningbusinessunitname": {
+          "type": "string",
+          "title": "owningbusinessunitname",
+          "x-ms-dataverse-attribute": "owningbusinessunitname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "OwningBusinessUnitName",
+          "x-ms-read-only": true,
+          "required": true,
+          "maxLength": 100
+        },
+        "owningteam": {
+          "type": "string",
+          "title": "Owning Team",
+          "x-ms-dataverse-attribute": "owningteam",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "OwningTeam",
+          "x-ms-read-only": true
+        },
+        "owninguser": {
+          "type": "string",
+          "title": "Owning User",
+          "x-ms-dataverse-attribute": "owninguser",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "OwningUser",
+          "x-ms-read-only": true
+        },
+        "sme_administrativemanageremail": {
+          "type": "string",
+          "title": "Administrative Manager Email",
+          "x-ms-dataverse-attribute": "sme_administrativemanageremail",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "sme_AdministrativeManagerEmail",
+          "x-ms-read-only": true,
+          "maxLength": 4000
+        },
+        "statecode": {
+          "type": "string",
+          "title": "Status",
+          "x-ms-dataverse-attribute": "statecode",
+          "x-ms-dataverse-type": "StateType",
+          "x-ms-schema-name": "statecode",
+          "required": true,
+          "enum": [
+            "Active",
+            "Inactive"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "e40c41be-5b2c-f011-8c4d-6045bdf32ce7",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Status",
+          "x-ms-optionSetType": "State"
+        },
+        "statecodename": {
+          "type": "string",
+          "title": "statecodename",
+          "x-ms-dataverse-attribute": "statecodename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "statecodeName",
+          "x-ms-read-only": true
+        },
+        "statuscode": {
+          "type": "string",
+          "title": "Status Reason",
+          "x-ms-dataverse-attribute": "statuscode",
+          "x-ms-dataverse-type": "StatusType",
+          "x-ms-schema-name": "statuscode",
+          "enum": [
+            "Active",
+            "Inactive"
+          ],
+          "x-ms-enum-values": [
+            1,
+            2
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "ee0c41be-5b2c-f011-8c4d-6045bdf32ce7",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Status Reason",
+          "x-ms-optionSetType": "Status"
+        },
+        "statuscodename": {
+          "type": "string",
+          "title": "statuscodename",
+          "x-ms-dataverse-attribute": "statuscodename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "statuscodeName",
+          "x-ms-read-only": true
+        },
+        "timezoneruleversionnumber": {
+          "type": "string",
+          "title": "Time Zone Rule Version Number",
+          "x-ms-dataverse-attribute": "timezoneruleversionnumber",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "TimeZoneRuleVersionNumber"
+        },
+        "utcconversiontimezonecode": {
+          "type": "string",
+          "title": "UTC Conversion Time Zone Code",
+          "x-ms-dataverse-attribute": "utcconversiontimezonecode",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "UTCConversionTimeZoneCode"
+        },
+        "versionnumber": {
+          "type": "string",
+          "title": "Version Number",
+          "x-ms-dataverse-attribute": "versionnumber",
+          "x-ms-dataverse-type": "BigIntType",
+          "x-ms-schema-name": "VersionNumber",
+          "x-ms-read-only": true
+        }
+      },
+      "required": [
+        "cr603_organizationstructure",
+        "createdbyyominame",
+        "createdonbehalfbyyominame",
+        "hr_bankaccountname",
+        "hr_birthdate",
+        "hr_businessunit",
+        "hr_effectivedate",
+        "hr_employeeid",
+        "hr_firstarabicname",
+        "hr_firstname",
+        "hr_fourtharabicname",
+        "hr_gender",
+        "hr_hiredate",
+        "hr_holdername",
+        "hr_hrcostcenter",
+        "hr_id",
+        "hr_identificationnumber",
+        "hr_insurancecode",
+        "hr_insurancestartdate",
+        "hr_iqamanumber",
+        "hr_isinsured",
+        "hr_lastname",
+        "hr_maritalstatus",
+        "hr_nationality",
+        "hr_officelocation",
+        "hr_religion",
+        "hr_secondarabicname",
+        "hr_secondname",
+        "hr_setexperiencefortheemployee",
+        "hr_ssn",
+        "hr_thirdarabicname",
+        "hr_thirdname",
+        "modifiedbyyominame",
+        "modifiedonbehalfbyyominame",
+        "ownerid",
+        "owneridname",
+        "owneridtype",
+        "owneridyominame",
+        "owningbusinessunitname",
+        "statecode"
+      ]
+    }
+  }
+}

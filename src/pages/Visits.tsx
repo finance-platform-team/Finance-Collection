@@ -2,23 +2,149 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Cr301_visitsService } from '../generated/services/Cr301_visitsService';
 import { Cr301_accountsService } from '../generated/services/Cr301_accountsService';
 import { Cr301_agentsService } from '../generated/services/Cr301_agentsService';
+import { Hr_employeesService } from '../generated/services/Hr_employeesService';
+import { Stf_kpiachievmentbreakdownsService } from '../generated/services/Stf_kpiachievmentbreakdownsService';
+import { Cfm_collectionplanweeksService } from '../generated/services/Cfm_collectionplanweeksService';
+import { Cr301_visitscr301_visitstatus } from '../generated/models/Cr301_visitsModel';
 import type { Cr301_visitsBase, Cr301_visitscr301_visittype } from '../generated/models/Cr301_visitsModel';
+import type { Cfm_collectionplanweeks } from '../generated/models/Cfm_collectionplanweeksModel';
+import type { Hr_employees } from '../generated/models/Hr_employeesModel';
 import { operationErrorMessage } from '../lib/errors';
+import { fetchAll } from '../lib/dataverse';
+import { visitStatusClass } from '../lib/visitStatus';
 import './Visits.css';
 
+const VISIT_KPI_NAME = 'No. of Visits';
+
+// First 3 words of a name, normalized — same tolerant match used on the Agents
+// page for Employee <-> System User, reused here for Agent <-> Employee since
+// Arabic names commonly carry 3-4+ parts and HR vs. agent records don't always
+// agree on how many are kept.
+function firstWords(name: string, n: number): string {
+  return name.trim().toLowerCase().split(/\s+/).slice(0, n).join(' ');
+}
+
+type AdjustOutcome =
+  | { status: 'ok'; weekNumber?: number }
+  | { status: 'no-employee' | 'no-breakdown' | 'no-week' | 'bad-date'; agentName: string }
+  | { status: 'error'; agentName: string; message: string };
+
+/**
+ * For an agent + a reference date (the Visit's createdon), find that agent's
+ * matching hr_employees record (by name), their active "No. of Visits" KPI
+ * achievement breakdown for that date's year, and the Collection Plan Week
+ * under that breakdown whose cfm_weeknumber matches the reference date's
+ * day-of-month bucket (day 1-7 -> week 1, 8-14 -> week 2, 15-21 -> week 3,
+ * ...) — then adjust that week's cfm_actual by `delta` (+1 for a
+ * created/moved-in visit, -1 for a removed/moved-out one, clamped at 0).
+ *
+ * Deliberately does NOT compare against cfm_weekfrom/cfm_weekto: those aren't
+ * reliable real calendar boundaries (the create wizard in VisitPlan.tsx just
+ * stamps them as sequential 7-day ranges from whenever the plan happened to be
+ * created, not from a fixed month start), so date-range matching against them
+ * can miss every week. cfm_weeknumber is the one plan-week-count-agnostic
+ * anchor both this code and the plan's own week cards agree on.
+ *
+ * Mirrors what a Power Automate flow on cr301_visits would do, run inline
+ * instead. Returns which step it stopped at rather than throwing, so the
+ * caller can tell the user exactly why nothing was adjusted instead of
+ * failing silently.
+ */
+async function adjustVisitPlanActual(agentName: string, referenceDateIso: string, delta: 1 | -1): Promise<AdjustOutcome> {
+  try {
+    const employeeRows = await fetchAll<Hr_employees>(
+      (skipToken) => Hr_employeesService.getAll({ select: ['hr_employeeid', 'hr_fullname'], filter: 'statecode eq 0', maxPageSize: 5000, skipToken }),
+      'Could not load employees.'
+    );
+    const agentKey = firstWords(agentName, 3);
+    const employee = agentKey ? employeeRows.find((e) => firstWords(e.hr_fullname || '', 3) === agentKey) : undefined;
+    if (!employee) return { status: 'no-employee', agentName };
+
+    const referenceDate = new Date(referenceDateIso);
+    if (Number.isNaN(referenceDate.getTime())) return { status: 'bad-date', agentName };
+    const year = referenceDate.getUTCFullYear();
+    const weekNumber = Math.ceil(referenceDate.getUTCDate() / 7);
+
+    const breakdowns = await Stf_kpiachievmentbreakdownsService.getAll({
+      select: ['stf_kpiachievmentbreakdownid'],
+      filter: `_stf_employee_value eq ${employee.hr_employeeid} and pms_year eq ${year} and pms_kpinamefx eq '${VISIT_KPI_NAME}' and statecode eq 0`,
+      orderBy: ['createdon desc'],
+      top: 1,
+    });
+    const breakdownId = breakdowns.success ? breakdowns.data?.[0]?.stf_kpiachievmentbreakdownid : undefined;
+    if (!breakdownId) return { status: 'no-breakdown', agentName };
+
+    const weeks = await fetchAll<Cfm_collectionplanweeks>(
+      (skipToken) =>
+        Cfm_collectionplanweeksService.getAll({
+          select: ['cfm_collectionplanweekid', 'cfm_weeknumber', 'cfm_actual'],
+          filter: `_cfm_kpiachievementbreakdown_value eq ${breakdownId} and statecode eq 0`,
+          maxPageSize: 5000,
+          skipToken,
+        }),
+      'Could not load collection plan weeks.'
+    );
+    const target = weeks.find((w) => Number(w.cfm_weeknumber) === weekNumber);
+    if (!target) return { status: 'no-week', agentName };
+
+    const nextActual = Math.max(0, (Number(target.cfm_actual) || 0) + delta);
+    const weekResult = await Cfm_collectionplanweeksService.update(target.cfm_collectionplanweekid, { cfm_actual: nextActual });
+    if (!weekResult.success) return { status: 'error', agentName, message: operationErrorMessage(weekResult.error, 'Could not update the week.') };
+
+    // Recompute the breakdown's total from a fresh read of every week — see the
+    // same reasoning in VisitPlan.tsx's commitActual: a client-computed running
+    // total can undercount if edits race, a fresh read never does.
+    const freshWeeks = await fetchAll<Cfm_collectionplanweeks>(
+      (skipToken) =>
+        Cfm_collectionplanweeksService.getAll({
+          select: ['cfm_actual'],
+          filter: `_cfm_kpiachievementbreakdown_value eq ${breakdownId} and statecode eq 0`,
+          maxPageSize: 5000,
+          skipToken,
+        }),
+      'Could not verify week totals.'
+    );
+    const totalActual = freshWeeks.reduce((s, w) => s + (Number(w.cfm_actual) || 0), 0);
+    await Stf_kpiachievmentbreakdownsService.update(breakdownId, { stf_value: totalActual });
+    return { status: 'ok', weekNumber: target.cfm_weeknumber };
+  } catch (e) {
+    return { status: 'error', agentName, message: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+function describeAdjustOutcome(o: AdjustOutcome): string | null {
+  switch (o.status) {
+    case 'ok':
+      return null;
+    case 'no-employee':
+      return `no employee match for "${o.agentName}"`;
+    case 'no-breakdown':
+      return `no active "No. of Visits" KPI plan found for "${o.agentName}" this year`;
+    case 'no-week':
+      return `no Collection Plan Week found for "${o.agentName}"`;
+    case 'bad-date':
+      return `invalid visit date`;
+    case 'error':
+      return `${o.agentName}: ${o.message}`;
+  }
+}
+
 const TYPE_INSURANCE = 983080002; // cr301_accounttype — Insurance (same value used on the Accounts page)
+const TYPE_DIRECT = 766340001; // cr301_accounttype — Direct (same value used on the Accounts page)
 
 const VISIT_TYPE_SINGLE: Cr301_visitscr301_visittype = 983080000; // 'Single Visit'
 const VISIT_TYPE_DOUBLE: Cr301_visitscr301_visittype = 983080001; // 'Double Visit'
 
-const CATEGORY_OPTIONS = [
-  { value: 766340002, label: 'Open' },
-  { value: 766340000, label: 'Partially Closed' },
-  { value: 766340001, label: 'Closed' },
+const VISIT_STATUS_OPEN = 983080000;
+const VISIT_STATUS_OPTIONS = [
+  { value: VISIT_STATUS_OPEN, label: 'Open' },
+  { value: 983080001, label: 'Completed' },
+  { value: 983080002, label: 'Cancelled' },
+  { value: 766340001, label: 'Partially Closed' },
 ];
 
 /**
- * cfm_category, cfm_tagename, cfm_revisitdate and cfm_agent2 (Task Owner 2) do not exist
+ * cfm_tagename, cfm_revisitdate and cfm_agent2 (Task Owner 2) do not exist
  * anywhere in the generated Cr301_visitsModel — this table's Code App data source was set
  * up without these columns. There is no generic-client fallback for a missing COLUMN the
  * way there was for a whole missing TABLE (Accounts' classification lookup): cr301_visits
@@ -41,7 +167,6 @@ const TAG_COLLECTION = 766340000; // cfm_tagename — "Collection"
 const AGENT2_BIND_NAV = 'cfm_Agent2'; // unconfirmed casing — see comment above
 
 interface UnmappedVisitFields {
-  cfm_category?: number;
   cfm_tagename?: number;
   cfm_revisitdate?: string;
   _cfm_agent2_value?: string;
@@ -68,8 +193,10 @@ interface VisitRow {
   agent2Id: string;
   owner2: string;
   date: string;
+  createdon: string;
   isDouble: boolean;
-  category: number | null;
+  status: number;
+  statusLabel: string;
   revisit: string;
   notes: string;
 }
@@ -83,13 +210,6 @@ function fmtDate(iso: string): string {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-function categoryChip(category: number | null): { cls: string; label: string } {
-  if (category === 766340002) return { cls: 'vis-cat-open', label: 'Open' };
-  if (category === 766340000) return { cls: 'vis-cat-partial', label: 'Partially Closed' };
-  if (category === 766340001) return { cls: 'vis-cat-closed', label: 'Closed' };
-  return { cls: 'vis-cat-none', label: '—' };
-}
-
 export default function VisitsPage() {
   const [visits, setVisits] = useState<VisitRow[]>([]);
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
@@ -98,17 +218,23 @@ export default function VisitsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [query, setQuery] = useState('');
-  const [catFilter, setCatFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('');
+  const [monthFilter, setMonthFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  // Snapshot of the row being edited, so a saved date/agent change can decrement
+  // the KPI week it's moving out of, not just increment the one it's moving into.
+  const [editOriginal, setEditOriginal] = useState<VisitRow | null>(null);
   const [formAccountId, setFormAccountId] = useState('');
   const [formAgentId, setFormAgentId] = useState('');
   const [formDate, setFormDate] = useState('');
-  const [formCategory, setFormCategory] = useState('766340002');
+  const [formStatus, setFormStatus] = useState(String(VISIT_STATUS_OPEN));
   const [formVisitType, setFormVisitType] = useState<'single' | 'double'>('single');
   const [formAgent2Id, setFormAgent2Id] = useState('');
   const [formRevisit, setFormRevisit] = useState('');
@@ -120,11 +246,11 @@ export default function VisitsPage() {
   const [toastOn, setToastOn] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  function showToast(msg: string) {
+  function showToast(msg: string, durationMs = 2200) {
     setToastMsg(msg);
     setToastOn(true);
     clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToastOn(false), 2200);
+    toastTimer.current = setTimeout(() => setToastOn(false), durationMs);
   }
 
   async function load() {
@@ -134,7 +260,7 @@ export default function VisitsPage() {
       const [accResult, agentResult, visitResult] = await Promise.all([
         Cr301_accountsService.getAll({
           select: ['cr301_accountid', 'cr301_acccountname', 'cr301_accountcode'],
-          filter: `cr301_accounttype eq ${TYPE_INSURANCE}`,
+          filter: `cr301_accounttype eq ${TYPE_INSURANCE} or cr301_accounttype eq ${TYPE_DIRECT}`,
           orderBy: ['cr301_acccountname'],
         }),
         Cr301_agentsService.getAll({
@@ -146,12 +272,13 @@ export default function VisitsPage() {
           select: [
             'cr301_visitid',
             'cr301_visitdate',
+            'createdon',
+            'cr301_visitstatus',
             'cr301_visittype',
             'cr301_notes',
             '_cr301_account_value',
             '_cr301_agent_value',
             // Not in the generated model — see the module comment above.
-            'cfm_category',
             'cfm_tagename',
             'cfm_revisitdate',
             '_cfm_agent2_value',
@@ -201,8 +328,10 @@ export default function VisitsPage() {
           agent2Id,
           owner2: agent2?.name || '',
           date: r.cr301_visitdate || '',
+          createdon: r.createdon || '',
           isDouble: r.cr301_visittype === VISIT_TYPE_DOUBLE,
-          category: typeof extra.cfm_category === 'number' ? extra.cfm_category : null,
+          status: r.cr301_visitstatus ?? VISIT_STATUS_OPEN,
+          statusLabel: Cr301_visitscr301_visitstatus[r.cr301_visitstatus ?? VISIT_STATUS_OPEN] || '—',
           revisit: extra.cfm_revisitdate || '',
           notes: r.cr301_notes || '',
         };
@@ -222,20 +351,39 @@ export default function VisitsPage() {
     load();
   }, []);
 
+  const monthOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    visits.forEach((v) => {
+      if (!v.date) return;
+      const d = new Date(v.date);
+      if (Number.isNaN(d.getTime())) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!seen.has(key)) {
+        seen.set(key, d.toLocaleDateString(undefined, { year: 'numeric', month: 'long' }));
+      }
+    });
+    return Array.from(seen.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([value, label]) => ({ value, label }));
+  }, [visits]);
+
   const view = useMemo(() => {
     const q = query.trim().toLowerCase();
     return visits.filter((v) => {
       if (q && !`${v.owner} ${v.owner2} ${v.company} ${v.code} ${v.notes}`.toLowerCase().includes(q)) return false;
-      if (catFilter && String(v.category) !== catFilter) return false;
+      if (statusFilter && String(v.status) !== statusFilter) return false;
       if (typeFilter === 'single' && v.isDouble) return false;
       if (typeFilter === 'double' && !v.isDouble) return false;
+      if (monthFilter && v.date.slice(0, 7) !== monthFilter) return false;
+      if (dateFrom && (!v.date || v.date.slice(0, 10) < dateFrom)) return false;
+      if (dateTo && (!v.date || v.date.slice(0, 10) > dateTo)) return false;
       return true;
     });
-  }, [visits, query, catFilter, typeFilter]);
+  }, [visits, query, statusFilter, typeFilter, monthFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     setPage(1);
-  }, [query, catFilter, typeFilter]);
+  }, [query, statusFilter, typeFilter, monthFilter, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Math.ceil(view.length / pageSize));
   const clampedPage = Math.min(page, totalPages);
@@ -243,21 +391,22 @@ export default function VisitsPage() {
 
   const kpis = useMemo(() => {
     const uniqueCompanies = new Set(visits.filter((v) => v.accountId).map((v) => v.accountId)).size;
-    const open = visits.filter((v) => v.category === 766340002).length;
-    const closed = visits.filter((v) => v.category === 766340001).length;
-    return { total: visits.length, uniqueCompanies, open, closed };
+    const open = visits.filter((v) => v.status === VISIT_STATUS_OPEN).length;
+    const completed = visits.filter((v) => v.status === 983080001).length;
+    return { total: visits.length, uniqueCompanies, open, completed };
   }, [visits]);
 
   const selectedAccount = useMemo(() => accounts.find((a) => a.id === formAccountId) || null, [accounts, formAccountId]);
 
   function openDrawer(row?: VisitRow) {
     setFormError('');
+    setEditOriginal(row || null);
     if (row) {
       setEditId(row.id);
       setFormAccountId(row.accountId);
       setFormAgentId(row.agentId);
       setFormDate(row.date ? row.date.substring(0, 10) : '');
-      setFormCategory(row.category != null ? String(row.category) : '766340002');
+      setFormStatus(String(row.status));
       setFormVisitType(row.isDouble ? 'double' : 'single');
       setFormAgent2Id(row.agent2Id);
       setFormRevisit(row.revisit ? row.revisit.substring(0, 10) : '');
@@ -267,7 +416,7 @@ export default function VisitsPage() {
       setFormAccountId('');
       setFormAgentId('');
       setFormDate(new Date().toISOString().substring(0, 10));
-      setFormCategory('766340002');
+      setFormStatus(String(VISIT_STATUS_OPEN));
       setFormVisitType('single');
       setFormAgent2Id('');
       setFormRevisit('');
@@ -294,6 +443,14 @@ export default function VisitsPage() {
       setFormError('Task Owner 2 is required for a double visit.');
       return;
     }
+    if (isDouble && formAgent2Id && formAgentId === formAgent2Id) {
+      setFormError('Task Owner 2 must be different from Task Owner.');
+      return;
+    }
+    if (parseInt(formStatus, 10) !== VISIT_STATUS_OPEN && !formDate) {
+      setFormError('Visit Date is required once the status is no longer Open.');
+      return;
+    }
 
     setSaving(true);
     setFormError('');
@@ -303,9 +460,12 @@ export default function VisitsPage() {
         'cr301_Agent@odata.bind': `/cr301_agents(${formAgentId})`,
         cr301_visittype: isDouble ? VISIT_TYPE_DOUBLE : VISIT_TYPE_SINGLE,
         cr301_visitdate: formDate ? new Date(formDate).toISOString() : null,
+        // Planned Visit Date has no field of its own in this form — it just mirrors
+        // Visit Date on every save, per user confirmation.
+        cr301_plannedvisitdate: formDate ? new Date(formDate).toISOString() : null,
+        cr301_visitstatus: parseInt(formStatus, 10),
         cr301_notes: formNotes.trim() || null,
         // Not in the generated model — see the module comment above.
-        cfm_category: parseInt(formCategory, 10),
         cfm_tagename: TAG_COLLECTION,
         cfm_revisitdate: formRevisit ? new Date(formRevisit).toISOString() : null,
       };
@@ -314,11 +474,6 @@ export default function VisitsPage() {
       } else if (editId) {
         // Switched back to Single (or cleared) on an existing visit — unlink the second owner.
         body[`${AGENT2_BIND_NAV}@odata.bind`] = null;
-      }
-      if (!editId) {
-        // cr301_visitstatus is required (non-optional) on Cr301_visitsBase, but Ref.html
-        // never sets it — defaulting new visits to Open (983080000); see chat summary.
-        body.cr301_visitstatus = 983080000;
       }
 
       let result;
@@ -330,8 +485,45 @@ export default function VisitsPage() {
       if (!result.success) {
         throw new Error(operationErrorMessage(result.error, 'Save failed.'));
       }
+
+      // Both directions: creating a visit increments its week's Actual; editing
+      // its task owner(s) decrements the old owner's assignment and increments
+      // the new one's. The reference date is the visit's own createdon (system
+      // timestamp), not the user-entered Visit Date — see adjustVisitPlanActual's
+      // doc comment for why, and it's immutable, so editing an existing visit
+      // can only ever change WHICH owner(s) it counts toward, never WHICH week.
+      // A failure/no-match here never undoes the fact that the visit itself
+      // already saved fine — the outcome is surfaced in the toast, not swallowed.
+      const adjustNotes: string[] = [];
+      const referenceDateIso = editId ? editOriginal?.createdon || '' : result.data?.createdon || '';
+      if (referenceDateIso) {
+        const newAgentNames = [formAgentId, isDouble ? formAgent2Id : '']
+          .filter(Boolean)
+          .map((id) => agents.find((a) => a.id === id)?.name || '')
+          .filter(Boolean);
+        const outcomes: AdjustOutcome[] = [];
+        if (!editId) {
+          outcomes.push(...(await Promise.all(newAgentNames.map((name) => adjustVisitPlanActual(name, referenceDateIso, 1)))));
+        } else if (editOriginal) {
+          const oldAgentNames = [editOriginal.agentId, editOriginal.isDouble ? editOriginal.agent2Id : '']
+            .filter(Boolean)
+            .map((id) => agents.find((a) => a.id === id)?.name || '')
+            .filter(Boolean);
+          const sameAgents = JSON.stringify([...oldAgentNames].sort()) === JSON.stringify([...newAgentNames].sort());
+          if (!sameAgents) {
+            outcomes.push(...(await Promise.all(oldAgentNames.map((name) => adjustVisitPlanActual(name, referenceDateIso, -1)))));
+            outcomes.push(...(await Promise.all(newAgentNames.map((name) => adjustVisitPlanActual(name, referenceDateIso, 1)))));
+          }
+        }
+        adjustNotes.push(...outcomes.map(describeAdjustOutcome).filter((n): n is string => n !== null));
+      }
+
       setDrawerOpen(false);
-      showToast(editId ? 'Visit updated' : 'Visit recorded');
+      if (adjustNotes.length) {
+        showToast(`${editId ? 'Visit updated' : 'Visit recorded'} — KPI actual not updated (${adjustNotes.join('; ')}).`, 6000);
+      } else {
+        showToast(editId ? 'Visit updated' : 'Visit recorded');
+      }
       await load();
     } catch (e) {
       setFormError(e instanceof Error ? e.message : String(e));
@@ -342,14 +534,14 @@ export default function VisitsPage() {
 
   function exportCsv() {
     const escapeForCsv = (value: string) => `"${value.replace(/"/g, '""')}"`;
-    const header = ['Task Owner', 'Task Owner 2', 'Company', 'Company Code', 'Visit Date', 'Category', 'Visit Type', 'Revisit Date', 'Comments'];
+    const header = ['Task Owner', 'Task Owner 2', 'Company', 'Company Code', 'Visit Date', 'Visit Status', 'Visit Type', 'Revisit Date', 'Comments'];
     const rows = view.map((v) => [
       v.owner,
       v.owner2,
       v.company,
       v.code,
       fmtDate(v.date),
-      categoryChip(v.category).label,
+      v.statusLabel,
       v.isDouble ? 'Double' : 'Single',
       fmtDate(v.revisit),
       v.notes,
@@ -382,7 +574,7 @@ export default function VisitsPage() {
         <div className="acc-head">
           <div>
             <h1 className="acc-title">Visits Log</h1>
-            <div className="acc-sub">Recorded visits — Task Owner · Company · Visit Date · Category · Visit Type · Revisit · Comments</div>
+            <div className="acc-sub">Recorded visits — Task Owner · Company · Visit Date · Visit Status · Visit Type · Revisit · Comments</div>
           </div>
           <div className="acc-actions">
             <button className="acc-btn acc-btn-primary" onClick={() => openDrawer()}>
@@ -432,11 +624,11 @@ export default function VisitsPage() {
               <span className="kpi-icon kpi-icon-ok">
                 <i className="fa-solid fa-circle-check"></i>
               </span>
-              <span className="kpi-label">Closed</span>
+              <span className="kpi-label">Completed</span>
             </div>
-            <div className="kpi-value">{loading ? '—' : kpis.closed}</div>
+            <div className="kpi-value">{loading ? '—' : kpis.completed}</div>
             <div className="kpi-context">
-              {loading ? '' : kpis.total > 0 ? `${Math.round((kpis.closed / kpis.total) * 100)}% of visits` : '—'}
+              {loading ? '' : kpis.total > 0 ? `${Math.round((kpis.completed / kpis.total) * 100)}% of visits` : '—'}
             </div>
           </div>
         </div>
@@ -447,17 +639,32 @@ export default function VisitsPage() {
               <i className="fa-solid fa-magnifying-glass"></i>
               <input placeholder="Search owner, company or notes…" value={query} onChange={(e) => setQuery(e.target.value)} />
             </div>
-            <select className="acc-f" value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
-              <option value="">All Categories</option>
-              <option value="766340002">Open</option>
-              <option value="766340000">Partially Closed</option>
-              <option value="766340001">Closed</option>
+            <select className="acc-f" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="">All Statuses</option>
+              {VISIT_STATUS_OPTIONS.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
             </select>
             <select className="acc-f" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}>
               <option value="">All Types</option>
               <option value="single">Single visit</option>
               <option value="double">Double visit</option>
             </select>
+            <select className="acc-f" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
+              <option value="">All Months</option>
+              {monthOptions.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+            <div className="acc-date-range">
+              <input type="date" className="acc-f" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} title="Visit date from" />
+              <span>–</span>
+              <input type="date" className="acc-f" value={dateTo} onChange={(e) => setDateTo(e.target.value)} title="Visit date to" />
+            </div>
           </div>
 
           <div className="acc-tablewrap">
@@ -468,7 +675,7 @@ export default function VisitsPage() {
                 <th>Task Owner 2</th>
                 <th>Company</th>
                 <th>Visit Date</th>
-                <th>Category</th>
+                <th>Visit Status</th>
                 <th>Type</th>
                 <th>Revisit</th>
                 <th>Comments</th>
@@ -507,7 +714,6 @@ export default function VisitsPage() {
                 </tr>
               ) : (
                 pageRows.map((v) => {
-                  const chip = categoryChip(v.category);
                   return (
                     <tr key={v.id} className="acc-row" onClick={() => openDrawer(v)}>
                       <td className="acc-name">{v.owner}</td>
@@ -516,9 +722,9 @@ export default function VisitsPage() {
                         <div className="acc-name">{v.company}</div>
                         {v.code && <div className="acc-code">{v.code}</div>}
                       </td>
-                      <td>{fmtDate(v.date)}</td>
+                      <td>{v.date ? fmtDate(v.date) : <span className="vis-muted">—</span>}</td>
                       <td>
-                        <span className={`vis-chip ${chip.cls}`}>{chip.label}</span>
+                        <span className={`acc-visit-status ${visitStatusClass(v.statusLabel)}`}>{v.statusLabel}</span>
                       </td>
                       <td>
                         {v.isDouble ? (
@@ -573,10 +779,9 @@ export default function VisitsPage() {
                 setPage(1);
               }}
             >
+              <option value={10}>10</option>
               <option value={15}>15</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-              <option value={9999}>All</option>
+              <option value={20}>20</option>
             </select>
           </div>
         </div>
@@ -634,11 +839,11 @@ export default function VisitsPage() {
           </div>
 
           <div className="acc-fld">
-            <label>Category</label>
-            <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)}>
-              {CATEGORY_OPTIONS.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
+            <label>Visit Status</label>
+            <select value={formStatus} onChange={(e) => setFormStatus(e.target.value)}>
+              {VISIT_STATUS_OPTIONS.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
                 </option>
               ))}
             </select>

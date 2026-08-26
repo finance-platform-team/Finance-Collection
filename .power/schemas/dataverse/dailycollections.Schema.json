@@ -241,6 +241,13 @@
           "x-ms-schema-name": "cfm_statusactionName",
           "x-ms-read-only": true
         },
+        "cfm_totalrejection": {
+          "type": "string",
+          "title": "Total Rejection",
+          "x-ms-dataverse-attribute": "cfm_totalrejection",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "cfm_TotalRejection"
+        },
         "createdby": {
           "type": "string",
           "title": "Created By",

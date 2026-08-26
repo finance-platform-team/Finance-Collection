@@ -78,6 +78,36 @@
           "entitySetName": "cfm_slas",
           "logicalName": "cfm_sla",
           "isHidden": false
+        },
+        "kpiachievements": {
+          "entitySetName": "pm_kpiachievments",
+          "logicalName": "pm_kpiachievment",
+          "isHidden": false
+        },
+        "kpis": {
+          "entitySetName": "strategy_kpises",
+          "logicalName": "strategy_kpis",
+          "isHidden": false
+        },
+        "kpiachievementbreakdowns": {
+          "entitySetName": "stf_kpiachievmentbreakdowns",
+          "logicalName": "stf_kpiachievmentbreakdown",
+          "isHidden": false
+        },
+        "collectionplanweeks": {
+          "entitySetName": "cfm_collectionplanweeks",
+          "logicalName": "cfm_collectionplanweek",
+          "isHidden": false
+        },
+        "highriskcompanies": {
+          "entitySetName": "cfm_highriskcompanieses",
+          "logicalName": "cfm_highriskcompanies",
+          "isHidden": false
+        },
+        "employees": {
+          "entitySetName": "hr_employees",
+          "logicalName": "hr_employee",
+          "isHidden": false
         }
       },
       "environmentVariableName": ""

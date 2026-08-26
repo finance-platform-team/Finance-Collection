@@ -328,6 +328,156 @@ async function addCollectedAmountToArAging(dailyCollectionId: string): Promise<s
   return null;
 }
 
+/* ========================================================================
+ * Excel-style import/export — a CSV template (Excel opens/edits/saves .csv
+ * natively) rather than true .xlsx: the "xlsx" npm package has two known
+ * unpatched high-severity vulnerabilities (prototype pollution, ReDoS) that
+ * matter a lot for a feature whose whole job is parsing an untrusted uploaded
+ * file, and every other export on this app already uses CSV — no reason to
+ * add a vulnerable dependency for a format Excel already round-trips fine.
+ * ======================================================================== */
+
+const IMPORT_COLUMNS = [
+  'Company Code',
+  'Bank Account',
+  'Collection Date (YYYY-MM-DD)',
+  'Payment Method (Cheque or Bank transfer)',
+  'Net Amount',
+  'Payment Reference',
+  'Note',
+  'Allocate To Month (YYYY-MM)',
+  'Allocation Amount',
+  'Tax',
+  'Volume Discount',
+  'Early Payment Discount',
+  'Admin Fees',
+  'Rejection',
+] as const;
+
+function escapeForCsv(value: string | number): string {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+/** Strips a trailing "(hint text)" and normalizes for header matching, so the
+ * format hints baked into IMPORT_COLUMNS don't need to survive round-trip. */
+function normaliseHeader(h: string): string {
+  return h.split('(')[0].trim().toLowerCase();
+}
+
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += c;
+      }
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ',') {
+      row.push(field);
+      field = '';
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field);
+      field = '';
+      rows.push(row);
+      row = [];
+    } else {
+      field += c;
+    }
+  }
+  if (field.length > 0 || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows.filter((r) => r.some((cell) => cell.trim() !== ''));
+}
+
+/** Accepts "YYYY-MM" or "YYYY-MM-DD" and normalizes to the "YYYY-MM-01" shape
+ * cfm_allocatetomonth already uses elsewhere on this page. */
+function normaliseMonthValue(text: string): string | null {
+  const m = text.trim().match(/^(\d{4})-(\d{2})/);
+  return m ? `${m[1]}-${m[2]}-01` : null;
+}
+
+interface ImportRowInput {
+  companyId: string;
+  bankAccountId: string;
+  date: string;
+  method: number;
+  net: number;
+  paymentRef: string;
+  note: string;
+  allocMonth: string | null;
+  allocAmount: number;
+  tax: number;
+  vol: number;
+  early: number;
+  admin: number;
+  reject: number;
+}
+
+/**
+ * The bulk-import equivalent of saveEntry()'s create path, scoped to exactly
+ * one allocation per row (import rows are 1 entry = 1 allocation; the manual
+ * form's own multi-allocation create path is untouched and lives in
+ * saveEntry() — the two aren't unified since their shapes genuinely differ).
+ * Same side effects as a manually-created entry: starts as Awaiting documents
+ * and bumps the matching AR Aging row's Pending AR Verification amount.
+ */
+async function createDailyCollectionEntry(input: ImportRowInput): Promise<{ success: boolean; error?: string }> {
+  const parentBody: Record<string, unknown> = {
+    'cfm_CompanyCode@odata.bind': `/cfm_aragings(${input.companyId})`,
+    'cfm_BankAccount@odata.bind': `/cr301_accounts(${input.bankAccountId})`,
+    cfm_collectiondate: `${input.date}T00:00:00Z`,
+    cfm_paymentmethod: input.method,
+    cfm_collectedamountnet: input.net,
+    cfm_totalrejection: input.reject,
+    cfm_paymentreference: input.paymentRef || null,
+    cfm_note: input.note || null,
+    cfm_statusaction: AR_STATUS.AWAITING_DOCS,
+  };
+  const parentResult = await Cfm_dailycollectionsService.create(parentBody as unknown as Omit<Cfm_dailycollectionsBase, 'cfm_dailycollectionid'>);
+  if (!parentResult.success) return { success: false, error: operationErrorMessage(parentResult.error, 'Save failed.') };
+  const parentId = parentResult.data?.cfm_dailycollectionid;
+  if (!parentId) return { success: false, error: 'Entry saved but no id was returned.' };
+
+  const allocBody: Record<string, unknown> = {
+    'cfm_DailyCollection@odata.bind': `/cfm_dailycollections(${parentId})`,
+    cfm_allocatetomonth: input.allocMonth,
+    cfm_allocatetoclaim: input.allocAmount,
+    cfm_allocationamount: input.allocAmount,
+    cfm_tax: input.tax,
+    cfm_volumediscount: input.vol,
+    cfm_earlypaymentdisc: input.early,
+    cfm_adminfees: input.admin,
+    cfm_rejection: input.reject,
+  };
+  const allocResult = await Cfm_collectionmonthallocationsService.create(allocBody as unknown as Omit<Cfm_collectionmonthallocationsBase, 'cfm_collectionmonthallocationid'>);
+  if (!allocResult.success) {
+    try {
+      await Cfm_dailycollectionsService.delete(parentId);
+    } catch {
+      /* best-effort rollback */
+    }
+    return { success: false, error: operationErrorMessage(allocResult.error, 'Allocation save failed.') };
+  }
+
+  const arAgingError = await addCollectedAmountToArAging(parentId);
+  return arAgingError ? { success: true, error: `AR Aging update failed: ${arAgingError}` } : { success: true };
+}
+
 export default function DailyCollectionPage() {
   const [entries, setEntries] = useState<EntryRow[]>([]);
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
@@ -343,7 +493,7 @@ export default function DailyCollectionPage() {
   const [byMe, setByMe] = useState(false);
   const [rejectedOnly, setRejectedOnly] = useState(false);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number | 'all'>(25);
+  const [pageSize, setPageSize] = useState(15);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [mode, setMode] = useState<Mode>('create');
@@ -523,9 +673,9 @@ export default function DailyCollectionPage() {
     setPage(1);
   }, [query, entityFilter, methodFilter, statusFilter, byMe, rejectedOnly]);
 
-  const totalPages = pageSize === 'all' ? 1 : Math.max(1, Math.ceil(filtered.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const clampedPage = Math.min(page, totalPages);
-  const pageRows = pageSize === 'all' ? filtered : filtered.slice((clampedPage - 1) * pageSize, (clampedPage - 1) * pageSize + pageSize);
+  const pageRows = filtered.slice((clampedPage - 1) * pageSize, (clampedPage - 1) * pageSize + pageSize);
 
   const kpis = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -613,6 +763,7 @@ export default function DailyCollectionPage() {
 
   const netVal = N(formNet);
   const sumAllocs = useMemo(() => allocs.reduce((t, a) => t + N(a.amount), 0), [allocs]);
+  const sumRejection = useMemo(() => allocs.reduce((t, a) => t + N(a.reject), 0), [allocs]);
   const sumOk = netVal > 0 && Math.abs(sumAllocs - netVal) < 0.01;
 
   // Allocations are normally read-only once an entry leaves 'create'/'reedit' — but
@@ -815,6 +966,7 @@ export default function DailyCollectionPage() {
       parentBody.cfm_collectiondate = formDate ? `${formDate}T00:00:00Z` : null;
       parentBody.cfm_paymentmethod = formMethod === '' ? null : parseInt(formMethod, 10);
       parentBody.cfm_collectedamountnet = netVal;
+      parentBody.cfm_totalrejection = sumRejection;
       parentBody.cfm_paymentreference = formPaymentRef.trim() || null;
       parentBody.cfm_note = formNote.trim() || null;
 
@@ -1161,19 +1313,18 @@ export default function DailyCollectionPage() {
                   className="acc-f"
                   value={pageSize}
                   onChange={(e) => {
-                    setPageSize(e.target.value === 'all' ? 'all' : parseInt(e.target.value, 10));
+                    setPageSize(parseInt(e.target.value, 10));
                     setPage(1);
                   }}
                 >
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                  <option value="all">All</option>
+                  <option value={10}>10</option>
+                  <option value={15}>15</option>
+                  <option value={20}>20</option>
                 </select>
               </div>
               <div className="dc-page-info">
-                Showing <strong>{pageSize === 'all' ? 1 : (clampedPage - 1) * pageSize + 1}</strong>–
-                <strong>{pageSize === 'all' ? filtered.length : Math.min(clampedPage * pageSize, filtered.length)}</strong> of <strong>{filtered.length}</strong>
+                Showing <strong>{(clampedPage - 1) * pageSize + 1}</strong>–
+                <strong>{Math.min(clampedPage * pageSize, filtered.length)}</strong> of <strong>{filtered.length}</strong>
               </div>
               <div className="acc-pg">
                 <button disabled={clampedPage <= 1} onClick={() => setPage(clampedPage - 1)}>

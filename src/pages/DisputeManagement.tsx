@@ -206,7 +206,7 @@ export default function DisputeManagementPage() {
   const [reviewFilter, setReviewFilter] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number | 'all'>(25);
+  const [pageSize, setPageSize] = useState(15);
 
   const [cellState, setCellState] = useState<Record<string, CellState>>({});
   const cellTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -347,9 +347,9 @@ export default function DisputeManagementPage() {
     setPage(1);
   }, [query, reviewFilter, categoryFilter]);
 
-  const totalPages = pageSize === 'all' ? 1 : Math.max(1, Math.ceil(filtered.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const clampedPage = Math.min(page, totalPages);
-  const pageRows = pageSize === 'all' ? filtered : filtered.slice((clampedPage - 1) * pageSize, (clampedPage - 1) * pageSize + pageSize);
+  const pageRows = filtered.slice((clampedPage - 1) * pageSize, (clampedPage - 1) * pageSize + pageSize);
 
   function pagerButtons(): (number | 'ellipsis')[] {
     const pages: (number | 'ellipsis')[] = [];
@@ -828,19 +828,18 @@ export default function DisputeManagementPage() {
                   className="acc-f"
                   value={pageSize}
                   onChange={(e) => {
-                    setPageSize(e.target.value === 'all' ? 'all' : parseInt(e.target.value, 10));
+                    setPageSize(parseInt(e.target.value, 10));
                     setPage(1);
                   }}
                 >
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                  <option value="all">All</option>
+                  <option value={10}>10</option>
+                  <option value={15}>15</option>
+                  <option value={20}>20</option>
                 </select>
               </div>
               <div className="dm-page-info">
-                Showing <strong>{pageSize === 'all' ? 1 : (clampedPage - 1) * pageSize + 1}</strong>–
-                <strong>{pageSize === 'all' ? filtered.length : Math.min(clampedPage * pageSize, filtered.length)}</strong> of <strong>{filtered.length}</strong>
+                Showing <strong>{(clampedPage - 1) * pageSize + 1}</strong>–
+                <strong>{Math.min(clampedPage * pageSize, filtered.length)}</strong> of <strong>{filtered.length}</strong>
               </div>
               <div className="acc-pg">
                 <button disabled={clampedPage <= 1} onClick={() => setPage(clampedPage - 1)}>

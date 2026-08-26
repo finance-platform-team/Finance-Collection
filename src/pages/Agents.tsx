@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Cr301_agentsService } from '../generated/services/Cr301_agentsService';
 import { SystemusersService } from '../generated/services/SystemusersService';
+import { Hr_employeesService } from '../generated/services/Hr_employeesService';
 import type { Cr301_agentsBase } from '../generated/models/Cr301_agentsModel';
 import { operationErrorMessage } from '../lib/errors';
 import './Agents.css';
@@ -21,6 +22,11 @@ interface UserOption {
   domainName: string;
 }
 
+interface EmployeeOption {
+  id: string;
+  name: string;
+}
+
 interface AgentRow {
   id: string;
   name: string;
@@ -37,6 +43,7 @@ function loginOf(domainName: string): string {
 export default function AgentsPage() {
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -48,6 +55,8 @@ export default function AgentsPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [formName, setFormName] = useState('');
   const [formUserId, setFormUserId] = useState('');
+  const [employeeQuery, setEmployeeQuery] = useState('');
+  const [employeePickerOpen, setEmployeePickerOpen] = useState(false);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -78,12 +87,24 @@ export default function AgentsPage() {
     }));
   }
 
+  async function fetchEmployees(): Promise<EmployeeOption[]> {
+    const result = await Hr_employeesService.getAll({
+      select: ['hr_employeeid', 'hr_fullname'],
+      filter: 'statecode eq 0',
+      orderBy: ['hr_fullname'],
+      maxPageSize: 5000,
+    });
+    if (!result.success) return [];
+    return (result.data || []).map((e) => ({ id: e.hr_employeeid, name: e.hr_fullname || '(employee)' }));
+  }
+
   async function load() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [userOptions, result] = await Promise.all([
+      const [userOptions, employeeOptions, result] = await Promise.all([
         fetchUsers(),
+        fetchEmployees(),
         Cr301_agentsService.getAll({
           select: ['cr301_agentid', 'cr301_newcolumn', '_cr301_agent_value'],
           filter: COLLECTION_FILTER,
@@ -110,6 +131,7 @@ export default function AgentsPage() {
         };
       });
       setUsers(userOptions);
+      setEmployees(employeeOptions);
       setAgents(rows);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : String(e));
@@ -146,14 +168,18 @@ export default function AgentsPage() {
 
   function openDrawer(id?: string) {
     setFormError('');
+    setEmployeePickerOpen(false);
     if (id) {
       const a = agents.find((x) => x.id === id);
+      const name = a && a.name !== '—' ? a.name : '';
       setEditId(id);
-      setFormName(a && a.name !== '—' ? a.name : '');
+      setFormName(name);
+      setEmployeeQuery(name);
       setFormUserId(a?.userId || '');
     } else {
       setEditId(null);
       setFormName('');
+      setEmployeeQuery('');
       setFormUserId('');
     }
     setDrawerOpen(true);
@@ -163,10 +189,46 @@ export default function AgentsPage() {
     setDrawerOpen(false);
   }
 
+  const employeeMatches = useMemo(() => {
+    const q = employeeQuery.trim().toLowerCase();
+    const list = q ? employees.filter((e) => e.name.toLowerCase().includes(q)) : employees;
+    return list.slice(0, 30);
+  }, [employees, employeeQuery]);
+
+  // First 3 words of a name, normalized — Arabic names commonly carry 3-4+ parts
+  // (first + father's + grandfather's + family name) and HR vs. system-user
+  // records don't always agree on how many are kept, so matching the full string
+  // is too strict. Matching just the first 3 tolerates a trailing name differing
+  // or being dropped, while still requiring real agreement on who the person is.
+  function firstWords(name: string, n: number): string {
+    return name.trim().toLowerCase().split(/\s+/).slice(0, n).join(' ');
+  }
+
+  // Employee doubles as the Agent Name field now (no separate free-text input) —
+  // picking a suggestion sets the name AND searches the already-loaded system
+  // users for a name match to auto-select Agent User. No match -> Agent User is
+  // left untouched, per requirement (don't guess).
+  function pickEmployee(employee: EmployeeOption) {
+    setEmployeeQuery(employee.name);
+    setFormName(employee.name);
+    setEmployeePickerOpen(false);
+    const key = firstWords(employee.name, 3);
+    const match = key ? users.find((u) => firstWords(u.displayName, 3) === key) : undefined;
+    if (match) {
+      setFormUserId(match.id);
+    } else {
+      showToast(`No matching system user found for "${employee.name}" — select one manually.`);
+    }
+  }
+
   async function handleSave() {
     const name = formName.trim();
     if (!name) {
-      setFormError('Agent Name is required.');
+      setFormError('Employee name is required.');
+      return;
+    }
+    if (!formUserId) {
+      setFormError('Agent User is required.');
       return;
     }
     setSaving(true);
@@ -175,24 +237,33 @@ export default function AgentsPage() {
       const body: Record<string, unknown> = {
         cr301_newcolumn: name,
         cfm_iscollection: true,
+        'cr301_Agent@odata.bind': `/systemusers(${formUserId})`,
       };
-      if (formUserId) {
-        body['cr301_Agent@odata.bind'] = `/systemusers(${formUserId})`;
-      } else if (editId) {
-        body['cr301_Agent@odata.bind'] = null;
+
+      // cr301_agents has a uniqueness constraint on the Agent User lookup — a
+      // hidden/non-collection agent for this system user (cfm_iscollection false
+      // or unset, so it doesn't show in this filtered list) still holds that key.
+      // Reactivate/update it instead of racing straight into a duplicate-key error.
+      let targetId = editId;
+      if (!targetId) {
+        const existing = await Cr301_agentsService.getAll({
+          select: ['cr301_agentid'],
+          filter: `_cr301_agent_value eq ${formUserId}`,
+          top: 1,
+        });
+        if (existing.success && existing.data && existing.data.length > 0) {
+          targetId = existing.data[0].cr301_agentid;
+        }
       }
 
-      let result;
-      if (editId) {
-        result = await Cr301_agentsService.update(editId, body as Partial<Omit<Cr301_agentsBase, 'cr301_agentid'>>);
-      } else {
-        result = await Cr301_agentsService.create(body as unknown as Omit<Cr301_agentsBase, 'cr301_agentid'>);
-      }
+      const result = targetId
+        ? await Cr301_agentsService.update(targetId, body as Partial<Omit<Cr301_agentsBase, 'cr301_agentid'>>)
+        : await Cr301_agentsService.create(body as unknown as Omit<Cr301_agentsBase, 'cr301_agentid'>);
       if (!result.success) {
         throw new Error(operationErrorMessage(result.error, 'Save failed.'));
       }
       setDrawerOpen(false);
-      showToast(editId ? 'Agent updated' : 'Agent created');
+      showToast(editId ? 'Agent updated' : targetId ? 'Agent reactivated' : 'Agent created');
       await load();
     } catch (e) {
       setFormError(e instanceof Error ? e.message : String(e));
@@ -361,10 +432,9 @@ export default function AgentsPage() {
                 setPage(1);
               }}
             >
+              <option value={10}>10</option>
               <option value={15}>15</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-              <option value={9999}>All</option>
+              <option value={20}>20</option>
             </select>
           </div>
         </div>
@@ -381,12 +451,44 @@ export default function AgentsPage() {
         </div>
         <div className="acc-dbody">
           <div className={`acc-err${formError ? ' on' : ''}`}>{formError}</div>
-          <div className="acc-fld">
-            <label>Agent Name</label>
-            <input placeholder="e.g. S. Al-Harbi" value={formName} onChange={(e) => setFormName(e.target.value)} />
+          <div className="acc-combo" style={{ marginBottom: 16 }}>
+            <div className="acc-fld" style={{ marginBottom: 0 }}>
+              <label>
+                Employee <span className="dm-req">*</span>
+              </label>
+              <input
+                placeholder="Search employee or type a name…"
+                autoComplete="off"
+                autoFocus
+                value={employeeQuery}
+                onChange={(e) => {
+                  setEmployeeQuery(e.target.value);
+                  setFormName(e.target.value);
+                  setEmployeePickerOpen(true);
+                }}
+                onFocus={() => setEmployeePickerOpen(true)}
+                onBlur={() => setTimeout(() => setEmployeePickerOpen(false), 150)}
+              />
+            </div>
+            {employeePickerOpen && (
+              <div className="acc-combo-list">
+                {employeeMatches.length === 0 ? (
+                  <div className="acc-combo-empty">No matches.</div>
+                ) : (
+                  employeeMatches.map((e) => (
+                    <div key={e.id} className="acc-combo-item" onMouseDown={(ev) => ev.preventDefault()} onClick={() => pickEmployee(e)}>
+                      {e.name}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+            <div className="acc-hint">Sets the Agent Name and auto-selects the matching Agent User below when found.</div>
           </div>
           <div className="acc-fld">
-            <label>Agent User (System User)</label>
+            <label>
+              Agent User (System User) <span className="dm-req">*</span>
+            </label>
             <select value={formUserId} onChange={(e) => setFormUserId(e.target.value)}>
               <option value="">— Select user —</option>
               {users.map((u) => (

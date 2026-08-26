@@ -256,7 +256,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
   const [classFilter, setClassFilter] = useState('');
   const [unassignedOnly, setUnassignedOnly] = useState(false);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number | 'all'>(15);
+  const [pageSize, setPageSize] = useState(15);
 
   const [detailId, setDetailId] = useState<string | null>(null);
 
@@ -426,9 +426,9 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
     return t;
   }, [filtered]);
 
-  const totalPages = pageSize === 'all' ? 1 : Math.max(1, Math.ceil(filtered.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const clampedPage = Math.min(page, totalPages);
-  const pageRows = pageSize === 'all' ? filtered : filtered.slice((clampedPage - 1) * pageSize, (clampedPage - 1) * pageSize + pageSize);
+  const pageRows = filtered.slice((clampedPage - 1) * pageSize, (clampedPage - 1) * pageSize + pageSize);
 
   const detailRow = useMemo(() => rows.find((r) => r.id === detailId) || null, [rows, detailId]);
 
@@ -1017,20 +1017,18 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
                   className="acc-f"
                   value={pageSize}
                   onChange={(e) => {
-                    setPageSize(e.target.value === 'all' ? 'all' : parseInt(e.target.value, 10));
+                    setPageSize(parseInt(e.target.value, 10));
                     setPage(1);
                   }}
                 >
+                  <option value={10}>10</option>
                   <option value={15}>15</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                  <option value="all">All</option>
+                  <option value={20}>20</option>
                 </select>
               </div>
               <div className="cp-page-info">
-                Showing <strong>{pageSize === 'all' ? 1 : (clampedPage - 1) * pageSize + 1}</strong>–
-                <strong>{pageSize === 'all' ? filtered.length : Math.min(clampedPage * pageSize, filtered.length)}</strong> of{' '}
+                Showing <strong>{(clampedPage - 1) * pageSize + 1}</strong>–
+                <strong>{Math.min(clampedPage * pageSize, filtered.length)}</strong> of{' '}
                 <strong>{filtered.length}</strong>
               </div>
               <div className="acc-pg">

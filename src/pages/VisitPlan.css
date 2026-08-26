@@ -1,0 +1,226 @@
+/* Visits — Planned & Actual: dashboard header eyebrow, filter row, expandable
+   owner rows with week cards, the actual-vs-target chart panel, and the
+   centered 2-step create wizard modal. Reuses acc- and kpi- tokens from
+   shared.css; adds vp- prefixed rules only for what's structurally new here. */
+
+.vp-eyebrow{display:flex;align-items:center;gap:6px;font-family:'Outfit',sans-serif;
+  font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);margin-bottom:2px}
+.vp-dot{width:7px;height:7px;border-radius:50%;background:var(--gold)}
+
+/* Month / Task owner multi-select — a button that opens a checkbox menu (native
+   <select multiple> is unusable here: no visible checked state, requires ctrl/cmd
+   click to pick more than one, and can't hold a search box). Lives in the table's
+   own tbl-hdr/dm-filter-bar, matching every other page's filter-row placement
+   (Accounts, Visits, HighRiskCompanies) instead of floating above the KPI cards. */
+.vp-multiselect{position:relative;min-width:190px}
+/* select.acc-f in shared.css is tag-qualified (only matches <select>), so this
+   <button> needs its own copy of that base look instead of inheriting it. */
+.vp-multiselect-btn{display:flex;align-items:center;gap:9px;width:100%;min-width:190px;
+  text-align:left;cursor:pointer;padding:9px 12px;border:1px solid var(--line);
+  border-radius:9px;font-family:'Inter';font-size:13px;background:#fbf8f2;color:var(--ink)}
+.vp-multiselect-btn:hover{border-color:var(--hover-border)}
+.vp-multiselect-btn:focus{outline:none;border-color:var(--gold)}
+.vp-multiselect-ico{color:var(--gold);font-size:12px;flex-shrink:0}
+.vp-multiselect-btn span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vp-multiselect-caret{font-size:10px;color:var(--muted);transition:transform .15s;flex-shrink:0}
+.vp-multiselect-caret.open{transform:rotate(180deg)}
+.vp-multiselect-menu{position:absolute;top:calc(100% + 6px);left:0;min-width:100%;width:max-content;max-width:320px;
+  background:var(--card);border:1px solid var(--line);border-radius:10px;
+  box-shadow:var(--shadow);z-index:20;padding:6px;display:flex;flex-direction:column}
+.vp-multiselect-menu-wide{width:280px}
+.vp-multiselect-search{display:flex;align-items:center;gap:8px;padding:7px 9px;margin-bottom:4px;
+  border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.vp-multiselect-search i{color:var(--muted);font-size:12px;flex-shrink:0}
+.vp-multiselect-search input{border:none;background:none;outline:none;font-size:13px;color:var(--ink);
+  width:100%;font-family:'Inter'}
+.vp-multiselect-scroll{overflow-y:auto;max-height:230px}
+.vp-multiselect-item{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:7px;
+  cursor:pointer;font-size:13px;color:var(--ink);white-space:nowrap}
+.vp-multiselect-item:hover{background:var(--hover-bg)}
+.vp-multiselect-item input{margin:0;accent-color:var(--brown);cursor:pointer;flex-shrink:0}
+.vp-multiselect-all{font-weight:600}
+.vp-multiselect-all.checked{color:var(--brown)}
+.vp-multiselect-sep{height:1px;background:var(--line);margin:5px 2px}
+.vp-multiselect-empty{padding:10px 8px;color:var(--muted);font-size:12.5px;text-align:center}
+
+.vp-clear-filters{display:inline-flex;align-items:center;gap:6px;background:none;border:none;
+  color:var(--muted);font-size:12.5px;font-weight:600;cursor:pointer;padding:6px 4px;white-space:nowrap}
+.vp-clear-filters:hover{color:var(--bad)}
+.vp-clear-filters i{font-size:10px}
+
+.vp-bar{height:8px;background:var(--track,var(--line));border-radius:6px;overflow:hidden;margin-top:10px}
+.vp-bar>span{display:block;height:100%;background:currentColor;border-radius:6px}
+.kpi-card.kpi-ok .vp-bar>span{background:var(--ok)}
+.kpi-card.kpi-warn .vp-bar>span{background:var(--warn)}
+.kpi-card.kpi-danger .vp-bar>span{background:var(--bad)}
+
+/* owner row */
+.vp-who{display:flex;align-items:center;gap:12px}
+.vp-caret{color:var(--muted);font-size:12px;width:14px;flex-shrink:0}
+.vp-ava{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;font-family:'Outfit',sans-serif;flex-shrink:0}
+.vp-ava-gold{background:var(--goldbg);color:var(--gold)}
+.vp-ava-ok{background:var(--okbg);color:var(--ok)}
+.vp-ava-warn{background:var(--warnbg);color:var(--warn)}
+.vp-ava-info{background:var(--infobg);color:var(--info)}
+.vp-ava-danger{background:var(--badbg);color:var(--bad)}
+.vp-tags{display:flex;gap:8px;margin-top:4px}
+.vp-chip{font-size:11.5px;background:var(--bg);border:1px solid var(--line);border-radius:20px;
+  padding:3px 10px;color:var(--muted);white-space:nowrap}
+.vp-planned{font-weight:700}
+.vp-achieved{font-weight:700;color:var(--brown)}
+.vp-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:6px}
+.vp-del:hover{color:var(--bad)}
+
+/* week expand */
+.vp-weeks-row td{padding:0 16px 18px;background:var(--bg)}
+.vp-weeks-grid{display:flex;gap:12px;flex-wrap:wrap;padding-top:14px}
+.vp-no-weeks{color:var(--muted);font-size:13px;padding:10px 0}
+.vp-wk{position:relative;flex:1;min-width:150px;background:var(--card);border:1px solid var(--line);
+  border-radius:12px;padding:12px 14px}
+.vp-wtitle{font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.05em;margin-bottom:9px}
+.vp-pair{display:flex;gap:10px}
+.vp-pair>div{flex:1}
+.vp-pair small{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px;font-weight:600}
+.vp-pair input{width:100%;height:34px;text-align:center;font-size:14px;border:1px solid var(--line);
+  border-radius:8px;font-weight:600;background:#fbf8f2;color:var(--ink);box-sizing:border-box}
+.vp-pair input[readonly]{background:var(--bg);color:var(--muted)}
+.vp-pair input:focus{outline:none;border-color:var(--gold)}
+.vp-wbar{height:5px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:10px}
+.vp-wbar>span{display:block;height:100%;background:var(--ok);border-radius:4px}
+.vp-cell-ico{position:absolute;top:10px;right:10px;font-size:11px;color:var(--muted)}
+.vp-cell-ico.vp-ok{color:var(--ok)}
+.vp-cell-ico.vp-bad{color:var(--bad)}
+
+/* chart panel */
+.vp-chart-panel{padding:4px 0 16px;margin-top:16px}
+.vp-chh{font-size:15px;font-weight:700;margin:0;padding:16px 16px 10px;display:flex;align-items:center;gap:8px}
+.vp-chh i{color:var(--gold)}
+.vp-chart-body{padding:0 16px}
+.vp-crow{display:flex;align-items:center;gap:16px;padding:8px 0}
+.vp-cname{width:150px;font-size:13.5px;font-weight:600;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vp-ctrack{flex:1;height:12px;background:var(--line);border-radius:8px;overflow:hidden}
+.vp-ctrack-fill{display:block;height:100%;border-radius:8px}
+.vp-ctrack-ok{background:var(--ok)}
+.vp-ctrack-warn{background:var(--warn)}
+.vp-ctrack-bad{background:var(--bad)}
+.vp-cval{width:100px;text-align:right;font-size:12.5px;color:var(--muted);font-weight:600;flex-shrink:0}
+.vp-cpct{width:60px;text-align:right;font-weight:800;font-size:13.5px;flex-shrink:0}
+.vp-cpct-ok{color:var(--ok)}
+.vp-cpct-warn{color:var(--warn)}
+.vp-cpct-bad{color:var(--bad)}
+
+/* ===== create wizard modal (centered, not the side drawer) ===== */
+.vp-modal-overlay{position:fixed;inset:0;background:rgba(20,14,8,.5);display:flex;align-items:flex-start;
+  justify-content:center;z-index:70;overflow:auto;padding:40px 16px;opacity:0;pointer-events:none;transition:.2s}
+.vp-modal-overlay.on{opacity:1;pointer-events:auto}
+.vp-modal{background:var(--card);border-radius:18px;max-width:860px;width:100%;padding:1.8rem 2rem 1.2rem;
+  position:relative;box-shadow:0 24px 70px rgba(20,14,8,.3)}
+.vp-modal-close{position:absolute;top:18px;right:20px;background:none;border:none;font-size:18px;color:var(--muted);cursor:pointer}
+.vp-modal-close:hover{color:var(--bad)}
+.vp-weyebrow{font-size:11px;font-weight:800;color:var(--gold);letter-spacing:.08em;text-transform:uppercase}
+.vp-wtitle{font-size:24px;font-weight:800;margin:6px 0 18px;letter-spacing:-.5px;font-family:'Outfit',sans-serif}
+
+.vp-steps{display:flex;align-items:center;gap:14px}
+.vp-step{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px}
+.vp-step.active{background:var(--goldbg)}
+.vp-scircle{width:28px;height:28px;border-radius:8px;background:var(--bg);color:var(--muted);
+  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0}
+.vp-step.active .vp-scircle{background:var(--brown);color:#fff}
+.vp-step.done .vp-scircle{background:var(--ok);color:#fff}
+.vp-stext{display:flex;flex-direction:column;line-height:1.25}
+.vp-stext b{font-size:13.5px;font-weight:700}
+.vp-stext span{font-size:11.5px;color:var(--muted)}
+.vp-step:not(.active) .vp-stext b{color:var(--muted);font-weight:600}
+.vp-sline{flex:1;height:2px;background:var(--line);border-radius:2px;max-width:70px}
+.vp-wdivider{height:1px;background:var(--line);margin:16px 0 2px}
+.vp-wbody{padding:10px 2px 4px;max-height:56vh;overflow-y:auto}
+
+.vp-toggle{display:flex;gap:8px;margin-bottom:16px}
+.vp-toggle button{flex:1;height:38px;font-size:13.5px;border:1px solid var(--line);border-radius:8px;
+  background:var(--card);color:var(--ink);cursor:pointer;font-family:'Inter'}
+.vp-toggle button.on{border:2px solid var(--gold);background:var(--goldbg);color:var(--brown);font-weight:600}
+
+.vp-field{margin-top:4px}
+.vp-field label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--brown)}
+.vp-field select,.vp-row2 select{width:100%;height:38px;padding:0 10px;font-size:13.5px;
+  border:1px solid var(--line);border-radius:8px;background:#fbf8f2;color:var(--ink)}
+.vp-field select:disabled,.vp-row2 select:disabled{background:var(--bg);color:var(--ink);opacity:1}
+.vp-hint{font-size:12px;color:var(--muted);margin:7px 0 0}
+.vp-hint b{color:var(--brown)}
+.vp-badge-ro{font-size:10.5px;font-weight:700;color:var(--muted);background:var(--bg);border-radius:4px;
+  padding:1px 6px;margin-left:5px;text-transform:uppercase}
+.vp-row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+.vp-row2 label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--brown)}
+
+.vp-wk-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px}
+.vp-wk-head label{font-size:13px;font-weight:600;color:var(--brown);display:block;margin-bottom:8px}
+.vp-weeks-ctl{display:flex;align-items:center;border:1px solid var(--line);border-radius:8px;overflow:hidden;width:fit-content}
+.vp-weeks-ctl button{width:34px;height:34px;border:none;background:var(--bg);font-size:16px;cursor:pointer;color:var(--ink)}
+.vp-weeks-ctl button:hover{background:var(--goldbg)}
+.vp-weeks-val{width:44px;text-align:center;font-size:15px;font-weight:700}
+.vp-total-planned{text-align:right}
+.vp-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.vp-num{font-size:20px;font-weight:800;color:var(--brown)}
+.vp-total-planned .vp-num{color:var(--gold)}
+
+.vp-owner-card{border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:12px;position:relative}
+.vp-owner-card .vp-del{position:absolute;top:10px;right:10px}
+.vp-owner-card label{display:block;font-size:12.5px;font-weight:600;margin-bottom:6px;color:var(--brown)}
+.vp-owner-card>select{width:100%;height:36px;padding:0 10px;font-size:13.5px;border:1px solid var(--line);
+  border-radius:8px;background:#fbf8f2;color:var(--ink)}
+/* Searchable task-owner combobox — plain <select> is unusable once the org has
+   hundreds of employees; acc-combo/acc-combo-list are the shared searchable-picker
+   classes (shared.css) already used elsewhere (e.g. HighRiskCompanies' company picker). */
+.vp-owner-combo{width:100%}
+.vp-owner-combo input{width:100%;height:36px;padding:0 10px;font-size:13.5px;border:1px solid var(--line);
+  border-radius:8px;background:#fbf8f2;color:var(--ink);box-sizing:border-box}
+.vp-owner-combo input:focus{outline:none;border-color:var(--gold)}
+.vp-wk-inputs{display:flex;gap:9px;flex-wrap:wrap;margin-top:11px;align-items:flex-end}
+.vp-wk2{flex:1;min-width:82px}
+.vp-wk2 small{font-size:10.5px;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:4px}
+.vp-wk2 input{text-align:center;width:100%;height:34px;border:1px solid var(--line);border-radius:8px;
+  background:#fbf8f2;color:var(--ink);box-sizing:border-box}
+.vp-wk2 input:focus{outline:none;border-color:var(--gold)}
+.vp-rowtotal{min-width:104px;background:var(--goldbg);border-radius:8px;padding:7px 11px;text-align:center}
+.vp-rowtotal .vp-lbl{color:var(--gold)}
+.vp-rowtotal .vp-num{font-size:16px;color:var(--gold)}
+.vp-add-owner-btn{width:100%;margin-top:14px;height:42px;border:1px dashed var(--gold);background:var(--goldbg);
+  color:var(--brown);border-radius:10px;font-weight:600;cursor:pointer;font-family:'Inter'}
+.vp-add-owner-btn:hover{background:rgba(165,132,91,.28)}
+
+.vp-wfooter{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--line);
+  margin-top:16px;padding-top:14px;flex-wrap:wrap;gap:10px}
+.vp-wfoot-chips{display:flex;gap:8px;flex-wrap:wrap}
+.vp-wchip{font-size:12px;background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:5px 13px;color:var(--muted)}
+.vp-wfoot-actions{display:flex;align-items:center;gap:12px}
+.vp-wbtn-link{background:none;border:none;font-size:14px;color:var(--ink);cursor:pointer;font-weight:500;font-family:'Inter'}
+.vp-wbtn-primary{height:40px;padding:0 20px;border-radius:10px;background:var(--brown);color:#fff;border:none;
+  font-size:14px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif}
+.vp-wbtn-primary:hover{background:var(--hover-btn-primary)}
+.vp-wbtn-primary:disabled{opacity:.6;cursor:default}
+
+@media(max-width:640px){
+  .vp-row2{grid-template-columns:1fr}
+  .vp-modal{padding:1.4rem 1.2rem 1rem}
+}
+
+/* ===== dark theme ===== */
+:root[data-theme="dark"] .vp-pair input,
+:root[data-theme="dark"] .vp-field select,
+:root[data-theme="dark"] .vp-row2 select,
+:root[data-theme="dark"] .vp-owner-card>select,
+:root[data-theme="dark"] .vp-multiselect-btn,
+:root[data-theme="dark"] .vp-owner-combo input,
+:root[data-theme="dark"] .vp-wk2 input{background:#1c2118;color:var(--ink);border-color:var(--line)}
+:root[data-theme="dark"] .vp-field select:disabled,
+:root[data-theme="dark"] .vp-row2 select:disabled{background:var(--bg)}
+:root[data-theme="dark"] .vp-wk{background:var(--card)}
+:root[data-theme="dark"] .vp-toggle button{background:var(--card);color:var(--ink)}
+:root[data-theme="dark"] .vp-modal{background:var(--card)}
+:root[data-theme="dark"] .vp-scircle{background:#1c2118}
+:root[data-theme="dark"] .vp-step.active .vp-scircle{color:#181c16}
+:root[data-theme="dark"] .vp-step.done .vp-scircle{color:#181c16}
+:root[data-theme="dark"] .vp-wbtn-primary{color:#181c16}
+:root[data-theme="dark"] .vp-multiselect-search{background:#1c2118;border-color:var(--line)}
+:root[data-theme="dark"] .vp-multiselect-search input{color:var(--ink)}

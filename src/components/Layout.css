@@ -14,17 +14,31 @@
 .acc-sb-toggle{background:rgba(255,255,255,.06);border:none;color:var(--shell-text);
   width:28px;height:28px;border-radius:7px;cursor:pointer;font-size:12px;flex-shrink:0}
 .acc-sb-toggle:hover{background:rgba(255,255,255,.12)}
-.acc-sb-nav{list-style:none;margin:0;padding:10px 10px;flex:1;overflow-y:auto;overflow-x:hidden}
-.acc-sb-nav li{margin-bottom:2px}
-.acc-sb-nav a{display:flex;align-items:center;gap:11px;padding:10px 12px;
+.acc-sb-nav{margin:0;padding:6px 10px;flex:1;overflow-y:auto;overflow-x:hidden}
+
+/* Collapsible group — section header (uppercase, letter-spaced) + its own item list */
+.acc-sb-group{margin-bottom:2px}
+.acc-sb-group + .acc-sb-group{margin-top:6px;padding-top:6px;border-top:1px solid var(--shell-line)}
+.acc-sb-group-hdr{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  width:100%;background:none;border:none;cursor:pointer;padding:9px 12px 6px;
+  font-family:'Outfit',sans-serif;font-size:11px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--shell-muted);transition:.15s}
+.acc-sb-group-hdr:hover{color:var(--shell-accent)}
+.acc-sb-group-caret{font-size:10px;color:var(--shell-muted);transition:transform .15s;
+  transform:rotate(-90deg);flex-shrink:0}
+.acc-sb-group-caret.open{transform:rotate(0deg)}
+
+.acc-sb-group-items{list-style:none;margin:0;padding:0}
+.acc-sb-group-items li{margin-bottom:2px}
+.acc-sb-group-items a{display:flex;align-items:center;gap:11px;padding:10px 12px;
   border-radius:8px;color:var(--shell-text);text-decoration:none;
   font-size:13.2px;font-weight:500;border-left:3px solid transparent;
   transition:.15s;white-space:nowrap}
-.acc-sb-nav a i{width:16px;text-align:center;font-size:13px;color:var(--shell-muted);flex-shrink:0}
-.acc-sb-nav a:hover{background:rgba(255,255,255,.06);color:var(--shell-text-strong)}
-.acc-sb-nav a.active{background:var(--shell-active-bg);color:var(--shell-text-strong);
+.acc-sb-group-items a i{width:16px;text-align:center;font-size:13px;color:var(--shell-muted);flex-shrink:0}
+.acc-sb-group-items a:hover{background:rgba(255,255,255,.06);color:var(--shell-text-strong)}
+.acc-sb-group-items a.active{background:var(--shell-active-bg);color:var(--shell-text-strong);
   font-weight:600;border-left-color:var(--shell-accent)}
-.acc-sb-nav a.active i{color:var(--shell-accent)}
+.acc-sb-group-items a.active i{color:var(--shell-accent)}
 
 /* Sidebar footer — region switcher + global Light/Dark theme switch, always pinned below the nav list */
 .acc-sb-foot{padding:12px 10px;border-top:1px solid var(--shell-line)}
@@ -49,7 +63,8 @@
   .acc-sidebar.collapsed{width:72px}
   .acc-sidebar.collapsed .acc-sb-brand{padding:18px 0;justify-content:center;gap:10px}
   .acc-sidebar.collapsed .acc-logo span{display:none}
-  .acc-sidebar.collapsed .acc-sb-nav a{justify-content:center;padding:12px 0}
+  .acc-sidebar.collapsed .acc-sb-group-hdr{display:none}
+  .acc-sidebar.collapsed .acc-sb-group-items a{justify-content:center;padding:12px 0}
   .acc-sidebar.collapsed .acc-sb-label{display:none}
   .acc-sidebar.collapsed .theme-switch{flex-direction:column}
   .acc-sidebar.collapsed .theme-btn + .theme-btn{border-left:none;border-top:1px solid var(--shell-line)}
@@ -89,6 +104,9 @@
 .region-opt-text{display:flex;flex-direction:column;gap:2px}
 .region-opt-text b{font-family:'Outfit',sans-serif;font-weight:600;font-size:14px;color:var(--ink)}
 .region-opt-text small{color:var(--muted);font-size:12px}
+.region-skip{display:block;width:100%;margin-top:14px;background:none;border:none;
+  color:var(--muted);font-size:12.5px;font-weight:600;cursor:pointer;text-align:center;padding:6px}
+.region-skip:hover{color:var(--gold)}
 @media(max-width:520px){
   .region-modal{padding:22px 18px}
 }
@@ -100,7 +118,7 @@
   .acc-sidebar.collapsed{width:230px}
   .acc-sidebar.collapsed .acc-sb-brand{padding:18px 18px 16px;justify-content:space-between}
   .acc-sidebar.collapsed .acc-logo span,.acc-sidebar.collapsed .acc-sb-label{display:inline}
-  .acc-sidebar.collapsed .acc-sb-nav a{justify-content:flex-start;padding:10px 12px}
+  .acc-sidebar.collapsed .acc-sb-group-items a{justify-content:flex-start;padding:10px 12px}
   .acc-sidebar.mobile-open{transform:translateX(0)}
 
   .acc-mobile-menu-btn{display:flex;align-items:center;justify-content:center;

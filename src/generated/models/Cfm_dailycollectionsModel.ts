@@ -42,6 +42,7 @@ export interface Cfm_dailycollectionsBase {
   cfm_paymentreference?: string;
   cfm_proof?: string;
   cfm_statusaction?: Cfm_dailycollectionscfm_statusaction;
+  cfm_totalrejection?: number;
   importsequencenumber?: number;
   overriddencreatedon?: string;
   statecode: Cfm_dailycollectionsstatecode;

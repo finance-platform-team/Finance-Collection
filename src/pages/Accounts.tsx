@@ -1,10 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { getClient } from '@microsoft/power-apps/data';
 import { dataSourcesInfo } from '../../.power/schemas/appschemas/dataSourcesInfo';
 import { Cr301_accountsService } from '../generated/services/Cr301_accountsService';
 import type { Cr301_accountsBase, Cr301_accountscr301_accounttype } from '../generated/models/Cr301_accountsModel';
 import { Cr301_accounttypesService } from '../generated/services/Cr301_accounttypesService';
+import { Cr301_visitsService } from '../generated/services/Cr301_visitsService';
+import { Cr301_agentsService } from '../generated/services/Cr301_agentsService';
+import { Cr301_visitscr301_visitstatus, Cr301_visitscr301_visittype } from '../generated/models/Cr301_visitsModel';
 import { operationErrorMessage } from '../lib/errors';
+import { visitStatusClass } from '../lib/visitStatus';
 import './Accounts.css';
 
 const TYPE_INSURANCE: Cr301_accountscr301_accounttype = 983080002;
@@ -43,7 +47,23 @@ interface AccountRow {
   type: number;
   typeName: string;
   target: number;
-  actual: number;
+}
+
+interface AccountVisitRow {
+  id: string;
+  refId: string;
+  agentName: string;
+  date: string;
+  statusLabel: string;
+  typeLabel: string;
+  notes: string;
+}
+
+function fmtDate(iso: string): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 /**
@@ -54,12 +74,6 @@ interface AccountRow {
 function formattedValue(record: unknown, attribute: string): string {
   const raw = (record as Record<string, unknown>)[`${attribute}@OData.Community.Display.V1.FormattedValue`];
   return typeof raw === 'string' ? raw : '';
-}
-
-function coverageDot(actual: number, target: number): string {
-  if (target > 0 && actual >= target) return 'acc-ok';
-  if (actual > 0) return 'acc-warn';
-  return 'acc-bad';
 }
 
 function classBadgeClass(cls: string): string {
@@ -73,6 +87,11 @@ function escapeForCsv(value: string | number): string {
   return `"${String(value).replace(/"/g, '""')}"`;
 }
 
+/** Target Visit is capped at 5 digits (max 99999) — strip anything past that as it's typed. */
+function clampTargetInput(raw: string): string {
+  return raw.slice(0, 5);
+}
+
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,9 +99,16 @@ export default function AccountsPage() {
 
   const [classes, setClasses] = useState<ClassOption[]>([]);
   const [classesLoadFailed, setClassesLoadFailed] = useState(false);
+  const [agentNames, setAgentNames] = useState<Map<string, string>>(new Map());
+
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [visitsByAccount, setVisitsByAccount] = useState<Record<string, AccountVisitRow[] | 'loading' | 'error'>>({});
 
   const [query, setQuery] = useState('');
   const [clsFilter, setClsFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [visitDateFrom, setVisitDateFrom] = useState('');
+  const [visitDateTo, setVisitDateTo] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
 
@@ -133,6 +159,58 @@ export default function AccountsPage() {
     }
   }
 
+  async function loadAgents() {
+    try {
+      const result = await Cr301_agentsService.getAll({ select: ['cr301_agentid', 'cr301_newcolumn'] });
+      if (!result.success) return;
+      setAgentNames(new Map((result.data || []).map((a) => [a.cr301_agentid, a.cr301_newcolumn || '(agent)'])));
+    } catch {
+      /* agent names are a display nicety — a failure here shouldn't block the page */
+    }
+  }
+
+  async function loadVisitsFor(accountId: string) {
+    setVisitsByAccount((prev) => ({ ...prev, [accountId]: 'loading' }));
+    try {
+      const result = await Cr301_visitsService.getAll({
+        select: [
+          'cr301_visitid',
+          'cr301_newcolumn',
+          'cr301_visitdate',
+          'cr301_visitstatus',
+          'cr301_visittype',
+          'cr301_notes',
+          '_cr301_agent_value',
+        ],
+        filter: `_cr301_account_value eq ${accountId}`,
+        orderBy: ['cr301_visitdate desc'],
+      });
+      if (!result.success) throw new Error(operationErrorMessage(result.error, 'Could not load visits.'));
+      const rows: AccountVisitRow[] = (result.data || []).map((v) => ({
+        id: v.cr301_visitid,
+        refId: v.cr301_newcolumn || '—',
+        agentName: agentNames.get(v._cr301_agent_value || '') || '—',
+        date: v.cr301_visitdate || '',
+        statusLabel: v.cr301_visitstatus != null ? Cr301_visitscr301_visitstatus[v.cr301_visitstatus] : '—',
+        typeLabel: v.cr301_visittype != null ? Cr301_visitscr301_visittype[v.cr301_visittype] : '—',
+        notes: v.cr301_notes || '',
+      }));
+      setVisitsByAccount((prev) => ({ ...prev, [accountId]: rows }));
+    } catch {
+      setVisitsByAccount((prev) => ({ ...prev, [accountId]: 'error' }));
+    }
+  }
+
+  function toggleExpand(accountId: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(accountId)) next.delete(accountId);
+      else next.add(accountId);
+      return next;
+    });
+    if (!visitsByAccount[accountId]) loadVisitsFor(accountId);
+  }
+
   async function load() {
     setLoading(true);
     setLoadError(null);
@@ -144,7 +222,6 @@ export default function AccountsPage() {
           'cr301_accountcode',
           'cr301_accounttype',
           'cfm_visittargetcollection',
-          'cr301_monthactualvisits',
           '_cr301_accountclassification_value',
         ],
         filter: `cr301_accounttype eq ${TYPE_INSURANCE} or cr301_accounttype eq ${TYPE_DIRECT}`,
@@ -162,7 +239,6 @@ export default function AccountsPage() {
         type: r.cr301_accounttype ?? TYPE_INSURANCE,
         typeName: (formattedValue(r, 'cr301_accounttype') || 'Insurance').trim(),
         target: r.cfm_visittargetcollection ?? 0,
-        actual: r.cr301_monthactualvisits ?? 0,
       }));
       setAccounts(rows);
     } catch (e) {
@@ -175,6 +251,7 @@ export default function AccountsPage() {
   useEffect(() => {
     // Independent loads: a classification-load failure never blocks the grid.
     loadClasses();
+    loadAgents();
     load();
   }, []);
 
@@ -183,13 +260,14 @@ export default function AccountsPage() {
     return accounts.filter((a) => {
       if (q && !`${a.name} ${a.code}`.toLowerCase().includes(q)) return false;
       if (clsFilter && a.cls !== clsFilter) return false;
+      if (typeFilter && String(a.type) !== typeFilter) return false;
       return true;
     });
-  }, [accounts, query, clsFilter]);
+  }, [accounts, query, clsFilter, typeFilter]);
 
   useEffect(() => {
     setPage(1);
-  }, [query, clsFilter]);
+  }, [query, clsFilter, typeFilter]);
 
   const totalPages = Math.max(1, Math.ceil(view.length / pageSize));
   const clampedPage = Math.min(page, totalPages);
@@ -197,13 +275,11 @@ export default function AccountsPage() {
 
   const kpis = useMemo(() => {
     let targetSum = 0;
-    let actualSum = 0;
-    accounts.forEach((a) => {
+    view.forEach((a) => {
       targetSum += a.target;
-      actualSum += a.actual;
     });
-    return { total: accounts.length, targetSum, actualSum };
-  }, [accounts]);
+    return { total: view.length, targetSum };
+  }, [view]);
 
   const allViewSelected = view.length > 0 && view.every((a) => selectedIds.has(a.id));
 
@@ -245,8 +321,8 @@ export default function AccountsPage() {
 
   async function handleBulkSave() {
     const value = parseInt(bulkTarget, 10);
-    if (bulkTarget.trim() === '' || Number.isNaN(value) || value < 0) {
-      setBulkError('Enter a valid Target Visit number.');
+    if (bulkTarget.trim() === '' || Number.isNaN(value) || value <= 0) {
+      setBulkError('Enter a positive Target Visit number.');
       return;
     }
     setBulkSaving(true);
@@ -379,8 +455,22 @@ export default function AccountsPage() {
 
   async function handleSave() {
     const name = formName.trim();
+    const code = formCode.trim();
     if (!name) {
       setFormError('Account Name is required.');
+      return;
+    }
+    if (!code) {
+      setFormError('Account Code is required.');
+      return;
+    }
+    if (!formAccountType) {
+      setFormError('Account Type is required.');
+      return;
+    }
+    const target = parseInt(formTarget, 10);
+    if (!Number.isFinite(target) || target <= 0) {
+      setFormError('Account Target Visit must be a positive number.');
       return;
     }
     setSaving(true);
@@ -390,9 +480,9 @@ export default function AccountsPage() {
       //    cr301_monthactualvisits is never written — it's auto-counted from the Visits Log.
       const body: Partial<Omit<Cr301_accountsBase, 'cr301_accountid'>> = {
         cr301_acccountname: name,
-        cr301_accountcode: formCode.trim() || null,
+        cr301_accountcode: code,
         cr301_accounttype: (parseInt(formAccountType, 10) || TYPE_INSURANCE) as Cr301_accountscr301_accounttype,
-        cfm_visittargetcollection: parseInt(formTarget, 10) || 0,
+        cfm_visittargetcollection: target,
       } as Partial<Omit<Cr301_accountsBase, 'cr301_accountid'>>;
 
       let recordId = editId;
@@ -442,8 +532,8 @@ export default function AccountsPage() {
   }
 
   function exportCsv() {
-    const header = ['Account Name', 'Account Code', 'Classification', 'Type', 'Target Visit', 'Actual Visit'];
-    const rows = view.map((a) => [a.name, a.code, a.cls, a.typeName, a.target, a.actual]);
+    const header = ['Account Name', 'Account Code', 'Classification', 'Type', 'Target Visit'];
+    const rows = view.map((a) => [a.name, a.code === '—' ? '0' : a.code, a.cls, a.typeName, a.target]);
     const csv = [header, ...rows].map((r) => r.map(escapeForCsv).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -505,18 +595,6 @@ export default function AccountsPage() {
             <div className="kpi-value">{loading ? '—' : kpis.targetSum}</div>
             <div className="kpi-context">&nbsp;</div>
           </div>
-          <div className="kpi-card kpi-ok">
-            <div className="kpi-top">
-              <span className="kpi-icon kpi-icon-ok">
-                <i className="fa-solid fa-check-double"></i>
-              </span>
-              <span className="kpi-label">Actual visits</span>
-            </div>
-            <div className="kpi-value">{loading ? '—' : kpis.actualSum}</div>
-            <div className="kpi-context">
-              {loading ? '' : kpis.targetSum > 0 ? `${Math.round((kpis.actualSum / kpis.targetSum) * 100)}% of target` : '—'}
-            </div>
-          </div>
         </div>
 
         {selectedIds.size > 0 && (
@@ -547,12 +625,38 @@ export default function AccountsPage() {
               <option value="B">Class B</option>
               <option value="C">Class C</option>
             </select>
+            <select className="acc-f" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+              <option value="">All Types</option>
+              {ACCOUNT_TYPE_OPTIONS.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <div className="acc-date-range">
+              <input
+                type="date"
+                className="acc-f"
+                value={visitDateFrom}
+                onChange={(e) => setVisitDateFrom(e.target.value)}
+                title="Visit date from (filters the visits panel per account)"
+              />
+              <span>–</span>
+              <input
+                type="date"
+                className="acc-f"
+                value={visitDateTo}
+                onChange={(e) => setVisitDateTo(e.target.value)}
+                title="Visit date to (filters the visits panel per account)"
+              />
+            </div>
           </div>
 
           <div className="acc-tablewrap">
           <table>
             <thead>
               <tr>
+                <th className="acc-expand"></th>
                 <th className="acc-check">
                   <input type="checkbox" checked={allViewSelected} onChange={toggleSelectAllView} aria-label="Select all" />
                 </th>
@@ -561,7 +665,6 @@ export default function AccountsPage() {
                 <th>Classification</th>
                 <th>Type</th>
                 <th className="acc-num">Target Visit</th>
-                <th className="acc-num">Actual Visit</th>
               </tr>
             </thead>
             <tbody>
@@ -596,31 +699,96 @@ export default function AccountsPage() {
                   </td>
                 </tr>
               ) : (
-                pageRows.map((a) => (
-                  <tr key={a.id} className="acc-row" onClick={() => openDrawer(a)}>
-                    <td className="acc-check" onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" checked={selectedIds.has(a.id)} onChange={() => toggleSelect(a.id)} aria-label={`Select ${a.name}`} />
-                    </td>
-                    <td className="acc-name">{a.name}</td>
-                    <td className="acc-code">{a.code}</td>
-                    <td>
-                      <span className={`acc-cls ${classBadgeClass(a.cls)}`}>{a.cls || '–'}</span>
-                    </td>
-                    <td>
-                      <span className="acc-typ">
-                        <i className="fa-solid fa-shield-heart" style={{ color: 'var(--gold)', fontSize: 12 }}></i>
-                        {a.typeName}
-                      </span>
-                    </td>
-                    <td className="acc-num">{a.target}</td>
-                    <td className="acc-num">
-                      <span className="acc-cover">
-                        <span className={`acc-dot ${coverageDot(a.actual, a.target)}`}></span>
-                        {a.actual}
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                pageRows.map((a) => {
+                  const expanded = expandedIds.has(a.id);
+                  const visitState = visitsByAccount[a.id];
+                  const visitRows: AccountVisitRow[] = Array.isArray(visitState)
+                    ? visitState.filter((v) => {
+                        const d = v.date ? v.date.slice(0, 10) : '';
+                        if (visitDateFrom && (!d || d < visitDateFrom)) return false;
+                        if (visitDateTo && (!d || d > visitDateTo)) return false;
+                        return true;
+                      })
+                    : [];
+                  return (
+                    <Fragment key={a.id}>
+                      <tr className="acc-row" onClick={() => openDrawer(a)}>
+                        <td className="acc-expand" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="acc-expand-btn"
+                            title={expanded ? 'Hide visits' : 'Show all visits on this account'}
+                            onClick={() => toggleExpand(a.id)}
+                          >
+                            <i className={`fa-solid ${expanded ? 'fa-chevron-down' : 'fa-chevron-right'}`}></i>
+                          </button>
+                        </td>
+                        <td className="acc-check" onClick={(e) => e.stopPropagation()}>
+                          <input type="checkbox" checked={selectedIds.has(a.id)} onChange={() => toggleSelect(a.id)} aria-label={`Select ${a.name}`} />
+                        </td>
+                        <td className="acc-name">{a.name}</td>
+                        <td className="acc-code">{a.code}</td>
+                        <td>
+                          <span className={`acc-cls ${classBadgeClass(a.cls)}`}>{a.cls || '–'}</span>
+                        </td>
+                        <td>
+                          <span className="acc-typ">
+                            <i className="fa-solid fa-shield-heart" style={{ color: 'var(--gold)', fontSize: 12 }}></i>
+                            {a.typeName}
+                          </span>
+                        </td>
+                        <td className="acc-num">{a.target}</td>
+                      </tr>
+                      {expanded && (
+                        <tr className="acc-expand-row">
+                          <td colSpan={7}>
+                            {visitState === 'loading' ? (
+                              <div className="acc-state">
+                                <i className="fa-solid fa-spinner fa-spin"></i> Loading visits…
+                              </div>
+                            ) : visitState === 'error' ? (
+                              <div className="acc-state">
+                                <i className="fa-solid fa-triangle-exclamation"></i> Could not load visits.
+                              </div>
+                            ) : !visitRows || visitRows.length === 0 ? (
+                              <div className="acc-state">
+                                <i className="fa-solid fa-inbox"></i>
+                                {visitDateFrom || visitDateTo ? 'No visits in that date range for this account.' : 'No visits recorded for this account.'}
+                              </div>
+                            ) : (
+                              <table className="acc-visits-table">
+                                <thead>
+                                  <tr>
+                                    <th>Visit ID</th>
+                                    <th>Agent</th>
+                                    <th>Visit Date</th>
+                                    <th>Visit Status</th>
+                                    <th>Visit Type</th>
+                                    <th>Comments</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {visitRows.map((v) => (
+                                    <tr key={v.id}>
+                                      <td>{v.refId}</td>
+                                      <td>{v.agentName}</td>
+                                      <td>{v.date ? fmtDate(v.date) : '—'}</td>
+                                      <td>
+                                        <span className={`acc-visit-status ${visitStatusClass(v.statusLabel)}`}>{v.statusLabel}</span>
+                                      </td>
+                                      <td>{v.typeLabel}</td>
+                                      <td>{v.notes || '—'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -656,10 +824,9 @@ export default function AccountsPage() {
                 setPage(1);
               }}
             >
+              <option value={10}>10</option>
               <option value={15}>15</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-              <option value={9999}>All</option>
+              <option value={20}>20</option>
             </select>
           </div>
         </div>
@@ -683,11 +850,15 @@ export default function AccountsPage() {
         <div className="acc-dbody">
           <div className={`acc-err${formError ? ' on' : ''}`}>{formError}</div>
           <div className="acc-fld">
-            <label>Account Name</label>
+            <label>
+              Account Name <span className="dm-req">*</span>
+            </label>
             <input placeholder="e.g. Tawuniya Insurance" value={formName} onChange={(e) => setFormName(e.target.value)} />
           </div>
           <div className="acc-fld">
-            <label>Account Code</label>
+            <label>
+              Account Code <span className="dm-req">*</span>
+            </label>
             <input placeholder="e.g. INS-001" value={formCode} onChange={(e) => setFormCode(e.target.value)} />
           </div>
           <div className="acc-fld">
@@ -708,7 +879,9 @@ export default function AccountsPage() {
             </select>
           </div>
           <div className="acc-fld">
-            <label>Account Type</label>
+            <label>
+              Account Type <span className="dm-req">*</span>
+            </label>
             <select value={formAccountType} onChange={(e) => setFormAccountType(e.target.value)}>
               {ACCOUNT_TYPE_OPTIONS.map((t) => (
                 <option key={t.value} value={t.value}>
@@ -719,10 +892,7 @@ export default function AccountsPage() {
           </div>
           <div className="acc-fld">
             <label>Account Target Visit</label>
-            <input type="number" min={0} value={formTarget} onChange={(e) => setFormTarget(e.target.value)} />
-          </div>
-          <div className="acc-hint" style={{ marginTop: -6 }}>
-            <i className="fa-solid fa-circle-info"></i> Actual visits are counted automatically from the Visits Log.
+            <input type="number" min={1} max={99999} maxLength={5} value={formTarget} onChange={(e) => setFormTarget(clampTargetInput(e.target.value))} />
           </div>
         </div>
         <div className="acc-dfoot">
@@ -748,11 +918,11 @@ export default function AccountsPage() {
           <div className={`acc-err${bulkError ? ' on' : ''}`}>{bulkError}</div>
           <div className="acc-hint" style={{ marginBottom: 16 }}>
             This sets <b>Target Visit</b> to the same value for all <b>{selectedIds.size}</b> selected account
-            {selectedIds.size !== 1 ? 's' : ''}. Actual Visit is never affected.
+            {selectedIds.size !== 1 ? 's' : ''}.
           </div>
           <div className="acc-fld">
             <label>Target Visit</label>
-            <input type="number" min={0} placeholder="e.g. 4" value={bulkTarget} onChange={(e) => setBulkTarget(e.target.value)} />
+            <input type="number" min={1} max={99999} maxLength={5} placeholder="e.g. 4" value={bulkTarget} onChange={(e) => setBulkTarget(clampTargetInput(e.target.value))} />
           </div>
         </div>
         <div className="acc-dfoot">

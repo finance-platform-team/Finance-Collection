@@ -41,6 +41,53 @@
           "x-ms-schema-name": "anoyer_isfinanceName",
           "x-ms-read-only": true
         },
+        "cfm_employee": {
+          "type": "string",
+          "title": "Employee",
+          "x-ms-dataverse-attribute": "cfm_employee",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "cfm_Employee"
+        },
+        "cfm_employeename": {
+          "type": "string",
+          "title": "cfm_employeename",
+          "x-ms-dataverse-attribute": "cfm_employeename",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "cfm_EmployeeName",
+          "x-ms-read-only": true,
+          "maxLength": 850
+        },
+        "cfm_iscollection": {
+          "type": "string",
+          "title": "Is Collection",
+          "x-ms-dataverse-attribute": "cfm_iscollection",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "cfm_IsCollection",
+          "enum": [
+            "No",
+            "Yes"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "e9285024-d893-f111-8075-00224882d001",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Is Collection",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "cfm_iscollectionname": {
+          "type": "string",
+          "title": "cfm_iscollectionname",
+          "x-ms-dataverse-attribute": "cfm_iscollectionname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "cfm_iscollectionName",
+          "x-ms-read-only": true
+        },
         "cr18c_area": {
           "type": "string",
           "title": "Area",
@@ -426,6 +473,22 @@
           "x-ms-read-only": true,
           "required": true,
           "maxLength": 100
+        },
+        "ms_bu": {
+          "type": "string",
+          "title": "BU",
+          "x-ms-dataverse-attribute": "ms_bu",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "ms_BU"
+        },
+        "ms_buname": {
+          "type": "string",
+          "title": "ms_buname",
+          "x-ms-dataverse-attribute": "ms_buname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ms_BUName",
+          "x-ms-read-only": true,
+          "maxLength": 160
         },
         "overriddencreatedon": {
           "type": "string",

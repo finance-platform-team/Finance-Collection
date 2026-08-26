@@ -10,6 +10,97 @@
       "x-ms-dataverse-primary-id": "cr301_visitid",
       "x-ms-dataverse-primary-name": "cr301_newcolumn",
       "properties": {
+        "cfm_agent2": {
+          "type": "string",
+          "title": "Agent 2",
+          "x-ms-dataverse-attribute": "cfm_agent2",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "cfm_Agent2"
+        },
+        "cfm_agent2name": {
+          "type": "string",
+          "title": "cfm_agent2name",
+          "x-ms-dataverse-attribute": "cfm_agent2name",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "cfm_Agent2Name",
+          "x-ms-read-only": true,
+          "maxLength": 850
+        },
+        "cfm_category": {
+          "type": "string",
+          "title": "Category",
+          "x-ms-dataverse-attribute": "cfm_category",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "cfm_Category",
+          "enum": [
+            "Partially Closed",
+            "Closed",
+            "Open"
+          ],
+          "x-ms-enum-values": [
+            766340000,
+            766340001,
+            766340002
+          ],
+          "Color": [
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "3fea76b7-e193-f111-8075-00224882d001",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Collection Category",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "cfm_categoryname": {
+          "type": "string",
+          "title": "cfm_categoryname",
+          "x-ms-dataverse-attribute": "cfm_categoryname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "cfm_categoryName",
+          "x-ms-read-only": true
+        },
+        "cfm_revisitdate": {
+          "type": "string",
+          "title": "Revisit Date",
+          "x-ms-dataverse-attribute": "cfm_revisitdate",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "cfm_RevisitDate"
+        },
+        "cfm_tagename": {
+          "type": "string",
+          "title": "Tage Name",
+          "x-ms-dataverse-attribute": "cfm_tagename",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "cfm_TageName",
+          "enum": [
+            "Collection",
+            "AR",
+            "AP"
+          ],
+          "x-ms-enum-values": [
+            766340000,
+            766340001,
+            766340002
+          ],
+          "Color": [
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "3de667dc-e693-f111-8075-00224882d001",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Tage Name",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "cfm_tagenamename": {
+          "type": "string",
+          "title": "cfm_tagenamename",
+          "x-ms-dataverse-attribute": "cfm_tagenamename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "cfm_tagenameName",
+          "x-ms-read-only": true
+        },
         "cr18c_checkonagent": {
           "type": "string",
           "title": "Check On ( Agent )",
@@ -376,17 +467,20 @@
           "enum": [
             "Open",
             "Completed",
-            "Cancelled"
+            "Cancelled",
+            "Partially Closed"
           ],
           "x-ms-enum-values": [
             983080000,
             983080001,
-            983080002
+            983080002,
+            766340001
           ],
           "Color": [
             "#f7ff99",
             "#c6b5ff",
-            "#ff8c8c"
+            "#ff8c8c",
+            "#f2e1e1"
           ],
           "x-ms-optionsetmetadataid": "c4c7c062-8a8c-f011-b4cc-6045bdf37b46",
           "x-ms-isGlobal": true,
@@ -586,6 +680,460 @@
           "required": true,
           "maxLength": 100
         },
+        "ms_accountneedidentified": {
+          "type": "string",
+          "title": "Account need identified",
+          "x-ms-dataverse-attribute": "ms_accountneedidentified",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "ms_Accountneedidentified",
+          "enum": [
+            "No",
+            "Onsite clinic",
+            "Meeting",
+            "Event",
+            "Business needs"
+          ],
+          "x-ms-enum-values": [
+            100000000,
+            100000001,
+            100000002,
+            100000003,
+            100000004
+          ],
+          "Color": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "9cf5275a-3496-f111-8075-00224882d001",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Account need identified",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "ms_accountneedidentifiedname": {
+          "type": "string",
+          "title": "ms_accountneedidentifiedname",
+          "x-ms-dataverse-attribute": "ms_accountneedidentifiedname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "ms_accountneedidentifiedName",
+          "x-ms-read-only": true
+        },
+        "ms_approvalstatus": {
+          "type": "string",
+          "title": "Approval Status",
+          "x-ms-dataverse-attribute": "ms_approvalstatus",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "ms_ApprovalStatus",
+          "enum": [
+            "Approved",
+            "Rejected",
+            "Waiting For Approval"
+          ],
+          "x-ms-enum-values": [
+            999740000,
+            999740001,
+            999740002
+          ],
+          "Color": [
+            "#a7c2b2",
+            "#daa1a3",
+            "#ffbe8f"
+          ],
+          "x-ms-optionsetmetadataid": "a0ec8a83-8817-4a38-8c6b-5d258a0e3b61",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Approval Status Global",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "ms_approvalstatusname": {
+          "type": "string",
+          "title": "ms_approvalstatusname",
+          "x-ms-dataverse-attribute": "ms_approvalstatusname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "ms_approvalstatusName",
+          "x-ms-read-only": true
+        },
+        "ms_engagementtype": {
+          "type": "string",
+          "title": "Engagement Type",
+          "x-ms-dataverse-attribute": "ms_engagementtype",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "ms_EngagementType",
+          "enum": [
+            "Management follow-up call",
+            "Management online meeting",
+            "Managerial visit (manager alone)",
+            "Joint managerial visit",
+            "Double visit",
+            "Regional management visit",
+            "Group management visit",
+            "Executive management visit",
+            "CEO visit request",
+            "Government / strategic stakeholder meeting"
+          ],
+          "x-ms-enum-values": [
+            100000000,
+            100000001,
+            100000002,
+            100000003,
+            100000004,
+            100000005,
+            100000006,
+            100000007,
+            100000008,
+            100000009
+          ],
+          "Color": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "49ad9c9c-2c9a-f111-b8db-00224882d001",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Engagement Type",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "ms_engagementtypename": {
+          "type": "string",
+          "title": "ms_engagementtypename",
+          "x-ms-dataverse-attribute": "ms_engagementtypename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "ms_engagementtypeName",
+          "x-ms-read-only": true
+        },
+        "ms_ishiringpotential": {
+          "type": "string",
+          "title": "Is Hiring potential",
+          "x-ms-dataverse-attribute": "ms_ishiringpotential",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "ms_IsHiringpotential",
+          "required": true,
+          "enum": [
+            "No",
+            "Yes"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "481d3a4b-2996-f111-8075-00224882d001",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Is Hiring potential",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "ms_ishiringpotentialname": {
+          "type": "string",
+          "title": "ms_ishiringpotentialname",
+          "x-ms-dataverse-attribute": "ms_ishiringpotentialname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "ms_ishiringpotentialName",
+          "x-ms-read-only": true
+        },
+        "ms_ismanagementengagement": {
+          "type": "string",
+          "title": "Is management engagement",
+          "x-ms-dataverse-attribute": "ms_ismanagementengagement",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "ms_Ismanagementengagement",
+          "enum": [
+            "No",
+            "Yes"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "f5b8db29-329a-f111-b8db-00224882d001",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "Is management engagement",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "ms_ismanagementengagementname": {
+          "type": "string",
+          "title": "ms_ismanagementengagementname",
+          "x-ms-dataverse-attribute": "ms_ismanagementengagementname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "ms_ismanagementengagementName",
+          "x-ms-read-only": true
+        },
+        "ms_ismanagementengagementrequired": {
+          "type": "string",
+          "title": "Is management engagement required?",
+          "x-ms-dataverse-attribute": "ms_ismanagementengagementrequired",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "ms_Ismanagementengagementrequired",
+          "enum": [
+            "Yes — raise to management",
+            "No"
+          ],
+          "x-ms-enum-values": [
+            100000000,
+            100000001
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "4dbc3f00-3596-f111-8075-00224882d001",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Is management engagement required?",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "ms_ismanagementengagementrequiredname": {
+          "type": "string",
+          "title": "ms_ismanagementengagementrequiredname",
+          "x-ms-dataverse-attribute": "ms_ismanagementengagementrequiredname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "ms_ismanagementengagementrequiredName",
+          "x-ms-read-only": true
+        },
+        "ms_medicalkpi": {
+          "type": "string",
+          "title": "Medical KPI",
+          "x-ms-dataverse-attribute": "ms_medicalkpi",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "ms_MedicalKPI"
+        },
+        "ms_medicalkpiname": {
+          "type": "string",
+          "title": "ms_medicalkpiname",
+          "x-ms-dataverse-attribute": "ms_medicalkpiname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ms_MedicalKPIName",
+          "x-ms-read-only": true,
+          "maxLength": 850
+        },
+        "ms_preferredfrom": {
+          "type": "string",
+          "title": "Preferred From",
+          "x-ms-dataverse-attribute": "ms_preferredfrom",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "ms_PreferredFrom"
+        },
+        "ms_preferredto": {
+          "type": "string",
+          "title": "Preferred To",
+          "x-ms-dataverse-attribute": "ms_preferredto",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "ms_PreferredTo"
+        },
+        "ms_reason": {
+          "type": "string",
+          "title": "Reason",
+          "x-ms-dataverse-attribute": "ms_reason",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ms_Reason",
+          "maxLength": 100
+        },
+        "ms_requestedlevel": {
+          "type": "string",
+          "title": "Requested Level",
+          "x-ms-dataverse-attribute": "ms_requestedlevel",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "ms_RequestedLevel",
+          "enum": [
+            "Supervisor",
+            "Team Manager",
+            "Regional / Area Manager",
+            "Group Manager / Director",
+            "Group Operations",
+            "Executive Management",
+            "CEO Office / CEO"
+          ],
+          "x-ms-enum-values": [
+            100000000,
+            100000001,
+            100000002,
+            100000003,
+            100000004,
+            100000005,
+            100000006
+          ],
+          "Color": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "a158d04f-2d9a-f111-b8db-00224882d001",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Requested Level",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "ms_requestedlevelname": {
+          "type": "string",
+          "title": "ms_requestedlevelname",
+          "x-ms-dataverse-attribute": "ms_requestedlevelname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "ms_requestedlevelName",
+          "x-ms-read-only": true
+        },
+        "ms_requestedmanagementrole": {
+          "type": "string",
+          "title": "Requested Management Role",
+          "x-ms-dataverse-attribute": "ms_requestedmanagementrole",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "ms_RequestedManagementRole",
+          "enum": [
+            "Corporate Supervisor",
+            "Regional Corporate Manager",
+            "Group Corporate Manager",
+            "Community Manager",
+            "Regional Medical Networking Manager",
+            "Group Operations Manager",
+            "Group Medical Director",
+            "Pricing Manager",
+            "Finance Director",
+            "Strategy Director",
+            "Legal Director",
+            "CEO Office",
+            "CEO"
+          ],
+          "x-ms-enum-values": [
+            100000000,
+            100000001,
+            100000002,
+            100000003,
+            100000004,
+            100000005,
+            100000006,
+            100000007,
+            100000008,
+            100000009,
+            100000010,
+            100000011,
+            100000012
+          ],
+          "Color": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "7a3c806b-2e9a-f111-b8db-00224882d001",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Requested management role ",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "ms_requestedmanagementrolename": {
+          "type": "string",
+          "title": "ms_requestedmanagementrolename",
+          "x-ms-dataverse-attribute": "ms_requestedmanagementrolename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "ms_requestedmanagementroleName",
+          "x-ms-read-only": true
+        },
+        "ms_segment": {
+          "type": "string",
+          "title": "Segment",
+          "x-ms-dataverse-attribute": "ms_segment",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "ms_Segment",
+          "enum": [
+            "Corporate wellness",
+            "Chronic care",
+            "Executive check-up",
+            "Maternity",
+            "Dental",
+            "Occupational health",
+            "Insurance conversion"
+          ],
+          "x-ms-enum-values": [
+            100000000,
+            100000001,
+            100000002,
+            100000003,
+            100000004,
+            100000005,
+            100000006
+          ],
+          "Color": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "50fdd716-739e-f111-b8dc-000d3a3885dc",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Segment",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "ms_segmentname": {
+          "type": "string",
+          "title": "ms_segmentname",
+          "x-ms-dataverse-attribute": "ms_segmentname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "ms_segmentName",
+          "x-ms-read-only": true
+        },
+        "ms_urgency": {
+          "type": "string",
+          "title": "Urgency",
+          "x-ms-dataverse-attribute": "ms_urgency",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "ms_Urgency",
+          "enum": [
+            "Low",
+            "Normal",
+            "High",
+            "Critical"
+          ],
+          "x-ms-enum-values": [
+            100000000,
+            100000001,
+            100000002,
+            100000003
+          ],
+          "Color": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "04946474-2f9a-f111-b8db-00224882d001",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Urgency",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "ms_urgencyname": {
+          "type": "string",
+          "title": "ms_urgencyname",
+          "x-ms-dataverse-attribute": "ms_urgencyname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "ms_urgencyName",
+          "x-ms-read-only": true
+        },
         "overriddencreatedon": {
           "type": "string",
           "title": "Record Created On",
@@ -758,6 +1306,7 @@
         "createdonbehalfbyyominame",
         "modifiedbyyominame",
         "modifiedonbehalfbyyominame",
+        "ms_ishiringpotential",
         "ownerid",
         "owneridname",
         "owneridtype",

@@ -1,1738 +1,885 @@
-<!--
-  ============================================================================
-  CFM · Daily Collection  —  Dataverse HTML Web Resource  (v1)
-  ----------------------------------------------------------------------------
-  LIST + right-drawer NEW ENTRY form.
-  Parent : cfm_dailycollections
-  Child  : cfm_collectionmonthallocations   (linked by _cfm_dailycollection_value)
-  Company lookup : cfm_aragings  (only companies with a Plan can be collected)
-  Rule   : Σ month allocations MUST equal Collected Net  (Save blocked otherwise)
-  Proof  : link created on OneDrive AFTER save by a Power Automate flow (later)
-  ----------------------------------------------------------------------------
-  Status flow:
-    Save (create)          → Awaiting documents (766340005)
-    First document upload   → Pending AR Verification (766340000)  [auto]
-  ============================================================================
--->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta http-equiv="X-UA-Compatible" content="IE=edge" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Daily Collection · CFM</title>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<title>Visits — Planned & Actual</title>
 <style>
-:root{
-  --brand-gold-600:#2b160a; --gold-dark:#a5845b; --gold-light:#f0c893;
-  --brand-gold-400:#f0c893; --brand-gold-100:#f9f3ed; --brand-gold-50:#fdfaf7;
-  --green-dark:#49604c; --brand-black:#211c1e;
-  --canvas:#f7f4ee; --surface:#ffffff; --surface-hover:#fbf8f2; --surface-alt:#fbf6ec;
-  --border:#e8e0d3; --border-hover:#d8cbb4;
-  --text-primary:#211c1e; --text-body:#514a44; --muted:#8a8079; --dim:#b3a99e;
-  --success:#49604c; --warning:#c98a1e; --danger:#b23a3a; --info:#3b7ab8;
-  --gold-soft:rgba(165,132,91,.12); --green-soft:rgba(73,96,76,.12);
-  --danger-soft:rgba(178,58,58,.10); --amber-soft:rgba(201,138,30,.12);
-  --info-soft:rgba(59,122,184,.10);
-  --grad-gold:linear-gradient(135deg,#a5845b 0%,#f0c893 100%);
-  --grad-gold-dk:linear-gradient(135deg,#2b160a 0%,#a5845b 100%);
-  --grad-card:linear-gradient(180deg,#fff 0%,#f9f3ed 100%);
-  --sans:"Outfit",-apple-system,sans-serif; --body:"Inter",-apple-system,sans-serif; --mono:"JetBrains Mono",monospace;
-  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:20px; --r-pill:999px;
-  --shadow-sm:0 1px 3px rgba(33,28,30,.06); --shadow-md:0 4px 12px rgba(33,28,30,.07);
-  --shadow-lg:0 12px 32px rgba(33,28,30,.12); --shadow-gold:0 6px 20px rgba(165,132,91,.22);
-}
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:var(--body);background:var(--canvas);color:var(--text-primary);font-size:13px;line-height:1.55;padding:20px 24px 60px;overflow-x:hidden}
-::-webkit-scrollbar{width:7px;height:7px}::-webkit-scrollbar-thumb{background:#d9cdb8;border-radius:4px}::-webkit-scrollbar-thumb:hover{background:var(--gold-dark)}
+  :root{
+    --purple:#5B4AE0; --purple-2:#6D5DE8; --purple-bg:#EEEDFE; --purple-border:#C9C4F5;
+    --text:#12121a; --muted:#8a8a94; --border:#ecebf0; --line:#f0eff4;
+    --danger:#E5484D; --danger-2:#E5484D; --amber:#E9962B; --success:#12A594;
+    --surface:#fff; --page:#f5f5f8; --track:#eeedf2;
+    --chip:#f4f3f8;
+  }
+  *{box-sizing:border-box;}
+  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;color:var(--text);background:var(--page);margin:0;padding:1.6rem 2rem;}
+  .wrap{max-width:1180px;margin:0 auto;}
+  .top{display:flex;align-items:flex-start;gap:16px;margin-bottom:20px;}
+  .top .ttl{flex:1;}
+  .eyebrow{font-size:12px;font-weight:700;color:var(--purple);letter-spacing:.06em;text-transform:uppercase;display:flex;align-items:center;gap:6px;}
+  .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--purple);}
+  h1{font-size:28px;font-weight:800;margin:8px 0 6px;letter-spacing:-.5px;}
+  .crumbs{font-size:13px;color:var(--muted);}
+  .crumbs span{margin:0 6px;}
+  .btn{height:44px;padding:0 18px;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--surface);}
+  .btn-primary{background:var(--purple);color:#fff;border:none;}
+  .btn-ghost{background:var(--surface);color:var(--text);}
+  /* filters */
+  .filters{display:flex;gap:12px;align-items:center;margin-bottom:20px;flex-wrap:wrap;}
+  .filters .fl{display:flex;flex-direction:column;gap:4px;}
+  .filters label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600;}
+  .filters select{height:40px;padding:0 12px;font-size:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface);min-width:200px;}
+  /* summary cards */
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:24px;}
+  .scard{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 22px;}
+  .scard .lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600;}
+  .scard .big{font-size:38px;font-weight:800;margin:8px 0 4px;letter-spacing:-1px;}
+  .scard .note{font-size:13px;color:var(--muted);}
+  .rate .big{color:var(--danger);display:flex;align-items:center;gap:8px;}
+  .rate .big .ar{font-size:20px;}
+  .bar{height:9px;background:var(--track);border-radius:6px;overflow:hidden;margin-top:10px;}
+  .bar > span{display:block;height:100%;background:var(--danger);border-radius:6px;}
+  /* owners panel */
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:4px 0 8px;margin-bottom:22px;}
+  .panel .ph{display:flex;align-items:center;justify-content:space-between;padding:18px 22px 6px;}
+  .panel h2{font-size:16px;font-weight:700;margin:0;}
+  .add-owner{color:var(--purple);font-weight:600;font-size:14px;background:none;border:none;cursor:pointer;padding:6px 22px 12px;display:flex;align-items:center;gap:6px;}
+  table{width:100%;border-collapse:collapse;}
+  thead th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;text-align:left;padding:12px 22px;border-bottom:1px solid var(--line);font-weight:700;}
+  thead th.num{text-align:center;} tbody td.num{text-align:center;}
+  .owner-row td{padding:16px 22px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  .owner-row:last-child td{border-bottom:none;}
+  .owner-row:hover{background:#fbfbfd;}
+  .who{display:flex;align-items:center;gap:14px;}
+  .caret{background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;width:16px;}
+  .ava{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;}
+  .who .nm{font-weight:700;font-size:15px;}
+  .who .tags{display:flex;gap:8px;margin-top:5px;}
+  .chip{font-size:12px;background:var(--chip);border:1px solid var(--border);border-radius:20px;padding:3px 11px;color:var(--muted);}
+  .planned{font-weight:800;font-size:16px;}
+  .achieved{font-weight:800;font-size:16px;color:var(--purple);}
+  .pct{font-weight:800;font-size:15px;}
+  .pct.low{color:var(--danger);} .pct.mid{color:var(--amber);} .pct.ok{color:var(--success);}
+  .month-chip{font-size:13px;background:var(--chip);border:1px solid var(--border);border-radius:8px;padding:6px 12px;color:var(--text);display:inline-flex;align-items:center;gap:6px;}
+  .del{background:none;border:none;color:#c9c9d0;cursor:pointer;font-size:16px;}
+  .del:hover{color:var(--danger);}
+  /* weeks expand */
+  .weeks-row td{padding:0 22px 20px;background:#fafaff;border-bottom:1px solid var(--line);}
+  .weeks-grid{display:flex;gap:14px;flex-wrap:wrap;padding-top:16px;}
+  .wk{flex:1;min-width:160px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;}
+  .wk .wtitle{font-size:12px;font-weight:800;color:var(--purple);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;}
+  .wk .pair{display:flex;gap:14px;}
+  .wk .pair > div{flex:1;}
+  .wk small{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px;font-weight:600;}
+  .wk input{width:100%;height:36px;text-align:center;font-size:15px;border:1px solid var(--border);border-radius:9px;font-weight:600;}
+  .wk input[readonly]{background:#f7f7fb;color:var(--muted);}
+  .wk .wbar{height:5px;background:var(--track);border-radius:4px;overflow:hidden;margin-top:12px;}
+  .wk .wbar > span{display:block;height:100%;background:var(--success);width:0;border-radius:4px;}
+  /* chart */
+  .chart .chh{font-size:15px;font-weight:700;margin:0;padding:18px 22px 10px;display:flex;align-items:center;gap:8px;}
+  .crow{display:flex;align-items:center;gap:18px;padding:9px 22px;}
+  .crow .cname{width:160px;font-size:14px;font-weight:600;}
+  .crow .ctrack{flex:1;height:13px;background:var(--track);border-radius:8px;overflow:hidden;}
+  .crow .ctrack > span{display:block;height:100%;border-radius:8px;}
+  .crow .cval{width:64px;text-align:right;font-size:13px;color:var(--muted);font-weight:600;}
+  .crow .cpct{width:66px;text-align:right;font-weight:800;font-size:14px;}
+  #status{margin:8px 22px;font-size:13px;}
+  .empty{padding:34px 22px;color:var(--muted);font-size:14px;text-align:center;}
+  /* ===== modal ===== */
+  .modal-overlay{position:fixed;inset:0;background:rgba(20,18,40,.5);display:none;align-items:flex-start;justify-content:center;z-index:50;overflow:auto;padding:40px 16px;}
+  .modal-overlay.open{display:flex;}
+  .modal{background:var(--surface);border-radius:16px;max-width:820px;width:100%;padding:1.6rem;position:relative;box-shadow:0 24px 70px rgba(20,18,40,.28);}
+  .wmodal .close-x{position:absolute;top:16px;right:18px;background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer;}
+  .wmodal label{display:block;font-size:14px;font-weight:600;margin-bottom:6px;}
+  .wmodal .hint{font-size:13px;color:var(--muted);margin:6px 0 0;}
+  .wmodal select,.wmodal input[type=text]{width:100%;height:38px;padding:0 10px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);}
+  .wmodal select[disabled],.wmodal input[disabled]{background:#f4f3f8;color:var(--text);opacity:1;}
+  .wmodal .badge-ro{font-size:11px;font-weight:700;color:var(--muted);background:#f4f3f8;border-radius:4px;padding:1px 6px;margin-left:6px;text-transform:uppercase;}
+  .wmodal .field{margin-top:18px;} .wmodal .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px;}
+  .wmodal .toggle{display:flex;gap:8px;margin-bottom:4px;}
+  .wmodal .toggle button{flex:1;height:38px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer;}
+  .wmodal .toggle button.on{border:2px solid var(--purple-border);background:var(--purple-bg);color:var(--purple);font-weight:600;}
+  .wmodal .actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;border-top:1px solid var(--line);padding-top:16px;}
+  .wmodal .actions button{height:38px;padding:0 16px;font-size:14px;border-radius:8px;cursor:pointer;}
+  .wmodal .btn-cancel{background:var(--surface);border:1px solid var(--border);}
+  .wmodal .btn-primary{border:2px solid var(--purple-border);background:var(--purple-bg);color:var(--purple);font-weight:600;}
+  .wk-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+  .weeks-ctl{display:flex;align-items:center;border:1px solid var(--border);border-radius:8px;overflow:hidden;width:fit-content;}
+  .weeks-ctl button{width:38px;height:38px;border:none;background:#f7f7fb;font-size:18px;cursor:pointer;}
+  .weeks-ctl .val{width:48px;text-align:center;font-size:16px;font-weight:700;}
+  .total-planned{text-align:right;} .total-planned .lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+  .total-planned .num{font-size:22px;font-weight:800;color:var(--purple);}
+  .owner-card{border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:14px;position:relative;}
+  .owner-card .del{position:absolute;top:12px;right:12px;}
+  .wk-inputs{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:flex-end;}
+  .wk-inputs .wk2{flex:1;min-width:90px;} .wk-inputs .wk2 small{font-size:11px;color:var(--muted);text-transform:uppercase;}
+  .wk-inputs .wk2 input{text-align:center;width:100%;height:36px;border:1px solid var(--border);border-radius:8px;}
+  .rowtotal{min-width:110px;background:#FDF4E3;border-radius:8px;padding:8px 12px;text-align:center;}
+  .rowtotal .lbl{font-size:11px;color:var(--amber);text-transform:uppercase;} .rowtotal .num{font-size:18px;font-weight:800;color:var(--amber);}
+  .add-owner-btn{width:100%;margin-top:14px;height:44px;border:1px dashed var(--purple-border);background:var(--purple-bg);color:var(--purple);border-radius:10px;font-weight:600;cursor:pointer;}
 
-.pg-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap}
-.pg-eyebrow{font:700 10px var(--sans);text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;display:flex;align-items:center;gap:6px}
-.pg-eyebrow i{color:var(--gold-dark);font-size:10px}
-.pg-title{font:800 24px var(--sans);color:var(--brand-black);letter-spacing:-.3px;display:flex;align-items:center;gap:10px}
-.pg-sub{font:400 12px var(--body);color:var(--muted);margin-top:3px}
-.hdr-actions{display:flex;gap:8px;flex-wrap:wrap}
-.btn{font:600 12px var(--sans);border-radius:var(--r-md);border:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:9px 15px;gap:7px;transition:all .22s cubic-bezier(.22,1,.36,1);white-space:nowrap}
-.btn:active{transform:scale(.97)}
-.btn-primary{background:var(--grad-gold);color:#fff;box-shadow:var(--shadow-sm)}
-.btn-primary:hover{background:var(--grad-gold-dk);box-shadow:var(--shadow-gold)}
-.btn-primary:disabled{opacity:.5;cursor:default;background:#c9b892}
-.btn-outline{background:#fff;color:var(--text-body);border:1px solid var(--border)}
-.btn-outline:hover{border-color:var(--gold-dark);color:var(--gold-dark);background:var(--brand-gold-100)}
-.btn-sm{padding:8px 14px;font-size:12px}.btn i{font-size:11px}
-
-.kpi-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl);overflow:hidden;box-shadow:var(--shadow-sm);margin-bottom:18px;display:grid;grid-template-columns:repeat(4,1fr)}
-.kpi-cell{padding:16px 22px;border-right:1px solid var(--border);transition:background .2s}
-.kpi-cell:last-child{border-right:none;background:var(--grad-card)}
-.kpi-cell:hover{background:var(--brand-gold-50)}
-.kpi-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.kpi-icon{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--gold-soft);color:var(--gold-dark);font-size:11px;flex-shrink:0}
-.kpi-icon.warn{background:var(--amber-soft);color:var(--warning)}
-.kpi-icon.green{background:var(--green-soft);color:var(--green-dark)}
-.kpi-icon.info{background:var(--info-soft);color:var(--info)}
-.kpi-label{font:700 10px var(--sans);letter-spacing:1px;text-transform:uppercase;color:var(--muted)}
-.kpi-value{font:800 20px var(--sans);color:var(--brand-black);letter-spacing:-.3px}
-.kpi-value.warn{color:var(--warning)}.kpi-value.pos{color:var(--green-dark)}
-.kpi-icon.danger{background:var(--danger-soft);color:var(--danger)}
-.kpi-value.danger{color:var(--danger)}
-.kpi-clickable{cursor:pointer;position:relative}
-.kpi-clickable:hover{background:var(--danger-soft)!important}
-.kpi-clickable.active{background:var(--danger-soft)!important;box-shadow:inset 0 0 0 2px var(--danger)}
-.kpi-clickable.active::after{content:"filtering";position:absolute;top:8px;right:12px;font:700 8px var(--sans);text-transform:uppercase;letter-spacing:.5px;color:var(--danger);background:#fff;padding:2px 6px;border-radius:5px;border:1px solid var(--danger)}
-tr.row-rejected td{background:var(--danger-soft)!important;box-shadow:inset 3px 0 0 var(--danger)}
-tr.row-rejected:hover td{background:rgba(178,58,58,.16)!important}
-.pill.rejected-strong{background:var(--danger);color:#fff;border:1px solid var(--danger);animation:rejPulse 2s ease-in-out infinite}
-@keyframes rejPulse{0%,100%{box-shadow:0 0 0 0 rgba(178,58,58,.4)}50%{box-shadow:0 0 0 4px rgba(178,58,58,0)}}
-
-.tbl-shell{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-sm)}
-.tbl-hdr-row{padding:14px 16px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#fff,var(--canvas));display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between}
-.tbl-count{font:600 11px var(--sans);color:var(--muted);display:flex;align-items:center;gap:6px}
-.tbl-count strong{color:var(--brand-black);font-weight:800}
-.tbl-count i{color:var(--gold-dark);font-size:10px}
-.filter-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex:1;min-width:0}
-.by-me-btn{display:inline-flex;align-items:center;gap:6px;font:600 12px var(--sans);color:var(--text-body);background:#fff;border:1px solid var(--border);border-radius:12px;padding:9px 14px;cursor:pointer;transition:all .18s;white-space:nowrap}
-.by-me-btn:hover{border-color:var(--gold-dark);color:var(--gold-dark);background:var(--brand-gold-100)}
-.by-me-btn.active{background:var(--grad-gold);color:#fff;border-color:transparent;box-shadow:var(--shadow-sm)}
-.by-me-btn.active:hover{background:var(--grad-gold-dk);color:#fff}
-.by-me-btn i{font-size:11px}
-.filter-search{display:flex;align-items:center;gap:10px;min-width:220px;flex:1 1 240px;max-width:320px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:9px 14px;transition:all .18s}
-.filter-search:focus-within{border-color:var(--gold-dark);box-shadow:0 0 0 3px var(--gold-soft)}
-.filter-search i{color:var(--dim);font-size:12px}
-.filter-search:focus-within i{color:var(--gold-dark)}
-.filter-search input{border:none;outline:none;background:transparent;width:100%;font:400 12px var(--body);color:var(--text-body)}
-.filter-search input::placeholder{color:var(--dim)}
-.select-wrap{position:relative;display:inline-block}
-.field-input{appearance:none;-webkit-appearance:none;background:#fff;border:1px solid var(--border);border-radius:12px;padding:9px 32px 9px 34px;font:500 12px var(--sans);color:var(--text-primary);outline:none;transition:all .18s;cursor:pointer}
-.field-input:hover{border-color:var(--border-hover)}
-.field-input:focus{border-color:var(--gold-dark);box-shadow:0 0 0 3px var(--gold-soft)}
-.select-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--dim);pointer-events:none;font-size:11px}
-.sel-arrow{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--dim);pointer-events:none;font-size:9px}
-
-.tbl-scroll{overflow:auto;max-height:65vh}
-.dc-tbl{width:100%;border-collapse:separate;border-spacing:0;min-width:1200px}
-.dc-tbl thead{position:sticky;top:0;z-index:5}
-.dc-tbl thead tr{background:var(--gold-dark)}
-.dc-tbl thead th{font:700 10px var(--sans);text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,.95);padding:12px 14px;text-align:left;white-space:nowrap;border-right:1px solid rgba(255,255,255,.08)}
-.dc-tbl thead th.numeric{text-align:right}
-.dc-tbl thead th i{margin-right:6px;font-size:10px;opacity:.85}
-.dc-tbl tbody td{padding:11px 14px;border-bottom:1px solid var(--border);font:400 12px var(--body);color:var(--text-body);vertical-align:middle;white-space:nowrap;background:#fff}
-.dc-tbl tbody tr:nth-child(even) td{background:var(--brand-gold-50)}
-.dc-tbl tbody tr:hover td{background:var(--surface-hover)}
-.dc-tbl tbody td.numeric{text-align:right}
-.col-ref{font:700 11px var(--mono);color:var(--gold-dark)}
-.col-bold{font:600 12px var(--sans);color:var(--brand-black)}
-.col-amt{font:600 12px var(--mono);color:var(--brand-black)}
-
-.pill{display:inline-flex;align-items:center;gap:5px;font:700 10px var(--sans);padding:3px 10px;border-radius:var(--r-pill);letter-spacing:.3px}
-.pill.entity{background:var(--gold-soft);color:var(--brand-gold-600);border:1px solid rgba(165,132,91,.22)}
-.pill.pending{background:var(--amber-soft);color:#8B5A0B;border:1px solid rgba(201,138,30,.24)}
-.pill.linked{background:var(--green-soft);color:var(--green-dark);border:1px solid rgba(73,96,76,.24)}
-.pill.method{background:var(--info-soft);color:var(--info);border:1px solid rgba(59,122,184,.2)}
-.pill.rejected{background:var(--danger-soft);color:var(--danger);border:1px solid rgba(178,58,58,.24)}
-.pill.allocated{background:var(--info-soft);color:var(--info);border:1px solid rgba(59,122,184,.24)}
-.pill.awaiting{background:var(--amber-soft);color:#8B5A0B;border:1px solid rgba(201,138,30,.28)}
-.proof-dot{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;font-size:10px;vertical-align:middle;margin-left:2px}
-.proof-dot.linked{background:var(--green-soft);color:var(--green-dark);border:1px solid rgba(73,96,76,.24)}
-.proof-dot.missing{background:var(--danger-soft);color:var(--danger);border:1px solid rgba(178,58,58,.2)}
-
-.state-cell{text-align:center;padding:56px 20px;color:var(--muted);font:600 12px var(--sans)}
-.state-icon{width:64px;height:64px;margin:0 auto 14px;border-radius:16px;background:var(--gold-soft);display:flex;align-items:center;justify-content:center;color:var(--gold-dark);font-size:22px}
-.state-icon.error{background:var(--danger-soft);color:var(--danger)}
-.state-title{font:700 14px var(--sans);color:var(--brand-black);margin-bottom:4px}
-.state-msg{font:400 12px var(--body);color:var(--muted);max-width:400px;margin:0 auto}
-.skel-row td{padding:14px}
-.skel{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--brand-gold-100) 0%,var(--brand-gold-50) 50%,var(--brand-gold-100) 100%);background-size:200% 100%;animation:skelShift 1.4s ease-in-out infinite}
-@keyframes skelShift{0%{background-position:200% 0}100%{background-position:-200% 0}}
-
-.overlay{position:fixed;inset:0;background:rgba(33,28,30,.35);opacity:0;pointer-events:none;transition:opacity .22s;z-index:900}
-.overlay.open{opacity:1;pointer-events:auto}
-.drawer{position:fixed;top:0;right:0;bottom:0;width:780px;max-width:100vw;background:#fff;box-shadow:-16px 0 40px rgba(33,28,30,.15);transform:translateX(100%);transition:transform .28s cubic-bezier(.22,1,.36,1);z-index:1000;display:flex;flex-direction:column;overflow:hidden}
-.drawer.open{transform:translateX(0)}
-.drawer-hdr{padding:18px 22px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#fff,var(--canvas));display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
-.drawer-hdr .eyebrow{font:700 10px var(--sans);text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px}
-.drawer-hdr .title{font:800 18px var(--sans);color:var(--brand-black)}
-.drawer-close{background:transparent;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:6px 10px;border-radius:8px}
-.drawer-close:hover{background:var(--brand-gold-100);color:var(--brand-black)}
-.drawer-body{flex:1;overflow-y:auto;padding:24px 28px}
-.drawer-ftr{padding:14px 22px;border-top:1px solid var(--border);background:var(--canvas);display:flex;justify-content:space-between;align-items:center;gap:10px}
-
-.fld-lbl{font:700 11px var(--sans);text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:6px;display:flex;align-items:center;gap:5px}
-.fld-lbl .req{color:var(--danger)}
-.fld-hint{font:500 10px var(--body);color:var(--dim);text-transform:none;letter-spacing:0;margin-left:auto;font-style:italic}
-.fld{width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:10px;background:#fff;font:500 14px var(--body);color:var(--text-primary);outline:none;transition:all .18s}
-.fld:hover{border-color:var(--border-hover)}
-.fld:focus{border-color:var(--gold-dark);box-shadow:0 0 0 3px var(--gold-soft)}
-.fld.num{text-align:right;font-family:var(--mono);font-weight:700;font-size:15px}
-.fld-row{display:grid;gap:12px;margin-bottom:16px}
-.fld-row.two{grid-template-columns:1fr 1fr}
-
-.co-search{position:relative;margin-bottom:14px}
-.co-search .fld{padding-left:36px}
-.co-search i{position:absolute;left:12px;top:calc(50% + 6px);transform:translateY(-50%);color:var(--dim);font-size:13px;pointer-events:none}
-.co-list{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-md);max-height:220px;overflow-y:auto;z-index:10;display:none}
-.co-list.open{display:block}
-.co-item{padding:10px 12px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:10px}
-.co-item:last-child{border-bottom:none}
-.co-item:hover{background:var(--brand-gold-100)}
-.co-item .code{font:600 11px var(--mono);color:var(--gold-dark)}
-.co-item .name{font-weight:600;color:var(--brand-black)}
-.co-item .entity{font-size:10px;color:var(--muted);text-transform:uppercase}
-
-.co-panel{background:linear-gradient(180deg,var(--brand-gold-50),#fff);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.co-panel.empty{background:#fafaf7;border-style:dashed;color:var(--muted);grid-template-columns:1fr;text-align:center;padding:16px}
-.co-panel .kv{display:flex;flex-direction:column;gap:2px}
-.co-panel .k{font:700 9px var(--sans);text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
-.co-panel .v{font:600 13px var(--sans);color:var(--brand-black)}
-
-.alloc-hdr{display:flex;justify-content:space-between;align-items:center;margin:18px 0 8px}
-.alloc-title{font:700 11px var(--sans);text-transform:uppercase;letter-spacing:.8px;color:var(--muted);display:flex;align-items:center;gap:6px}
-.alloc-title i{color:var(--gold-dark)}
-.alloc-add{background:transparent;border:1px dashed var(--border-hover);color:var(--gold-dark);padding:5px 12px;border-radius:8px;font:600 11px var(--sans);cursor:pointer;display:inline-flex;align-items:center;gap:5px}
-.alloc-add:hover{background:var(--brand-gold-100);border-style:solid}
-
-.alloc-wrap-cards{display:flex;flex-direction:column;gap:12px}
-.alloc-card{background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color .18s}
-.alloc-card:hover{border-color:var(--border-hover)}
-.alloc-card:focus-within{border-color:var(--gold-dark);box-shadow:0 0 0 3px var(--gold-soft)}
-.alloc-card-hdr{display:flex;align-items:center;gap:8px;padding:10px 14px;background:linear-gradient(180deg,var(--brand-gold-50),#fff);border-bottom:1px solid var(--border)}
-.alloc-card-hdr .month-inp{flex:1;padding:8px 30px 8px 12px;border:1px solid var(--border);border-radius:8px;background:#fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'><path d='M1 1.5L6 6.5L11 1.5' stroke='%23a5845b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>") no-repeat right 10px center;-webkit-appearance:none;appearance:none;font:700 13px var(--sans);color:var(--brand-black);outline:none;transition:all .18s;cursor:pointer}
-.alloc-card-hdr .month-inp:focus{border-color:var(--gold-dark);box-shadow:0 0 0 3px var(--gold-soft)}
-.alloc-card-hdr .del-btn{background:transparent;border:none;color:var(--dim);cursor:pointer;padding:6px 10px;border-radius:8px;font-size:13px}
-.alloc-card-hdr .del-btn:hover{color:var(--danger);background:var(--danger-soft)}
-.alloc-card-body{padding:12px 14px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px 12px}
-.alloc-card-body .fg{display:flex;flex-direction:column;gap:4px}
-.alloc-card-body .fg-lbl{font:600 9px var(--sans);text-transform:uppercase;letter-spacing:.6px;color:var(--muted);white-space:nowrap}
-.alloc-card-body .fg-lbl .auto{font-style:italic;font-weight:500;color:var(--dim);margin-left:3px;text-transform:none;letter-spacing:0}
-.alloc-card-body .fg-inp{padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;font:600 12px var(--mono);color:var(--brand-black);text-align:right;outline:none;transition:all .18s;width:100%}
-.alloc-card-body .fg-inp:hover{border-color:var(--border-hover)}
-.alloc-card-body .fg-inp:focus{border-color:var(--gold-dark);box-shadow:0 0 0 2px var(--gold-soft)}
-.alloc-card-body .fg-inp.txt{text-align:left;font-family:var(--body);font-weight:500}
-.alloc-card-body .fg-inp.readonly{background:var(--brand-gold-50);color:var(--gold-dark);font-weight:700;cursor:default}
-.alloc-card-body .fg.wide{grid-column:span 4}
-
-.sum-pill{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-radius:12px;margin-top:10px;font:600 12px var(--sans);transition:all .2s}
-.sum-pill.ok{background:var(--green-soft);color:var(--green-dark);border:1px solid rgba(73,96,76,.24)}
-.sum-pill.bad{background:var(--danger-soft);color:var(--danger);border:1px solid rgba(178,58,58,.22)}
-.sum-pill .amounts{font-family:var(--mono);font-weight:700;font-size:13px}
-
-.proof-note{margin-top:16px;padding:12px 14px;border:1px dashed var(--border-hover);border-radius:12px;background:var(--brand-gold-50);display:flex;gap:10px;align-items:center;font-size:11px;color:var(--muted)}
-.proof-note i{color:var(--gold-dark);font-size:14px}
-
-.docs-sec{margin-top:20px;border-top:1px solid var(--border);padding-top:16px}
-.docs-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
-.docs-title{font:700 11px var(--sans);text-transform:uppercase;letter-spacing:.8px;color:var(--muted);display:flex;align-items:center;gap:6px}
-.docs-title i{color:var(--gold-dark)}
-.docs-title .count{font-weight:800;color:var(--brand-black)}
-.docs-upload-btn{position:relative;overflow:hidden;background:transparent;border:1px dashed var(--border-hover);color:var(--gold-dark);padding:5px 12px;border-radius:8px;font:600 11px var(--sans);cursor:pointer;display:inline-flex;align-items:center;gap:5px}
-.docs-upload-btn:hover{background:var(--brand-gold-100);border-style:solid}
-.docs-upload-btn input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
-.docs-list{display:flex;flex-direction:column;gap:8px}
-.doc-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;transition:border-color .15s}
-.doc-row:hover{border-color:var(--border-hover)}
-.doc-ico{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--gold-soft);color:var(--gold-dark);font-size:13px}
-.doc-ico.pdf{background:var(--danger-soft);color:var(--danger)}
-.doc-ico.img{background:var(--green-soft);color:var(--green-dark)}
-.doc-ico.doc{background:var(--info-soft);color:var(--info)}
-.doc-ico.xls{background:var(--green-soft);color:var(--green-dark)}
-.doc-meta{flex:1;min-width:0}
-.doc-name{font:600 12px var(--body);color:var(--brand-black);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.doc-sub{font:500 10px var(--body);color:var(--muted)}
-.doc-act{display:flex;gap:4px;flex-shrink:0}
-.doc-act a,.doc-act button{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:#fff;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:12px;text-decoration:none;transition:all .15s}
-.doc-act a:hover{border-color:var(--gold-dark);color:var(--gold-dark);background:var(--brand-gold-100)}
-.doc-act button.del:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-soft)}
-.docs-empty{padding:16px;text-align:center;border:1px dashed var(--border);border-radius:10px;color:var(--muted);font:500 11px var(--body);background:#fafaf7}
-.docs-empty i{color:var(--gold-dark);margin-right:6px}
-.docs-note{margin-top:8px;font:500 10px var(--body);color:var(--dim);font-style:italic}
-.doc-uploading{display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--brand-gold-50);font:600 11px var(--sans);color:var(--gold-dark)}
-
-.toast-rack{position:fixed;top:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:9999;pointer-events:none}
-.toast{background:#fff;border:1px solid var(--border);border-left:4px solid var(--gold-dark);border-radius:12px;padding:12px 15px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:280px;max-width:380px;display:flex;align-items:flex-start;gap:11px;pointer-events:auto;animation:tin .3s cubic-bezier(.22,1,.36,1);transition:opacity .3s,transform .3s}
-.toast.success{border-left-color:var(--green-dark)}
-.toast.alert{border-left-color:var(--danger)}
-.toast.info{border-left-color:var(--info)}
-.toast-icon{width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;margin-top:1px;background:var(--gold-soft);color:var(--gold-dark)}
-.toast.success .toast-icon{background:var(--green-soft);color:var(--green-dark)}
-.toast.alert .toast-icon{background:var(--danger-soft);color:var(--danger)}
-.toast.info .toast-icon{background:var(--info-soft);color:var(--info)}
-.toast-body{flex:1;min-width:0}
-.toast-title{font:700 12px var(--sans);color:var(--brand-black);margin-bottom:2px}
-.toast-msg{font:400 11px var(--body);color:var(--text-body);word-break:break-word}
-@keyframes tin{from{transform:translateX(110%);opacity:0}to{transform:translateX(0);opacity:1}}
-
-.pager{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--border);background:linear-gradient(180deg,var(--canvas),#fff)}
-.pager-left{display:flex;align-items:center;gap:10px;font:600 11px var(--sans);color:var(--muted)}
-.pager-size{display:flex;align-items:center;gap:6px}
-.pager-size select{appearance:none;-webkit-appearance:none;background:#fff;border:1px solid var(--border);border-radius:8px;padding:6px 26px 6px 10px;font:600 11px var(--sans);color:var(--text-primary);outline:none;cursor:pointer;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 12 8' fill='none'><path d='M1 1.5L6 6.5L11 1.5' stroke='%23a5845b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");background-repeat:no-repeat;background-position:right 8px center}
-.pager-size select:focus{border-color:var(--gold-dark);box-shadow:0 0 0 3px var(--gold-soft)}
-.pager-info strong{color:var(--brand-black);font-weight:800}
-.pager-nav{display:flex;align-items:center;gap:4px}
-.pg-btn{min-width:32px;height:32px;padding:0 9px;border:1px solid var(--border);background:#fff;border-radius:8px;font:600 12px var(--sans);color:var(--text-body);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:5px;transition:all .15s}
-.pg-btn:hover:not(:disabled){border-color:var(--gold-dark);color:var(--gold-dark);background:var(--brand-gold-100)}
-.pg-btn:disabled{opacity:.4;cursor:not-allowed}
-.pg-btn.active{background:var(--grad-gold);color:#fff;border-color:transparent;box-shadow:var(--shadow-sm)}
-.pg-btn.active:hover{background:var(--grad-gold-dk);color:#fff}
-.pg-ellipsis{padding:0 4px;color:var(--dim);font:600 12px var(--sans);align-self:center}
-
-@media (max-width:900px){.kpi-wrap{grid-template-columns:repeat(2,1fr)}.drawer{width:100%}}
+  /* ===== wizard modal (redesigned) ===== */
+  .wmodal{background:var(--surface);border-radius:20px;max-width:900px;width:100%;padding:2rem 2.2rem 1.4rem;position:relative;box-shadow:0 30px 80px rgba(20,18,40,.3);}
+  .wmodal .close-x{position:absolute;top:20px;right:24px;background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer;}
+  .weyebrow{font-size:12px;font-weight:800;color:var(--purple);letter-spacing:.08em;text-transform:uppercase;}
+  .wtitle2{font-size:26px;font-weight:800;margin:6px 0 20px;letter-spacing:-.5px;}
+  .steps{display:flex;align-items:center;gap:14px;}
+  .step{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:12px;}
+  .step.active{background:var(--purple-bg);}
+  .scircle{width:30px;height:30px;border-radius:9px;background:#eee;color:#999;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;}
+  .step.active .scircle{background:var(--purple);color:#fff;}
+  .step.done .scircle{background:var(--success);color:#fff;}
+  .stext{display:flex;flex-direction:column;line-height:1.25;}
+  .stext b{font-size:14px;font-weight:700;} .stext span{font-size:12px;color:var(--muted);}
+  .step:not(.active) .stext b{color:var(--muted);font-weight:600;}
+  .sline{flex:1;height:2px;background:var(--line);border-radius:2px;max-width:80px;}
+  .wdivider{height:1px;background:var(--line);margin:18px 0 4px;}
+  .wbody{padding:12px 2px 4px;}
+  .wfooter{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--line);margin-top:18px;padding-top:16px;}
+  .wfoot-chips{display:flex;gap:8px;}
+  .wchip{font-size:12px;background:var(--chip);border:1px solid var(--border);border-radius:20px;padding:5px 14px;color:var(--muted);}
+  .wfoot-actions{display:flex;align-items:center;gap:14px;}
+  .wbtn-link{background:none;border:none;font-size:15px;color:var(--text);cursor:pointer;font-weight:500;}
+  .wbtn-primary{height:44px;padding:0 22px;border-radius:12px;background:#B9AEF3;color:#fff;border:none;font-size:15px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
+  .wbtn-primary:hover{background:var(--purple);}
+  #wiz-status{margin-top:10px;font-size:13px;}
 </style>
 </head>
 <body>
-
-<div class="pg-hdr">
-  <div>
-    <div class="pg-eyebrow"><i class="fa-solid fa-hand-holding-dollar"></i> Collection · Daily Entries</div>
-    <div class="pg-title">Daily Collection</div>
-    <div class="pg-sub">Every collection recorded by the team, and one place to enter a new one.</div>
-  </div>
-  <div class="hdr-actions">
-    <button class="btn btn-outline btn-sm" onclick="reload()"><i class="fa-solid fa-rotate"></i> Reload</button>
-    <button class="btn btn-primary btn-sm" onclick="openDrawer()"><i class="fa-solid fa-plus"></i> New entry</button>
-  </div>
-</div>
-
-<div class="kpi-wrap">
-  <div class="kpi-cell"><div class="kpi-top"><div class="kpi-icon"><i class="fa-solid fa-list-check"></i></div><div class="kpi-label">Entries Today</div></div><div id="kpi-today" class="kpi-value">0</div></div>
-  <div class="kpi-cell"><div class="kpi-top"><div class="kpi-icon green"><i class="fa-solid fa-hand-holding-dollar"></i></div><div class="kpi-label">Collected Today</div></div><div id="kpi-today-amt" class="kpi-value pos">—</div></div>
-  <div class="kpi-cell"><div class="kpi-top"><div class="kpi-icon info"><i class="fa-solid fa-calendar-days"></i></div><div class="kpi-label">Month To Date</div></div><div id="kpi-mtd" class="kpi-value">—</div></div>
-  <div class="kpi-cell kpi-clickable" id="kpi-rejected-cell" onclick="toggleRejectedFilter()" title="Click to show only rejected entries"><div class="kpi-top"><div class="kpi-icon danger"><i class="fa-solid fa-circle-xmark"></i></div><div class="kpi-label">Rejected · Action Needed</div></div><div id="kpi-rejected" class="kpi-value danger">0</div></div>
-</div>
-
-<div class="tbl-shell">
-  <div class="tbl-hdr-row">
-    <div class="filter-bar">
-      <button class="by-me-btn" id="by-me-btn" onclick="toggleByMe()" title="Show only entries I created"><i class="fa-solid fa-user"></i> By Me</button>
-      <div class="filter-search"><i class="fa-solid fa-magnifying-glass"></i><input id="f-search" placeholder="Search company, code, ref…" oninput="filterChanged()"></div>
-      <div class="select-wrap"><i class="fa-solid fa-building select-icon"></i><select id="f-entity" class="field-input" onchange="filterChanged()"><option value="">All Entities</option></select><span class="sel-arrow"><i class="fa-solid fa-chevron-down"></i></span></div>
-      <div class="select-wrap"><i class="fa-solid fa-credit-card select-icon"></i><select id="f-method" class="field-input" onchange="filterChanged()"><option value="">All Methods</option></select><span class="sel-arrow"><i class="fa-solid fa-chevron-down"></i></span></div>
-      <div class="select-wrap"><i class="fa-solid fa-shield-halved select-icon"></i><select id="f-status" class="field-input" onchange="filterChanged()"><option value="">All AR Status</option></select><span class="sel-arrow"><i class="fa-solid fa-chevron-down"></i></span></div>
+<div class="wrap">
+  <div class="top">
+    <div class="ttl">
+      <div class="eyebrow"><span class="dot"></span> KPI achievement <span id="hdr-month" style="color:var(--muted);font-weight:600;"></span></div>
+      <h1>Visits — Planned &amp; Actual</h1>
+      <div class="crumbs">Task owner<span>·</span>Monthly planned / achieved<span>·</span>Weekly planned / achieved<span>·</span>Achievement %</div>
     </div>
-    <div class="tbl-count"><i class="fa-solid fa-table"></i> Showing <strong id="tbl-showing">0</strong> of <strong id="tbl-total">0</strong> entries</div>
+    <button class="btn btn-primary" onclick="openWizard()"><span style="font-size:18px;line-height:1;">+</span> Create KPI achievement</button>
+    <button class="btn btn-ghost" onclick="exportCsv()">⤓ Export</button>
   </div>
-  <div class="tbl-scroll">
-    <table class="dc-tbl">
-      <thead>
-        <tr>
-          <th><i class="fa-solid fa-hashtag"></i>Ref</th>
-          <th><i class="fa-solid fa-building"></i>Entity</th>
-          <th><i class="fa-solid fa-hashtag"></i>Company Code</th>
-          <th><i class="fa-solid fa-briefcase"></i>Company Name</th>
-          <th><i class="fa-solid fa-calendar-day"></i>Collection Date</th>
-          <th><i class="fa-solid fa-credit-card"></i>Payment Method</th>
-          <th class="numeric"><i class="fa-solid fa-coins"></i>Collected (Net)</th>
-          <th><i class="fa-solid fa-layer-group"></i>Allocations</th>
-          <th><i class="fa-solid fa-shield-halved"></i>Status &amp; Proof</th>
-          <th><i class="fa-solid fa-user"></i>Created By</th>
-          <th><i class="fa-solid fa-clock"></i>Created On</th>
-        </tr>
-      </thead>
-      <tbody id="dc-body">
-        <tr class="skel-row"><td colspan="11"><div class="skel" style="width:60%"></div></td></tr>
-        <tr class="skel-row"><td colspan="11"><div class="skel" style="width:75%"></div></td></tr>
-        <tr class="skel-row"><td colspan="11"><div class="skel" style="width:68%"></div></td></tr>
-      </tbody>
+
+  <div class="filters">
+    <div class="fl"><label>Month</label><select id="f-month"></select></div>
+    <div class="fl"><label>Task owner</label><select id="f-owner"><option value="">All owners</option></select></div>
+  </div>
+
+  <div class="cards">
+    <div class="scard"><div class="lbl">Monthly planned</div><div class="big" id="sum-planned">0</div><div class="note" id="sum-planned-note">across 0 task owners</div></div>
+    <div class="scard"><div class="lbl">Monthly achieved</div><div class="big" id="sum-achieved">0</div><div class="note">recorded so far</div></div>
+    <div class="scard rate"><div class="lbl">Achievement rate</div><div class="big"><span class="ar">↘</span><span id="sum-rate">0%</span></div><div class="bar"><span id="sum-rate-bar" style="width:0"></span></div></div>
+  </div>
+
+  <div class="panel">
+    <div class="ph"><h2 id="owners-title">Task owners</h2></div>
+    <button class="add-owner" onclick="openWizard()">＋ Add task owner</button>
+    <table>
+      <thead><tr>
+        <th>Task owner</th><th class="num">Monthly planned</th><th class="num">Monthly achieved</th><th class="num">Achievement %</th><th class="num">Month</th><th></th>
+      </tr></thead>
+      <tbody id="owners-body"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
     </table>
   </div>
-  <div class="pager" id="pager"></div>
+
+  <div class="panel chart">
+    <h2 class="chh">◎ Actual vs target by task owner</h2>
+    <div id="chart-body"></div>
+  </div>
+
+  <div id="status"></div>
+
+  <!-- ===== Create wizard modal ===== -->
+  <div class="modal-overlay" id="wizard-overlay">
+    <div class="wmodal">
+      <button class="close-x" onclick="closeWizard()">✕</button>
+      <div class="weyebrow">New objective</div>
+      <h2 class="wtitle2">Create KPI achievement</h2>
+
+      <!-- step indicator -->
+      <div class="steps">
+        <div class="step" id="stp-1">
+          <div class="scircle">1</div>
+          <div class="stext"><b>Define KPI</b><span>Name &amp; month</span></div>
+        </div>
+        <div class="sline"></div>
+        <div class="step" id="stp-2">
+          <div class="scircle">2</div>
+          <div class="stext"><b>Add visit plan</b><span>Owners &amp; weeks</span></div>
+        </div>
+      </div>
+      <div class="wdivider"></div>
+
+      <!-- ===== STEP 1 ===== -->
+      <div id="step1" class="wbody">
+        <div class="toggle">
+          <button id="btn-existing" class="on" onclick="setMode('existing')">Use existing</button>
+          <button id="btn-new" onclick="setMode('new')">Create new</button>
+        </div>
+
+        <div id="pane-existing">
+          <div class="field">
+            <label>KPI achievement</label>
+            <select id="ach-select" disabled><option>Loading…</option></select>
+            <p class="hint">Auto-selected: latest "No. of Visits" achievement. Weeks and breakdowns link to this one.</p>
+          </div>
+        </div>
+
+        <div id="pane-new" style="display:none">
+          <div class="field">
+            <label>KPI <span class="badge-ro">read only</span></label>
+            <select id="kpi-select" disabled><option>Loading KPIs…</option></select>
+            <p class="hint">Defaults to "No. of Visits". Loaded live from the KPI table.</p>
+          </div>
+          <div class="row2">
+            <div>
+              <label>Month</label>
+              <select id="month">
+                <option value="1">January</option><option value="2">February</option>
+                <option value="3">March</option><option value="4">April</option>
+                <option value="5">May</option><option value="6">June</option>
+                <option value="7">July</option><option value="8">August</option>
+                <option value="9">September</option><option value="10">October</option>
+                <option value="11">November</option><option value="12">December</option>
+              </select>
+              <p class="hint">Year derived: <b id="year-out">—</b></p>
+            </div>
+            <div>
+              <label>Business unit <span class="badge-ro">read only</span></label>
+              <select id="bu" disabled><option value="0a650dd0-5d4f-f011-877a-6045bd9979f4" selected>SMH</option></select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== STEP 2: visit plan ===== -->
+      <div id="step2" class="wbody" style="display:none">
+        <div class="wk-head">
+          <div>
+            <label style="margin-bottom:8px;">Number of weeks</label>
+            <div class="weeks-ctl">
+              <button onclick="changeWeeks(-1)">&minus;</button>
+              <div class="val" id="weeks-val">4</div>
+              <button onclick="changeWeeks(1)">+</button>
+            </div>
+          </div>
+          <div class="total-planned">
+            <div class="lbl">Total planned visits</div>
+            <div class="num" id="total-planned">0</div>
+          </div>
+        </div>
+        <div id="owners"></div>
+        <button class="add-owner-btn" onclick="addOwner()">＋ Add task owner</button>
+      </div>
+
+      <!-- ===== footer (shared) ===== -->
+      <div class="wfooter">
+        <div class="wfoot-chips">
+          <span class="wchip" id="foot-kpi">No. of Visits</span>
+          <span class="wchip" id="foot-month">August</span>
+        </div>
+        <div class="wfoot-actions">
+          <button class="wbtn-link" id="btn-cancel" onclick="closeWizard()">Cancel</button>
+          <button class="wbtn-link" id="btn-back" style="display:none" onclick="backToStep1()">Back</button>
+          <button id="btn-continue" class="wbtn-primary" onclick="onContinue()">Continue &rsaquo;</button>
+          <button id="btn-create-kpi" class="wbtn-primary" style="display:none" onclick="onCreateAll()">✓ Create KPI</button>
+        </div>
+      </div>
+      <div id="wiz-status"></div>
+    </div>
+  </div>
 </div>
 
-<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
-<aside class="drawer" id="drawer" role="dialog">
-  <div class="drawer-hdr">
-    <div>
-      <div class="eyebrow">New</div>
-      <div class="title" id="drawer-title">Daily Collection entry</div>
-    </div>
-    <button class="drawer-close" onclick="closeDrawer()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
-  </div>
-  <div class="drawer-body">
-    <div class="co-search" id="co-search-wrap">
-      <div class="fld-lbl">Company <span class="req">*</span> <span style="color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0;font-size:10px;">— from AR Aging (Plan required)</span></div>
-      <i class="fa-solid fa-magnifying-glass"></i>
-      <input class="fld" id="co-input" placeholder="Search by name or code…" autocomplete="off" oninput="onCoSearch()" onfocus="onCoSearch()" />
-      <div class="co-list" id="co-list"></div>
-    </div>
-
-    <div class="co-panel empty" id="co-panel">
-      <div><i class="fa-solid fa-circle-info" style="color:var(--gold-dark);margin-right:6px"></i>Pick a company — name &amp; entity fill in automatically.</div>
-    </div>
-
-    <div class="fld-row two">
-      <div>
-        <div class="fld-lbl">Collection Date <span class="req">*</span></div>
-        <input class="fld" id="fld-date" type="date">
-      </div>
-      <div>
-        <div class="fld-lbl">Payment Method <span class="req">*</span></div>
-        <select class="fld" id="fld-method"><option value="">Select…</option></select>
-      </div>
-    </div>
-
-    <div class="fld-row two">
-      <div>
-        <div class="fld-lbl">Collected Amount (Net) <span class="req">*</span></div>
-        <input class="fld num" id="fld-net" type="number" step="any" min="0" placeholder="0.00" oninput="checkSum()">
-      </div>
-      <div>
-        <div class="fld-lbl">Payment Reference #</div>
-        <input class="fld" id="fld-paymentref" type="text" placeholder="e.g. TT-887421">
-      </div>
-    </div>
-
-    <div style="margin-bottom:16px">
-      <div class="fld-lbl">Notes</div>
-      <textarea class="fld" id="fld-note" rows="2" placeholder="Any note about this entry…" style="resize:vertical;min-height:60px;font-family:var(--body)"></textarea>
-    </div>
-
-    <div class="alloc-hdr">
-      <div class="alloc-title"><i class="fa-solid fa-layer-group"></i> Month Allocations</div>
-      <button class="alloc-add" id="alloc-add-btn" onclick="addAlloc()"><i class="fa-solid fa-plus"></i> Add month</button>
-    </div>
-    <div class="alloc-wrap-cards" id="alloc-body"></div>
-    <div class="sum-pill bad" id="sum-pill">
-      <span><i class="fa-solid fa-circle-exclamation"></i> Σ allocations must equal Collected Net</span>
-      <span class="amounts"><span id="sum-val">0</span> / <span id="net-val">0</span></span>
-    </div>
-
-    <div class="proof-note" id="proof-note">
-      <i class="fa-solid fa-file-signature"></i>
-      <span>The proof link will be created on OneDrive automatically after the entry is saved.</span>
-    </div>
-
-    <div class="docs-sec" id="docs-sec" style="display:none">
-      <div class="docs-hdr">
-        <div class="docs-title"><i class="fa-solid fa-paperclip"></i> Documents <span class="count" id="docs-count"></span></div>
-        <label class="docs-upload-btn" id="docs-upload-label" style="display:none">
-          <i class="fa-solid fa-upload"></i> Upload
-          <input type="file" id="docs-file-input" multiple onchange="onDocsSelected(this.files)">
-        </label>
-      </div>
-      <div class="docs-list" id="docs-list"></div>
-      <div class="docs-note" id="docs-note"></div>
-    </div>
-  </div>
-  <div class="drawer-ftr">
-    <div style="font-size:11px;color:var(--muted)" id="drawer-ftr-hint"><i class="fa-solid fa-triangle-exclamation" style="color:var(--warning);margin-right:4px"></i>Company must exist in AR Aging</div>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-outline btn-sm" onclick="closeDrawer()">Cancel</button>
-      <button class="btn btn-primary btn-sm" id="btn-save" onclick="saveEntry()" disabled><i class="fa-solid fa-floppy-disk"></i> Save Entry</button>
-    </div>
-  </div>
-</aside>
-
-<div class="toast-rack" id="toast-rack"></div>
-
 <script>
-const SETTINGS = {
-  parentSet:"cfm_dailycollections",
-  childSet: "cfm_collectionmonthallocations",
-  companySet:"cfm_aragings",
-  // AR Aging "Pending AR Verification" running total — the Daily Collection creation
-  // flow ADDS cfm_collectedamountnet to this field (add-only; no subtract here).
-  arAgingPendingField:"cfm_pendingconfirmation",
-  parentIdField:"cfm_dailycollectionid",
-  parentCompanyBind:"cfm_companycode",
-  childParentBind:  "cfm_dailycollection",
-  methodField:"cfm_paymentmethod",
-  currency:"SAR",
-  // ── Documents (SharePoint via Power Automate) ──────────────────────────────
-  // Paste the "HTTP POST URL" from your CFM_CollectionDocs flow trigger here.
-  // Leave empty to hide the Documents section entirely until the flow is ready.
-  docsFlowUrl: "https://9ce6fb095b63e9f49185b707b4b342.5e.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/30/workflows/f925d853a7c944ca88f9e886f1290e45/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=XnsQ8q4II-APCA1K7gBM--Zd0E_2kcqxV5fnaVVDlDU",
-  // Upload-only: flow handles ONLY "upload" for now (no list / no delete).
-  // Set to false once the flow also handles list + delete.
-  docsUploadOnly: false
-};
+// ================= config =================
+const API = "https://org319b4ea9.crm4.dynamics.com/api/data/v9.2";
+const SET_ACHIEVEMENT = "pm_kpiachievments";
+const SET_BREAKDOWN   = "stf_kpiachievmentbreakdowns";
+const SET_WEEK        = "cfm_collectionplanweeks";
+const KPI_NAME_FIELD  = "strategy_newcolumn";
+const EMP_NAME_FIELD  = "hr_fullname";
+const DEFAULT_KPI_NAME = "No. of Visits";
+const NAV_WEEK_BRK = "cfm_KPIAchievementBreakdown";
+const MONTHS = ["","January","February","March","April","May","June","July","August","September","October","November","December"];
 
-const N = v => Number(v||0);
-const esc = s => (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const fmt = n => (n==null||n===0)?'—':Number(n).toLocaleString('en-US',{maximumFractionDigits:0});
+// ================= auth + http =================
+async function getToken(){ return null; }
+async function authHeaders(extra){
+  extra = extra||{};
+  const h = { "Accept":"application/json","OData-MaxVersion":"4.0","OData-Version":"4.0" };
+  for (const k in extra) h[k]=extra[k];
+  const t = await getToken(); if (t) h["Authorization"]="Bearer "+t;
+  return h;
+}
+async function dvGet(url){
+  const r=await fetch(url,{headers:await authHeaders({"Prefer":"odata.include-annotations=\"OData.Community.Display.V1.FormattedValue\""})});
+  if(!r.ok) throw new Error("GET failed ("+r.status+"): "+(await r.text()));
+  return r.json();
+}
+async function dvPost(entitySet, body){
+  const r=await fetch(API+"/"+entitySet,{method:"POST",headers:await authHeaders({"Content-Type":"application/json; charset=utf-8","Prefer":"return=representation"}),body:JSON.stringify(body)});
+  if(!r.ok) throw new Error("POST "+entitySet+" failed ("+r.status+"): "+(await r.text())); return r.json();
+}
+async function dvPatch(entitySet,id,body){
+  const r=await fetch(API+"/"+entitySet+"("+id+")",{method:"PATCH",headers:await authHeaders({"Content-Type":"application/json; charset=utf-8"}),body:JSON.stringify(body)});
+  if(!r.ok) throw new Error("PATCH "+entitySet+" failed ("+r.status+"): "+(await r.text()));
+}
+function num(v){ const n=parseFloat(v); return isNaN(n)?0:n; }
+function initials(n){ return n.split(/\s+/).map(function(p){return p[0]||"";}).join("").slice(0,2).toUpperCase(); }
+function pctClass(p){ return p>=35?"ok":(p>=30?"mid":"low"); }
+function sum(arr,f){ return arr.reduce(function(a,b){return a+f(b);},0); }
 
-/* ------- Currency by Business Unit (Entity) ------------------------------------
-   Egypt BUs use EGP; everything else uses SAR.
-   Edit EGYPT_BUS to add/remove Egyptian business units.                          */
-const EGYPT_BUS = ['ARC','AMH','ASH','SMH'];
-function currencyFor(entity){
-  const e = String(entity||'').toUpperCase();
-  // Match if the entity value equals or contains one of the Egypt BU codes
-  const isEgypt = EGYPT_BUS.some(bu => e === bu || e.includes(bu));
-  return isEgypt ? 'EGP' : 'SAR';
-}
-// Format an amount with the currency of a given entity (rounded, no decimals)
-const fmtCur = (n, entity) => currencyFor(entity)+' '+Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0});
-// Backward-compatible SAR formatter (kept for any leftover call sites)
-const fmtSAR = n => 'SAR '+Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0});
-// Currency for the currently-open drawer (based on selected company's entity/BU)
-const drawerCur = () => currencyFor(SELECTED_CO ? SELECTED_CO.entityName : '');
+// ================= dashboard state =================
+// ALL_OWNERS: every breakdown across all achievements, with month/year + weeks.
+let ALL_OWNERS = [];
+// each: { breakdownId, achievementId, month, year, name, initials, target, weeks:[{id,number,plan,actual}] }
+let AVATAR_COLORS = [
+  ["#FDF0D5","#C77D0A"],["#FDE7EA","#D33B45"],["#FDF0D5","#C77D0A"],["#E2F6F1","#0E7C6B"],
+  ["#EAE7FB","#5B4AE0"],["#FDE7EA","#D33B45"]
+];
 
-let ENTRIES=[], COMPANIES=[], METHOD_CHOICES=[], ALLOCS=[], SELECTED_CO=null, SAVING=false;
-let MODE='create';       // 'create' | 'edit' | 'reedit' (rejected → full edit)
-let EDIT_ID=null;
-let EDIT_ALLOCS=[];
-let ORIGINAL_CHILD_IDS=[];   // child GUIDs loaded for a rejected entry (to diff on save)
-
-/* ------- AR Status choice (cfm_statusaction, global choice "AR Status") ------- */
-const AR_STATUS = {
-  PENDING_VERIFY: 766340000,   // Pending AR Verification  (open — set after first document upload)
-  REJECTED:       766340001,   // Rejected from AR         (open — Collection can edit & re-submit)
-  APPROVED:       766340002,   // Approved                 (LOCKED)
-  ALLOCATED:      766340003,   // Allocated                (LOCKED)
-  PENDING_BANK:   766340004,   // Pending Bank Statement   (LOCKED — waiting Treasury)
-  AWAITING_DOCS:  766340005    // Awaiting documents       (open — DEFAULT for new entries)
-};
-const AR_STATUS_LABEL = {
-  766340000:'Pending AR Verification',
-  766340001:'Rejected from AR',
-  766340002:'Approved',
-  766340003:'Allocated',
-  766340004:'Pending Bank Statement',
-  766340005:'Awaiting documents'
-};
-function isLocked(status){
-  // Collection can edit ONLY when status is Awaiting documents, Pending Verification, OR Rejected from AR
-  if(status==null) return false;                              // no status yet = open
-  if(status===AR_STATUS.AWAITING_DOCS) return false;
-  if(status===AR_STATUS.PENDING_VERIFY) return false;
-  if(status===AR_STATUS.REJECTED) return false;
-  return true;                                                // Approved / Allocated / Pending Bank = LOCKED
-}
-function statusPillClass(status){
-  switch(status){
-    case AR_STATUS.APPROVED:       return 'linked';   // green
-    case AR_STATUS.REJECTED:       return 'rejected'; // red
-    case AR_STATUS.ALLOCATED:      return 'allocated';// blue
-    case AR_STATUS.PENDING_BANK:   return 'pending';  // amber
-    case AR_STATUS.AWAITING_DOCS:  return 'awaiting'; // amber
-    case AR_STATUS.PENDING_VERIFY: default: return 'method';  // neutral
-  }
-}
-function statusIcon(status){
-  switch(status){
-    case AR_STATUS.APPROVED:      return 'fa-circle-check';
-    case AR_STATUS.REJECTED:      return 'fa-circle-xmark';
-    case AR_STATUS.ALLOCATED:     return 'fa-layer-group';
-    case AR_STATUS.PENDING_BANK:  return 'fa-building-columns';
-    case AR_STATUS.AWAITING_DOCS: return 'fa-file-circle-plus';
-    case AR_STATUS.PENDING_VERIFY:default: return 'fa-clock';
-  }
-}
-
-/* ------- Month options (Date Only) — 24 months back → 24 months forward ------- */
-function generateMonthOptions(){
-  const opts=[];
-  const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const now=new Date();
-  const start=new Date(now.getFullYear(), now.getMonth()-24, 1);
-  for(let i=0;i<60;i++){
-    const d=new Date(start.getFullYear(), start.getMonth()+i, 1);
-    const y=d.getFullYear();
-    const m=d.getMonth();
-    const value = y+'-'+String(m+1).padStart(2,'0')+'-01';  // Date Only ISO
-    const label = MONTHS[m]+' '+y;
-    opts.push({value,label});
-  }
-  return opts;
-}
-const MONTH_OPTIONS = generateMonthOptions();
-function monthOptionsHTML(){
-  const cur = new Date();
-  const curVal = cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-01';
-  return '<option value="">Select month…</option>'+
-    MONTH_OPTIONS.map(o=>'<option value="'+o.value+'"'+(o.value===curVal?' selected':'')+'>'+o.label+'</option>').join('');
-}
-
-/* ------- Auto-discover navigation property names for lookup binds ------- */
-async function discoverBind(referencingEntity, referencingAttribute){
-  const url=api()+"RelationshipDefinitions/Microsoft.Dynamics.CRM.OneToManyRelationshipMetadata"
-    +"?$select=ReferencingEntityNavigationPropertyName,ReferencingAttribute,ReferencingEntity"
-    +"&$filter=ReferencingEntity eq '"+referencingEntity+"' and ReferencingAttribute eq '"+referencingAttribute+"'";
+// ================= load everything =================
+async function loadAll(){
+  const st=document.getElementById("status"); st.style.color="var(--muted)"; st.textContent="Loading…";
+  const body=document.getElementById("owners-body");
+  ALL_OWNERS=[];
   try{
-    const r=await fetch(url,{headers:H(),credentials:'include'});
-    if(r.ok){
-      const d=await r.json();
-      if(d.value&&d.value[0]&&d.value[0].ReferencingEntityNavigationPropertyName){
-        return d.value[0].ReferencingEntityNavigationPropertyName;
+    const aq="$select=pm_kpiachievmentid,pm_month,pm_year&$expand=pm_kpi($select="+KPI_NAME_FIELD+")&$filter=statecode eq 0&$orderby=createdon desc";
+    const adata=await dvGet(API+"/"+SET_ACHIEVEMENT+"?"+aq);
+    console.log("[loadAll] achievements:", adata.value.length);
+
+    // fetch all breakdowns per achievement IN PARALLEL
+    const perAch = await Promise.all(adata.value.map(async function(a){
+      let bdata;
+      try{
+        const bq="$select=stf_kpiachievmentbreakdownid,stf_value,comp_breakdowntarget"
+               +"&$expand=stf_Employee($select="+EMP_NAME_FIELD+")"
+               +"&$filter=_stf_total_value eq "+a.pm_kpiachievmentid+" and statecode eq 0&$orderby=createdon asc";
+        bdata=await dvGet(API+"/"+SET_BREAKDOWN+"?"+bq);
+      }catch(expandErr){
+        const bq2="$select=stf_kpiachievmentbreakdownid,stf_value,comp_breakdowntarget,_stf_employee_value"
+                +"&$filter=_stf_total_value eq "+a.pm_kpiachievmentid+" and statecode eq 0&$orderby=createdon asc";
+        bdata=await dvGet(API+"/"+SET_BREAKDOWN+"?"+bq2);
       }
-    }
-  }catch(e){ console.warn('discoverBind error:', e); }
-  return referencingAttribute; // fallback to column name (may fail)
-}
-async function discoverAllBinds(){
-  const [parentCo, childPa] = await Promise.all([
-    discoverBind('cfm_dailycollection','cfm_companycode'),
-    discoverBind('cfm_collectionmonthallocation','cfm_dailycollection')
-  ]);
-  SETTINGS.parentCompanyBind = parentCo;
-  SETTINGS.childParentBind   = childPa;
-  console.log('Navigation properties resolved:',{
-    parentCompanyBind: SETTINGS.parentCompanyBind,
-    childParentBind:   SETTINGS.childParentBind
-  });
-}
-
-function getClientUrl(){try{if(window.parent&&window.parent.Xrm)return window.parent.Xrm.Utility.getGlobalContext().getClientUrl();}catch(e){}return window.location.origin;}
-const api=()=>getClientUrl()+'/api/data/v9.2/';
-const H=(extra)=>{const h={'Accept':'application/json','Content-Type':'application/json','OData-MaxVersion':'4.0','OData-Version':'4.0'};if(extra)for(const k in extra)h[k]=extra[k];return h;};
-const HGET=()=>H({'Prefer':'odata.include-annotations="OData.Community.Display.V1.FormattedValue"'});
-
-async function loadEntries(){
-  const cols=['cfm_dailycollectionid','cfm_name','cfm_companynamefx','cfm_entityfx','cfm_collectiondate','cfm_paymentmethod','cfm_collectedamountnet','cfm_proof','cfm_note','cfm_paymentreference','cfm_statusaction','_cfm_companycode_value','createdon','_createdby_value'].join(',');
-  const r=await fetch(api()+SETTINGS.parentSet+'?$select='+cols+'&$filter=statecode eq 0&$orderby=createdon desc',{headers:HGET(),credentials:'include'});
-  if(!r.ok){const t=await r.text();throw new Error('Load failed: '+r.status+' '+t.slice(0,200));}
-  return (await r.json()).value||[];
-}
-async function loadAllocationCounts(parentIds){
-  if(!parentIds.length)return{};
-  const filter=parentIds.map(id=>'_cfm_dailycollection_value eq '+id).join(' or ');
-  const r=await fetch(api()+SETTINGS.childSet+'?$select=cfm_collectionmonthallocationid,_cfm_dailycollection_value&$filter=statecode eq 0 and ('+filter+')',{headers:H(),credentials:'include'});
-  if(!r.ok)return{};
-  const d=await r.json(); const map={};
-  (d.value||[]).forEach(a=>{const p=a._cfm_dailycollection_value;map[p]=(map[p]||0)+1;});
-  return map;
-}
-async function loadCompanies(){
-  const cols=['cfm_aragingid','cfm_companycode','cfm_companyname','_cfm_type_value'].join(',');
-  const r=await fetch(api()+SETTINGS.companySet+'?$select='+cols+'&$filter=statecode eq 0&$top=500',{headers:HGET(),credentials:'include'});
-  if(!r.ok)throw new Error('Companies load failed: '+r.status);
-  return (await r.json()).value||[];
-}
-async function loadMethodChoices(){
-  // Try 1: local attribute optionset (works for local + global picklists usually)
-  try{
-    const url1=api()+"EntityDefinitions(LogicalName='cfm_dailycollection')/Attributes(LogicalName='"+SETTINGS.methodField+"')/Microsoft.Dynamics.CRM.PicklistAttributeMetadata?$expand=OptionSet,GlobalOptionSet";
-    const r=await fetch(url1,{headers:H(),credentials:'include'});
-    if(r.ok){
-      const d=await r.json();
-      // Global picklist attributes carry the options under GlobalOptionSet; local ones under OptionSet.
-      const src = (d.GlobalOptionSet && d.GlobalOptionSet.Options) || (d.OptionSet && d.OptionSet.Options) || [];
-      if(src.length){
-        return src.map(o=>({
-          value: Number(o.Value),
-          label: (o.Label && o.Label.UserLocalizedLabel && o.Label.UserLocalizedLabel.Label) || String(o.Value)
-        }));
-      }
-    }
-  }catch(e){ console.warn('loadMethodChoices try1 failed:', e); }
-  // Try 2: last-resort hardcoded values (matches "Payment Method" global choice)
-  console.warn('Falling back to hardcoded Payment Method choices.');
-  return [
-    { value: 766340000, label: 'Cheque' },
-    { value: 766340001, label: 'Bank transfer' }
-  ];
-}
-async function postRow(setName,body){
-  const r=await fetch(api()+setName,{method:'POST',headers:H({'Prefer':'return=representation'}),credentials:'include',body:JSON.stringify(body)});
-  if(!r.ok){
-    const t=await r.text();
-    let msg=t;
-    try{
-      const j=JSON.parse(t);
-      if(j.error){
-        msg = (j.error.message||'') + (j.error.innererror&&j.error.innererror.message ? ' | '+j.error.innererror.message : '');
-      }
-    }catch(_){}
-    console.error('POST '+setName+' failed:', body, msg);
-    throw new Error(msg.slice(0,400));
-  }
-  return await r.json();
-}
-async function deleteRow(setName,id){
-  await fetch(api()+setName+'('+id+')',{method:'DELETE',headers:H(),credentials:'include'});
-}
-async function patchRow(setName,id,body){
-  const r=await fetch(api()+setName+'('+id+')',{method:'PATCH',headers:H(),credentials:'include',body:JSON.stringify(body)});
-  if(!r.ok){
-    const t=await r.text();
-    let msg=t;
-    try{const j=JSON.parse(t);if(j.error){msg=(j.error.message||'')+(j.error.innererror&&j.error.innererror.message?' | '+j.error.innererror.message:'');}}catch(_){}
-    console.error('PATCH '+setName+' failed:', body, msg);
-    throw new Error(msg.slice(0,400));
-  }
-}
-
-function methodLabel(v){const it=METHOD_CHOICES.find(c=>c.value===v);return it?it.label:(v==null?'—':String(v));}
-function fmtDate(iso){if(!iso)return '—';const d=new Date(iso);if(isNaN(d))return '—';return d.toISOString().slice(0,10);}
-function fmtDateTime(iso){
-  if(!iso)return '—';
-  const d=new Date(iso);
-  if(isNaN(d))return '—';
-  const dd=String(d.getDate()).padStart(2,'0');
-  const mm=String(d.getMonth()+1).padStart(2,'0');
-  const yyyy=d.getFullYear();
-  let hh=d.getHours(); const min=String(d.getMinutes()).padStart(2,'0');
-  const ap=hh>=12?'PM':'AM'; hh=hh%12||12;
-  return dd+'-'+mm+'-'+yyyy+' '+hh+':'+min+' '+ap;
-}
-function proofPill(link){if(link && String(link).trim())return '<span class="pill linked"><i class="fa-solid fa-check"></i> Linked</span>';return '<span class="pill pending"><i class="fa-solid fa-clock"></i> Pending</span>';}
-
-function normaliseEntry(row){
-  // Client-side JOIN with COMPANIES by lookup Guid — used mainly to display code/name/entity
-  // even before Dataverse's formula columns fire, and to have a single source of truth.
-  const coId = row._cfm_companycode_value || '';
-  const co = coId ? COMPANIES.find(c=>c.cfm_aragingid===coId) : null;
-  const code   = co ? (co.cfm_companycode||'—') : '—';
-  const name   = co ? (co.cfm_companyname||'—')
-                    : (row.cfm_companynamefx || '—');       // formula column on cfm_dailycollection
-  const entity = co ? (co['_cfm_type_value@OData.Community.Display.V1.FormattedValue']||'—')
-                    : (row.cfm_entityfx || '—');            // formula column on cfm_dailycollection
-  return {
-    id:row.cfm_dailycollectionid,
-    ref:row.cfm_name||'—',
-    entity, companyCode:code, companyName:name,
-    companyId: coId,
-    date:row.cfm_collectiondate||'',
-    method:row.cfm_paymentmethod,
-    methodLabel:row['cfm_paymentmethod@OData.Community.Display.V1.FormattedValue']||methodLabel(row.cfm_paymentmethod),
-    net:N(row.cfm_collectedamountnet),
-    proof:row.cfm_proof||'',
-    note:row.cfm_note||'',
-    paymentReference:row.cfm_paymentreference||'',
-    status: row.cfm_statusaction==null ? null : Number(row.cfm_statusaction),
-    statusLabel: row['cfm_statusaction@OData.Community.Display.V1.FormattedValue']
-              || (row.cfm_statusaction!=null ? AR_STATUS_LABEL[Number(row.cfm_statusaction)] : 'Awaiting documents'),
-    createdBy: row['_createdby_value@OData.Community.Display.V1.FormattedValue'] || '—',
-    createdById: (row._createdby_value||'').replace(/[{}]/g,'').toLowerCase(),
-    createdOn: row.createdon || '',
-    allocCount:0
-  };
-}
-
-// Effective status label shown/filtered in the UI.
-// Status is now a real Dataverse value, so we use it directly.
-function displayStatusLabel(r){
-  if(r.status===AR_STATUS.AWAITING_DOCS) return 'Awaiting documents';
-  if(r.status==null) return 'Awaiting documents';   // fallback for legacy entries with no status
-  return r.statusLabel;
-}
-function buildFilterOptions(){
-  const uniq=(k)=>{const s=new Set();ENTRIES.forEach(r=>{if(r[k]&&r[k]!=='—')s.add(r[k]);});return Array.from(s).sort();};
-  const fill=(id,vals,all)=>{const sel=document.getElementById(id);const cur=sel.value;
-    sel.innerHTML='<option value="">'+all+'</option>'+vals.map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('');
-    if(vals.indexOf(cur)>=0)sel.value=cur;};
-  fill('f-entity', uniq('entity'), 'All Entities');
-  fill('f-method', uniq('methodLabel'), 'All Methods');
-  // Status options use the derived display label
-  const statusVals=(()=>{const s=new Set();ENTRIES.forEach(r=>{const l=displayStatusLabel(r);if(l&&l!=='—')s.add(l);});return Array.from(s).sort();})();
-  fill('f-status', statusVals, 'All Statuses');
-}
-let REJECTED_ONLY=false;
-let BY_ME=false;
-let PAGE=1, PAGE_SIZE=25;   // pagination (Infinity = All)
-
-// Current user's display name + id (from Xrm context) — used by the "By Me" filter
-function currentUser(){
-  try{
-    const gc = window.parent && window.parent.Xrm && window.parent.Xrm.Utility.getGlobalContext();
-    if(gc){
-      const us = gc.userSettings || {};
-      return { id:(us.userId||'').replace(/[{}]/g,'').toLowerCase(), name:us.userName||'' };
-    }
-  }catch(e){}
-  return { id:'', name:'' };
-}
-function toggleByMe(){
-  BY_ME=!BY_ME;
-  const b=document.getElementById('by-me-btn');
-  if(b) b.classList.toggle('active', BY_ME);
-  PAGE=1; renderTable();
-}
-function toggleRejectedFilter(){
-  REJECTED_ONLY=!REJECTED_ONLY;
-  const cell=document.getElementById('kpi-rejected-cell');
-  if(cell) cell.classList.toggle('active', REJECTED_ONLY);
-  PAGE=1; renderTable();
-}
-function filterEntries(){
-  const q=(document.getElementById('f-search').value||'').toLowerCase().trim();
-  const en=document.getElementById('f-entity').value;
-  const mt=document.getElementById('f-method').value;
-  const st=document.getElementById('f-status').value;
-  return ENTRIES.filter(r=>{
-    if(REJECTED_ONLY && r.status!==AR_STATUS.REJECTED)return false;
-    if(BY_ME){
-      const me=currentUser();
-      // Prefer exact GUID match; fall back to display-name match
-      if(me.id){
-        if(r.createdById !== me.id) return false;
-      } else if(me.name){
-        if(String(r.createdBy||'').trim().toLowerCase()!==me.name.trim().toLowerCase()) return false;
-      }
-    }
-    if(en && r.entity!==en)return false;
-    if(mt && r.methodLabel!==mt)return false;
-    if(st && displayStatusLabel(r)!==st)return false;
-    if(q){const hay=(r.ref+' '+r.companyCode+' '+r.companyName).toLowerCase();if(!hay.includes(q))return false;}
-    return true;
-  });
-}
-function filterChanged(){ PAGE=1; renderTable(); }
-function renderTable(){
-  const allRows=filterEntries();
-  const tbody=document.getElementById('dc-body');
-  document.getElementById('tbl-showing').textContent=allRows.length;
-  document.getElementById('tbl-total').textContent=ENTRIES.length;
-  if(!allRows.length){
-    tbody.innerHTML='<tr><td colspan="11" class="state-cell"><div class="state-icon"><i class="fa-solid fa-inbox"></i></div><div class="state-title">No entries yet</div><div class="state-msg">Click <strong>New entry</strong> to record your first collection.</div></td></tr>';
-    renderPager(0,0,0);
-    updateKPIs();return;
-  }
-  const size = PAGE_SIZE===Infinity ? allRows.length : PAGE_SIZE;
-  const totalPages = Math.max(1, Math.ceil(allRows.length/size));
-  if(PAGE>totalPages) PAGE=totalPages;
-  if(PAGE<1) PAGE=1;
-  const start=(PAGE-1)*size;
-  const rows=allRows.slice(start, start+size);
-  renderPager(allRows.length, start, rows.length);
-  tbody.innerHTML=rows.map(r=>{
-    const locked = isLocked(r.status);
-    const rejected = (r.status===AR_STATUS.REJECTED);
-    const statusCls = statusPillClass(r.status);
-    const statusIco = statusIcon(r.status);
-    const rowCls = rejected ? ' class="row-rejected"' : '';
-    const rowStyle = 'cursor:pointer'+(locked&&!rejected?';background:var(--brand-gold-50)':'');
-    const proofDot = '';   // paperclip indicator removed per request
-    // Merged Status + Proof cell
-    let statusCell;
-    if(rejected){
-      statusCell = '<span class="pill rejected-strong"><i class="fa-solid fa-rotate-left"></i> '+esc(r.statusLabel)+' — Re-work</span> '+proofDot;
-    } else if(r.status===AR_STATUS.AWAITING_DOCS || r.status==null){
-      statusCell = '<span class="pill awaiting"><i class="fa-solid fa-file-circle-plus"></i> Awaiting documents</span> '+proofDot;
-    } else {
-      statusCell = '<span class="pill '+statusCls+'"><i class="fa-solid '+statusIco+'"></i> '+esc(r.statusLabel)+'</span> '+proofDot;
-    }
-    return '<tr'+rowCls+' onclick="openDrawerEdit(\''+r.id+'\')" style="'+rowStyle+'">'+
-      '<td class="col-ref">'+(rejected?'<i class="fa-solid fa-triangle-exclamation" style="color:var(--danger);margin-right:6px" title="Rejected by AR — needs re-work"></i>':(locked?'<i class="fa-solid fa-lock" style="color:var(--gold-dark);margin-right:6px" title="Locked by AR"></i>':''))+esc(r.ref)+'</td>'+
-      '<td><span class="pill entity">'+esc(r.entity)+'</span></td>'+
-      '<td><span style="font-family:var(--mono);color:var(--gold-dark);font-weight:600">'+esc(r.companyCode)+'</span></td>'+
-      '<td class="col-bold">'+esc(r.companyName)+'</td>'+
-      '<td>'+fmtDate(r.date)+'</td>'+
-      '<td><span class="pill method">'+esc(r.methodLabel)+'</span></td>'+
-      '<td class="col-amt numeric">'+fmt(r.net)+'</td>'+
-      '<td>'+(r.allocCount?(r.allocCount+' month'+(r.allocCount===1?'':'s')):'<span style="color:var(--muted)">—</span>')+'</td>'+
-      '<td>'+statusCell+'</td>'+
-      '<td><span style="font-size:11px;color:var(--text-body)"><i class="fa-solid fa-user" style="color:var(--dim);margin-right:5px;font-size:10px"></i>'+esc(r.createdBy)+'</span></td>'+
-      '<td><span style="font-size:11px;color:var(--muted)">'+fmtDateTime(r.createdOn)+'</span></td>'+
-    '</tr>';
-  }).join('');
-  updateKPIs();
-}
-function renderPager(total, start, shown){
-  const pager=document.getElementById('pager');
-  if(!pager) return;
-  const size = PAGE_SIZE===Infinity ? (total||1) : PAGE_SIZE;
-  const totalPages = Math.max(1, Math.ceil(total/(size||1)));
-  const from = total? start+1 : 0;
-  const to = start+shown;
-  let nums='';
-  const addBtn=(p)=>{nums+='<button class="pg-btn'+(p===PAGE?' active':'')+'" onclick="goPage('+p+')">'+p+'</button>';};
-  const addEll=()=>{nums+='<span class="pg-ellipsis">…</span>';};
-  if(totalPages<=7){ for(let p=1;p<=totalPages;p++) addBtn(p); }
-  else{
-    addBtn(1);
-    if(PAGE>3) addEll();
-    const s=Math.max(2,PAGE-1), e=Math.min(totalPages-1,PAGE+1);
-    for(let p=s;p<=e;p++) addBtn(p);
-    if(PAGE<totalPages-2) addEll();
-    addBtn(totalPages);
-  }
-  const sizeSel='<div class="pager-size">Rows: <select onchange="changePageSize(this.value)">'+
-    [25,50,100].map(n=>'<option value="'+n+'"'+(PAGE_SIZE===n?' selected':'')+'>'+n+'</option>').join('')+
-    '<option value="all"'+(PAGE_SIZE===Infinity?' selected':'')+'>All</option>'+
-    '</select></div>';
-  pager.innerHTML=
-    '<div class="pager-left">'+sizeSel+
-      '<span class="pager-info">Showing <strong>'+from+'</strong>–<strong>'+to+'</strong> of <strong>'+total+'</strong></span>'+
-    '</div>'+
-    '<div class="pager-nav">'+
-      '<button class="pg-btn" onclick="goPage(1)" '+(PAGE<=1?'disabled':'')+' title="First"><i class="fa-solid fa-angles-left"></i></button>'+
-      '<button class="pg-btn" onclick="goPage('+(PAGE-1)+')" '+(PAGE<=1?'disabled':'')+' title="Previous"><i class="fa-solid fa-angle-left"></i></button>'+
-      nums+
-      '<button class="pg-btn" onclick="goPage('+(PAGE+1)+')" '+(PAGE>=totalPages?'disabled':'')+' title="Next"><i class="fa-solid fa-angle-right"></i></button>'+
-      '<button class="pg-btn" onclick="goPage('+totalPages+')" '+(PAGE>=totalPages?'disabled':'')+' title="Last"><i class="fa-solid fa-angles-right"></i></button>'+
-    '</div>';
-}
-function goPage(p){ PAGE=p; renderTable(); const sc=document.querySelector('.tbl-scroll'); if(sc) sc.scrollTop=0; }
-function changePageSize(v){ PAGE_SIZE=(v==='all')?Infinity:Number(v); PAGE=1; renderTable(); }
-function updateKPIs(){
-  const today=new Date().toISOString().slice(0,10);
-  const monthStart=today.slice(0,7);
-  let cToday=0,aToday=0,mtd=0,rejected=0;
-  ENTRIES.forEach(r=>{
-    const d=(r.date||'').slice(0,10);
-    if(d===today){cToday++;aToday+=r.net;}
-    if(d.startsWith(monthStart))mtd+=r.net;
-    if(r.status===AR_STATUS.REJECTED)rejected++;
-  });
-  // All visible entries share one country/currency — take it from the first entry
-  const cur = ENTRIES.length ? currencyFor(ENTRIES[0].entity) : (SETTINGS.currency||'SAR');
-  const withCur = n => cur+' '+Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0});
-  document.getElementById('kpi-today').textContent=cToday;
-  document.getElementById('kpi-today-amt').textContent=withCur(aToday);
-  document.getElementById('kpi-mtd').textContent=withCur(mtd);
-  document.getElementById('kpi-rejected').textContent=rejected;
-}
-
-function openDrawer(){
-  MODE='create'; EDIT_ID=null; EDIT_ALLOCS=[];
-  resetDrawer();
-  // create-mode UI
-  document.getElementById('drawer-title').textContent='New · Daily Collection entry';
-  document.getElementById('co-search-wrap').style.display='';
-  document.getElementById('alloc-add-btn').style.display='';
-  document.getElementById('btn-save').style.display='';   // ensure visible (may have been hidden by a locked view)
-  document.getElementById('btn-save').innerHTML='<i class="fa-solid fa-floppy-disk"></i> Save Entry';
-  document.getElementById('proof-note').innerHTML='<i class="fa-solid fa-file-circle-plus"></i> <span>This entry will be saved as <strong>Awaiting documents</strong>. Upload the first document to move it to <strong>Pending AR Verification</strong>.</span>';
-  document.getElementById('docs-sec').style.display='none';   // no record yet — attach after save
-  document.getElementById('overlay').classList.add('open');
-  document.getElementById('drawer').classList.add('open');
-  document.getElementById('fld-date').value=new Date().toISOString().slice(0,10);
-  addAlloc();
-  checkSum();
-  setTimeout(()=>document.getElementById('co-input').focus(),260);
-}
-
-async function openDrawerEdit(entryId){
-  const e = ENTRIES.find(x=>x.id===entryId);
-  if(!e)return;
-  EDIT_ID=entryId; EDIT_ALLOCS=[]; ORIGINAL_CHILD_IDS=[];
-
-  const locked = isLocked(e.status);
-  const reedit = (e.status===AR_STATUS.REJECTED);   // Rejected → full edit (parent + allocations)
-  MODE = reedit ? 'reedit' : 'edit';
-  resetDrawer();
-
-  // Edit-mode UI
-  const lockPrefix = locked ? '<i class="fa-solid fa-lock" style="margin-right:6px;color:var(--gold-dark)"></i>' : '';
-  document.getElementById('drawer-title').innerHTML = lockPrefix + (locked?'View · ':(reedit?'Re-submit · ':'Edit · ')) + esc(e.ref);
-  // Company picker: editable (edit/reedit) shows the search; locked stays read-only
-  document.getElementById('co-search-wrap').style.display = locked ? 'none' : '';
-  if(!locked){
-    document.getElementById('co-input').value = (e.companyCode||'')+' — '+(e.companyName||'');
-  }
-  document.getElementById('alloc-add-btn').style.display = reedit ? '' : 'none';   // rejected can add months
-  // Hide the Save/Update button entirely for locked entries (Approved / Allocated / Pending Bank)
-  document.getElementById('btn-save').style.display = locked ? 'none' : '';
-  document.getElementById('btn-save').innerHTML = locked
-    ? '<i class="fa-solid fa-lock"></i> Locked'
-    : (reedit
-        ? '<i class="fa-solid fa-paper-plane"></i> Re-submit Entry'
-        : '<i class="fa-solid fa-pen-to-square"></i> Update Entry');
-
-  // Seed selected company from the entry (may be changed via the picker when editable)
-  SELECTED_CO = {
-    id: e.companyId || '', code: e.companyCode || '', name: e.companyName || '',
-    entityId:'', entityName: e.entity || '—'
-  };
-  const p=document.getElementById('co-panel');
-  p.className='co-panel';
-  const dispLabel = displayStatusLabel(e);
-  const isAwaiting = (e.status===AR_STATUS.AWAITING_DOCS || e.status==null);
-  const statusCls = isAwaiting ? 'awaiting' : statusPillClass(e.status);
-  const statusIco = isAwaiting ? 'fa-file-circle-plus' : statusIcon(e.status);
-  p.innerHTML=
-    '<div class="kv"><div class="k">Ref</div><div class="v" style="font-family:var(--mono);color:var(--gold-dark)">'+esc(e.ref)+'</div></div>'+
-    '<div class="kv"><div class="k">AR Status</div><div class="v"><span class="pill '+statusCls+'"><i class="fa-solid '+statusIco+'"></i> '+esc(dispLabel)+'</span></div></div>'+
-    '<div class="kv"><div class="k">Company Code</div><div class="v" style="font-family:var(--mono);color:var(--gold-dark)">'+esc(e.companyCode||'—')+'</div></div>'+
-    '<div class="kv"><div class="k">Company Name</div><div class="v">'+esc(e.companyName||'—')+'</div></div>'+
-    '<div class="kv"><div class="k">Entity</div><div class="v">'+esc(e.entity||'—')+'</div></div>';
-
-  // Pre-fill parent fields
-  document.getElementById('fld-date').value = (e.date||'').slice(0,10);
-  document.getElementById('fld-method').value = (e.method==null?'':String(e.method));
-  document.getElementById('fld-net').value = e.net || '';
-  document.getElementById('fld-paymentref').value = e.paymentReference || '';
-  document.getElementById('fld-note').value = e.note || '';
-
-  // Lock all inputs when locked (Approved / Allocated / Pending Bank Statement)
-  const inputs = ['fld-date','fld-method','fld-net','fld-paymentref','fld-note'];
-  inputs.forEach(id=>{
-    const el=document.getElementById(id);
-    if(locked){ el.setAttribute('disabled','true'); el.style.background='var(--brand-gold-50)'; el.style.cursor='not-allowed'; }
-    else     { el.removeAttribute('disabled'); el.style.background=''; el.style.cursor=''; }
-  });
-
-  // Lock banner — replaces the proof-note area with a prominent lock message
-  const proofEl=document.getElementById('proof-note');
-  if(locked){
-    const reasonMap = {
-      [AR_STATUS.APPROVED]:      'This entry has been <strong>approved by AR</strong>. Editing is disabled.',
-      [AR_STATUS.ALLOCATED]:     'This entry has been <strong>allocated</strong>. Editing is disabled.',
-      [AR_STATUS.PENDING_BANK]:  'This entry is <strong>awaiting the bank statement from Treasury</strong>. Editing is disabled until Treasury acts.'
-    };
-    proofEl.style.background='var(--danger-soft)';
-    proofEl.style.borderColor='rgba(178,58,58,.24)';
-    proofEl.innerHTML='<i class="fa-solid fa-lock" style="color:var(--danger)"></i> <span style="color:var(--danger)">'+(reasonMap[e.status]||'This entry is locked.')+'</span>';
-  } else if(e.status===AR_STATUS.REJECTED){
-    // Rejected — encourage the Collection team to fix and re-submit
-    proofEl.style.background='var(--danger-soft)';
-    proofEl.style.borderColor='rgba(178,58,58,.24)';
-    proofEl.innerHTML='<i class="fa-solid fa-circle-xmark" style="color:var(--danger)"></i> <span style="color:var(--danger)"><strong>Rejected by AR.</strong> Fix the details and click Re-submit — the entry will go back to AR as <strong>Pending AR Verification</strong>.</span>';
-  } else if(e.status===AR_STATUS.AWAITING_DOCS || e.status==null){
-    // Awaiting documents — prompt to upload
-    proofEl.style.background='var(--amber-soft)';
-    proofEl.style.borderColor='rgba(201,138,30,.28)';
-    proofEl.innerHTML='<i class="fa-solid fa-file-circle-plus" style="color:var(--warning)"></i> <span><strong>Awaiting documents.</strong> Upload the first document below to move this entry to <strong>Pending AR Verification</strong>.</span>';
-  } else if(e.proof){
-    proofEl.style.background='';
-    proofEl.style.borderColor='';
-    proofEl.innerHTML='<i class="fa-solid fa-link" style="color:var(--green-dark)"></i> <span>Proof: <a href="'+esc(e.proof)+'" target="_blank" rel="noopener" style="color:var(--gold-dark);font-weight:600;text-decoration:underline">'+esc(e.proof)+'</a></span>';
-  } else {
-    proofEl.style.background='';
-    proofEl.style.borderColor='';
-    proofEl.innerHTML='<i class="fa-solid fa-clock" style="color:var(--warning)"></i> <span>Proof link not yet created — Power Automate flow will generate the OneDrive link and fill <code>cfm_proof</code> automatically.</span>';
-  }
-
-  // Fetch and render allocations
-  document.getElementById('alloc-body').innerHTML='<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px"><i class="fa-solid fa-spinner fa-spin"></i> Loading allocations…</div>';
-  try{
-    const r=await fetch(api()+SETTINGS.childSet+'?$select=cfm_collectionmonthallocationid,cfm_allocatetomonth,cfm_allocatetoclaim,cfm_allocationamount,cfm_tax,cfm_volumediscount,cfm_earlypaymentdisc,cfm_adminfees,cfm_rejection,cfm_grossamount&$filter=statecode eq 0 and _cfm_dailycollection_value eq '+entryId+'&$orderby=cfm_allocatetomonth',{headers:HGET(),credentials:'include'});
-    if(!r.ok)throw new Error('Failed to load allocations');
-    const d=await r.json();
-    EDIT_ALLOCS = d.value||[];
-    ORIGINAL_CHILD_IDS = EDIT_ALLOCS.map(a=>a.cfm_collectionmonthallocationid).filter(Boolean);
-    if(reedit){
-      // Rebuild editable allocation cards from existing children (carry child GUIDs)
-      document.getElementById('alloc-body').innerHTML='';
-      ALLOCS=[];
-      if(EDIT_ALLOCS.length){
-        EDIT_ALLOCS.forEach(a=>addAlloc({
-          childId: a.cfm_collectionmonthallocationid || null,
-          month:  (a.cfm_allocatetomonth||'').slice(0,10) || null,
-          amount: N(a.cfm_allocationamount),
-          tax:    N(a.cfm_tax),
-          vol:    N(a.cfm_volumediscount),
-          early:  N(a.cfm_earlypaymentdisc),
-          admin:  N(a.cfm_adminfees),
-          reject: N(a.cfm_rejection)
-        }));
-      }else{
-        addAlloc();   // at least one blank card
-      }
-    }else{
-      renderReadOnlyAllocs();
-    }
-  }catch(err){
-    document.getElementById('alloc-body').innerHTML='<div style="padding:20px;text-align:center;color:var(--danger);font-size:12px">Could not load allocations: '+esc(err.message)+'</div>';
-  }
-
-  checkSum();   // reedit uses the live Σ rule; edit uses updateEditSumPill via checkSum branch
-
-  // Documents: shown in all statuses; upload/delete only when not locked
-  initDocsSection(e, locked);
-
-  document.getElementById('overlay').classList.add('open');
-  document.getElementById('drawer').classList.add('open');
-  document.getElementById('btn-save').disabled = locked;   // Save disabled when locked
-}
-
-function renderReadOnlyAllocs(){
-  const container=document.getElementById('alloc-body');
-  if(!EDIT_ALLOCS.length){
-    container.innerHTML='<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">No allocations found.</div>';
-    return;
-  }
-  const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const monthLabel = iso => {
-    if(!iso) return '—';
-    const d = new Date(iso);
-    if(isNaN(d)) return '—';
-    return MONTHS[d.getMonth()]+' '+d.getFullYear();
-  };
-  container.innerHTML=EDIT_ALLOCS.map(a=>{
-    return '<div class="alloc-card">'+
-      '<div class="alloc-card-hdr" style="background:linear-gradient(180deg,#f9f3ed,#fff)">'+
-        '<div style="flex:1;padding:8px 12px;font:700 13px var(--sans);color:var(--brand-black)">'+esc(monthLabel(a.cfm_allocatetomonth))+'</div>'+
-        '<div style="font:600 10px var(--sans);color:var(--muted);padding-right:8px">READ-ONLY</div>'+
-      '</div>'+
-      '<div class="alloc-card-body">'+
-        '<div class="fg"><div class="fg-lbl">Amount</div><input class="fg-inp readonly" readonly value="'+fmt(a.cfm_allocationamount)+'"></div>'+
-        '<div class="fg"><div class="fg-lbl">Tax</div><input class="fg-inp readonly" readonly value="'+fmt(a.cfm_tax)+'"></div>'+
-        '<div class="fg"><div class="fg-lbl">Volume Discount</div><input class="fg-inp readonly" readonly value="'+fmt(a.cfm_volumediscount)+'"></div>'+
-        '<div class="fg"><div class="fg-lbl">Early Payment Disc</div><input class="fg-inp readonly" readonly value="'+fmt(a.cfm_earlypaymentdisc)+'"></div>'+
-        '<div class="fg"><div class="fg-lbl">Admin Fees</div><input class="fg-inp readonly" readonly value="'+fmt(a.cfm_adminfees)+'"></div>'+
-        '<div class="fg"><div class="fg-lbl">Rejection</div><input class="fg-inp readonly" readonly value="'+fmt(a.cfm_rejection)+'"></div>'+
-        '<div class="fg wide"><div class="fg-lbl">Gross Amount</div><input class="fg-inp readonly" readonly value="'+drawerCur()+' '+fmt(a.cfm_grossamount)+'"></div>'+
-      '</div>'+
-    '</div>';
-  }).join('');
-}
-
-function updateEditSumPill(){
-  const sum=EDIT_ALLOCS.reduce((t,a)=>t+N(a.cfm_allocationamount),0);
-  const net=N(document.getElementById('fld-net').value);
-  document.getElementById('sum-val').textContent=fmt(sum);
-  document.getElementById('net-val').textContent=fmt(net);
-  const pill=document.getElementById('sum-pill');
-  const ok = net>0 && Math.abs(sum-net)<0.01;
-  pill.className='sum-pill '+(ok?'ok':'bad');
-  pill.querySelector('span:first-child').innerHTML= ok
-    ? '<i class="fa-solid fa-circle-check"></i> Σ allocations match Collected Net'
-    : '<i class="fa-solid fa-triangle-exclamation"></i> Σ allocations differ from Collected Net — allocations are read-only';
-}
-function closeDrawer(){
-  document.getElementById('overlay').classList.remove('open');
-  document.getElementById('drawer').classList.remove('open');
-}
-function resetDrawer(){
-  document.getElementById('co-input').value='';
-  document.getElementById('co-list').classList.remove('open');
-  document.getElementById('co-list').innerHTML='';
-  const p=document.getElementById('co-panel');
-  p.className='co-panel empty';
-  p.innerHTML='<div><i class="fa-solid fa-circle-info" style="color:var(--gold-dark);margin-right:6px"></i>Pick a company — name &amp; entity fill in automatically.</div>';
-  document.getElementById('fld-net').value='';
-  document.getElementById('fld-method').value='';
-  document.getElementById('fld-paymentref').value='';
-  document.getElementById('fld-note').value='';
-  document.getElementById('alloc-body').innerHTML='';
-  SELECTED_CO=null; ALLOCS=[];
-  document.getElementById('btn-save').disabled=true;
-}
-
-function onCoSearch(){
-  const q=(document.getElementById('co-input').value||'').toLowerCase().trim();
-  const list=document.getElementById('co-list');
-  if(!q){list.classList.remove('open');list.innerHTML='';return;}
-  const hits=COMPANIES.filter(c=>{const hay=((c.cfm_companycode||'')+' '+(c.cfm_companyname||'')).toLowerCase();return hay.includes(q);}).slice(0,20);
-  if(!hits.length){list.innerHTML='<div class="co-item" style="cursor:default;color:var(--muted)">No matches — company must exist in AR Aging</div>';list.classList.add('open');return;}
-  list.innerHTML=hits.map(c=>{
-    const en=c['_cfm_type_value@OData.Community.Display.V1.FormattedValue']||'';
-    return '<div class="co-item" onclick="pickCompany(\''+c.cfm_aragingid+'\')">'
-      +'<div><div class="code">'+esc(c.cfm_companycode||'—')+'</div><div class="name">'+esc(c.cfm_companyname||'—')+'</div></div>'
-      +'<div class="entity">'+esc(en)+'</div></div>';
-  }).join('');
-  list.classList.add('open');
-}
-function pickCompany(id){
-  const c=COMPANIES.find(x=>x.cfm_aragingid===id);
-  if(!c)return;
-  SELECTED_CO={
-    id:c.cfm_aragingid,
-    code:c.cfm_companycode||'',
-    name:c.cfm_companyname||'',
-    entityId:c._cfm_type_value||'',
-    entityName:c['_cfm_type_value@OData.Community.Display.V1.FormattedValue']||'—'
-  };
-  document.getElementById('co-input').value=(c.cfm_companycode||'')+' — '+(c.cfm_companyname||'');
-  document.getElementById('co-list').classList.remove('open');
-  const p=document.getElementById('co-panel');
-  p.className='co-panel';
-  p.innerHTML=
-    '<div class="kv"><div class="k">Company Name</div><div class="v">'+esc(SELECTED_CO.name||'—')+'</div></div>'+
-    '<div class="kv"><div class="k">Entity</div><div class="v">'+esc(SELECTED_CO.entityName||'—')+'</div></div>';
-  checkSum();
-}
-
-function addAlloc(prefill){
-  const idx=ALLOCS.length;
-  const cur=new Date();
-  const defaultMonth=cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-01';
-  const a = {
-    childId: (prefill && prefill.childId) || null,   // existing Dataverse child GUID (null = new)
-    month:  (prefill && prefill.month)  || defaultMonth,
-    balance:0,
-    amount: (prefill && prefill.amount) || 0,
-    tax:    (prefill && prefill.tax)    || 0,
-    vol:    (prefill && prefill.vol)    || 0,
-    early:  (prefill && prefill.early)  || 0,
-    admin:  (prefill && prefill.admin)  || 0,
-    reject: (prefill && prefill.reject) || 0
-  };
-  ALLOCS.push(a);
-  const gross=N(a.amount)+N(a.tax)+N(a.vol)+N(a.early)+N(a.admin)+N(a.reject);
-  const container=document.getElementById('alloc-body');
-  const card=document.createElement('div');
-  card.className='alloc-card';
-  card.setAttribute('data-idx',idx);
-  card.innerHTML=
-    '<div class="alloc-card-hdr">'+
-      '<select class="month-inp" data-f="month" onchange="setAlloc('+idx+',\'month\',this.value)">'+monthOptionsHTML()+'</select>'+
-      '<button class="del-btn" onclick="removeAlloc('+idx+')" aria-label="Remove"><i class="fa-solid fa-trash"></i></button>'+
-    '</div>'+
-    '<div class="alloc-card-body">'+
-      '<div class="fg"><div class="fg-lbl">Amount</div><input class="fg-inp" type="number" step="any" placeholder="0" data-f="amount" oninput="setAlloc('+idx+',\'amount\',this.value)"></div>'+
-      '<div class="fg"><div class="fg-lbl">Tax</div><input class="fg-inp" type="number" step="any" placeholder="0" data-f="tax" oninput="setAlloc('+idx+',\'tax\',this.value)"></div>'+
-      '<div class="fg"><div class="fg-lbl">Volume Discount</div><input class="fg-inp" type="number" step="any" placeholder="0" data-f="vol" oninput="setAlloc('+idx+',\'vol\',this.value)"></div>'+
-      '<div class="fg"><div class="fg-lbl">Early Payment Disc</div><input class="fg-inp" type="number" step="any" placeholder="0" data-f="early" oninput="setAlloc('+idx+',\'early\',this.value)"></div>'+
-      '<div class="fg"><div class="fg-lbl">Admin Fees</div><input class="fg-inp" type="number" step="any" placeholder="0" data-f="admin" oninput="setAlloc('+idx+',\'admin\',this.value)"></div>'+
-      '<div class="fg"><div class="fg-lbl">Rejection</div><input class="fg-inp" type="number" step="any" placeholder="0" data-f="reject" oninput="setAlloc('+idx+',\'reject\',this.value)"></div>'+
-      '<div class="fg wide"><div class="fg-lbl">Gross Amount <span class="auto">(auto: Amount + Tax + Vol + Early + Admin + Rejection)</span></div><input class="fg-inp readonly" readonly value="'+drawerCur()+' '+fmt(gross)+'" data-f="gross"></div>'+
-    '</div>';
-  container.appendChild(card);
-  // Pre-fill inputs when reconstructing from an existing/rejected allocation
-  if(prefill){
-    card.querySelector('[data-f="month"]').value = a.month || '';
-    if(a.amount) card.querySelector('[data-f="amount"]').value = a.amount;
-    if(a.tax)    card.querySelector('[data-f="tax"]').value    = a.tax;
-    if(a.vol)    card.querySelector('[data-f="vol"]').value    = a.vol;
-    if(a.early)  card.querySelector('[data-f="early"]').value  = a.early;
-    if(a.admin)  card.querySelector('[data-f="admin"]').value  = a.admin;
-    if(a.reject) card.querySelector('[data-f="reject"]').value = a.reject;
-  }
-}
-
-function setAlloc(idx,field,val){
-  ALLOCS[idx][field]=(field==='month')?val:N(val);
-  const a=ALLOCS[idx];
-  const gross=N(a.amount)+N(a.tax)+N(a.vol)+N(a.early)+N(a.admin)+N(a.reject);
-  const card=document.querySelector('.alloc-card[data-idx="'+idx+'"]');
-  if(card){
-    const grossInp=card.querySelector('[data-f="gross"]');
-    if(grossInp) grossInp.value=drawerCur()+' '+fmt(gross);
-  }
-  checkSum();
-}
-function removeAlloc(idx){
-  if(ALLOCS.length===1){toast('At least one allocation is required','','info');return;}
-  ALLOCS.splice(idx,1);
-  document.getElementById('alloc-body').innerHTML='';
-  const copy=ALLOCS.slice(); ALLOCS=[];
-  copy.forEach(a=>addAlloc(a));   // addAlloc pre-fills inputs AND preserves childId
-  checkSum();
-}
-
-function checkSum(){
-  if(MODE==='edit'){
-    updateEditSumPill();
-    // Check lock status
-    const e = EDIT_ID ? ENTRIES.find(x=>x.id===EDIT_ID) : null;
-    if(e && isLocked(e.status)){
-      document.getElementById('btn-save').disabled = true;
-      return;
-    }
-    // In edit mode, Save is enabled once we have date + method + net
-    const net=N(document.getElementById('fld-net').value);
-    const canSave = document.getElementById('fld-date').value
-                 && document.getElementById('fld-method').value!==''
-                 && net>0 && !SAVING;
-    document.getElementById('btn-save').disabled = !canSave;
-    return;
-  }
-  // 'create' and 'reedit' share the strict Σ-allocations-must-equal-net rule.
-  const net=N(document.getElementById('fld-net').value);
-  const sum=ALLOCS.reduce((t,a)=>t+N(a.amount),0);
-  document.getElementById('sum-val').textContent=fmt(sum);
-  document.getElementById('net-val').textContent=fmt(net);
-  const pill=document.getElementById('sum-pill');
-  const ok=net>0 && Math.abs(sum-net)<0.01;
-  pill.className='sum-pill '+(ok?'ok':'bad');
-  pill.querySelector('span:first-child').innerHTML= ok
-    ? '<i class="fa-solid fa-circle-check"></i> Σ allocations match Collected Net'
-    : '<i class="fa-solid fa-circle-exclamation"></i> Σ allocations must equal Collected Net';
-  const canSave = SELECTED_CO && document.getElementById('fld-date').value && document.getElementById('fld-method').value!=='' && net>0 && ok && !SAVING;
-  document.getElementById('btn-save').disabled=!canSave;
-}
-
-/* ------------------------------------------------------------------------
-   AR Aging — ADD Daily Collection net to "Pending AR Verification".
-   ------------------------------------------------------------------------
-   Called ONCE, only from the CREATE branch of saveEntry(), immediately after
-   the Daily Collection parent record is created. This is the running total on
-   the matched AR Aging record (identified by the Daily Collection's AR Aging
-   lookup = the company the user selected).
-
-   Rules (per spec):
-     - ADD only. No subtract anywhere.
-     - Match ONLY via the existing AR Aging lookup (SELECTED_CO.id). No lookup
-       by code/BU, no fuzzy matching.
-     - If the AR Aging record is missing/invalid → do nothing. Never create one.
-     - Null existing value is treated as 0.
-     - Update ONLY the arAgingPendingField.
-   Returns true if the ADD was applied, false otherwise. Never throws — a
-   failure here must not roll back the already-created Daily Collection.       */
-async function addToArAgingPending(arAgingId, amountToAdd){
-  const add = N(amountToAdd);
-  if(!arAgingId){ console.warn('AR Aging ADD skipped: no AR Aging lookup id.'); return false; }
-  if(!(add>0)){  console.warn('AR Aging ADD skipped: amount is not > 0.');     return false; }
-  const field = SETTINGS.arAgingPendingField;
-  try{
-    // 1) Read the current running total from the matched AR Aging record.
-    const r = await fetch(
-      api()+SETTINGS.companySet+'('+arAgingId+')?$select='+field,
-      {headers:H(),credentials:'include'}
-    );
-    if(r.status===404){ console.warn('AR Aging ADD skipped: record not found (404).'); return false; }
-    if(!r.ok){ console.warn('AR Aging ADD read failed: '+r.status); return false; }
-    const row = await r.json();
-
-    // 2) Null → 0, then add the Daily Collection net.
-    const existing = N(row[field]);          // N() maps null/undefined/'' → 0
-    const newValue = existing + add;
-
-    // 3) PATCH ONLY the pending-confirmation field.
-    const patchBody = {};
-    patchBody[field] = newValue;
-    console.log('AR Aging ADD:', {arAgingId, field, existing, add, newValue});
-    await patchRow(SETTINGS.companySet, arAgingId, patchBody);
-    return true;
-  }catch(err){
-    console.error('AR Aging ADD error:', err);
-    return false;
-  }
-}
-
-async function saveEntry(){
-  if(SAVING)return;
-  SAVING=true;
-  const btn=document.getElementById('btn-save');
-  const origHtml=btn.innerHTML;
-  btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> '+(MODE==='edit'?'Updating…':(MODE==='reedit'?'Re-submitting…':'Saving…'));
-  btn.disabled=true;
-
-  // Build parent payload common to all modes
-  const parentBody={};
-  // Company lookup: bind on create, and on edit/reedit if a company is selected (allows changing it)
-  if(SELECTED_CO && SELECTED_CO.id){
-    parentBody[SETTINGS.parentCompanyBind+'@odata.bind']='/'+SETTINGS.companySet+'('+SELECTED_CO.id+')';
-  }
-  const dateVal = document.getElementById('fld-date').value;
-  parentBody.cfm_collectiondate = dateVal ? (dateVal+'T00:00:00Z') : null;
-  const methodRaw = document.getElementById('fld-method').value;
-  parentBody.cfm_paymentmethod  = methodRaw === '' ? null : parseInt(methodRaw,10);
-  parentBody.cfm_collectedamountnet = N(document.getElementById('fld-net').value);
-  parentBody.cfm_paymentreference = document.getElementById('fld-paymentref').value.trim() || null;
-  parentBody.cfm_note = document.getElementById('fld-note').value.trim() || null;
-  console.log((MODE==='edit'?'PATCH':'POST')+' parent payload:', JSON.stringify(parentBody));
-
-  try{
-    if(MODE==='edit'){
-      // Guard: don't PATCH a locked entry
-      const e = ENTRIES.find(x=>x.id===EDIT_ID);
-      if(e && isLocked(e.status)){
-        toast('Entry is locked','This entry is '+e.statusLabel+' and cannot be modified.','alert');
-        SAVING=false; btn.innerHTML=origHtml; return;
-      }
-      // Just PATCH the parent — allocations are read-only in edit mode
-      await patchRow(SETTINGS.parentSet, EDIT_ID, parentBody);
-      toast('Entry updated','Fields saved.','success');
-      closeDrawer();
-      await reload();
-      return;
-    }
-
-    if(MODE==='reedit'){
-      // Rejected entry → full edit. Guard: must still be Rejected.
-      const e = ENTRIES.find(x=>x.id===EDIT_ID);
-      if(e && e.status!==AR_STATUS.REJECTED){
-        toast('Cannot re-submit','This entry is no longer in Rejected status.','alert');
-        SAVING=false; btn.innerHTML=origHtml; return;
-      }
-      // 1) PATCH the parent — on re-submit, send status BACK to Pending AR Verification
-      parentBody.cfm_statusaction = AR_STATUS.PENDING_VERIFY;
-      await patchRow(SETTINGS.parentSet, EDIT_ID, parentBody);
-
-      // 2) Sync children: update existing, add new, delete removed
-      const buildChildBody=(a)=>{
-        const amt=N(a.amount),tax=N(a.tax),vol=N(a.vol),early=N(a.early),admin=N(a.admin),reject=N(a.reject);
-        const body={
-          cfm_allocatetomonth: a.month || null,
-          cfm_allocatetoclaim: amt,
-          cfm_allocationamount: amt,
-          cfm_tax: tax, cfm_volumediscount: vol, cfm_earlypaymentdisc: early,
-          cfm_adminfees: admin, cfm_rejection: reject,
-          cfm_grossamount: amt+tax+vol+early+admin+reject
-        };
-        return body;
-      };
-      const keptIds = new Set(ALLOCS.map(a=>a.childId).filter(Boolean));
-      let cOk=0,cFail=0,firstErr='';
-      // update + create
-      for(const a of ALLOCS){
-        const body=buildChildBody(a);
+      // fetch weeks for each breakdown IN PARALLEL
+      const owners = await Promise.all(bdata.value.map(async function(b){
+        let name=(b.stf_Employee&&b.stf_Employee[EMP_NAME_FIELD])||null;
+        if(!name && b["_stf_employee_value@OData.Community.Display.V1.FormattedValue"]) name=b["_stf_employee_value@OData.Community.Display.V1.FormattedValue"];
+        if(!name) name="(owner)";
+        let weeks=[];
         try{
-          if(a.childId){
-            await patchRow(SETTINGS.childSet, a.childId, body);
-          }else{
-            body[SETTINGS.childParentBind+'@odata.bind']='/'+SETTINGS.parentSet+'('+EDIT_ID+')';
-            await postRow(SETTINGS.childSet, body);
-          }
-          cOk++;
-        }catch(err){cFail++;if(!firstErr)firstErr=err.message;}
-      }
-      // delete removed originals
-      for(const oldId of ORIGINAL_CHILD_IDS){
-        if(!keptIds.has(oldId)){
-          try{await deleteRow(SETTINGS.childSet, oldId);}catch(err){cFail++;if(!firstErr)firstErr=err.message;}
-        }
-      }
-      if(cFail>0){
-        toast('Re-submitted with issues','Sent back to AR (Pending Verification); '+cFail+' allocation change(s) failed: '+firstErr,'alert');
-      }else{
-        toast('Sent back to AR','Status set to Pending AR Verification. '+cOk+' allocation'+(cOk===1?'':'s')+' saved.','success');
-      }
-      closeDrawer();
-      await reload();
-      return;
-    }
+          const wq="$select=cfm_collectionplanweekid,cfm_weeknumber,cfm_plan,cfm_actual"
+                 +"&$filter=_cfm_kpiachievementbreakdown_value eq "+b.stf_kpiachievmentbreakdownid+" and statecode eq 0&$orderby=cfm_weeknumber asc";
+          const wdata=await dvGet(API+"/"+SET_WEEK+"?"+wq);
+          weeks=wdata.value.map(function(w){ return {id:w.cfm_collectionplanweekid, number:w.cfm_weeknumber||0, plan:num(w.cfm_plan), actual:num(w.cfm_actual)}; });
+        }catch(weekErr){ console.warn("weeks load failed:", weekErr.message); }
+        return {
+          breakdownId:b.stf_kpiachievmentbreakdownid,
+          achievementId:a.pm_kpiachievmentid,
+          month:a.pm_month, year:a.pm_year,
+          name:name, initials:initials(name),
+          target:num(b.comp_breakdowntarget),
+          weeks:weeks
+        };
+      }));
+      return owners;
+    }));
 
-    // ── CREATE ── new entries start as "Awaiting documents" ──────────────────
-    parentBody.cfm_statusaction = AR_STATUS.AWAITING_DOCS;
-    const parent=await postRow(SETTINGS.parentSet,parentBody);
-    const parentId=parent[SETTINGS.parentIdField];
-    let childOk=0,childFail=0,firstChildErr='';
-    for(const a of ALLOCS){
-      const amt   = N(a.amount);
-      const tax   = N(a.tax);
-      const vol   = N(a.vol);
-      const early = N(a.early);
-      const admin = N(a.admin);
-      const reject= N(a.reject);
-      const gross = amt + tax + vol + early + admin + reject;
-      const body={};
-      body[SETTINGS.childParentBind+'@odata.bind']='/'+SETTINGS.parentSet+'('+parentId+')';
-      body.cfm_allocatetomonth  = a.month || null;      // Date Only "YYYY-MM-DD"
-      body.cfm_allocatetoclaim  = amt;                  // Decimal — same as amount (user confirmed same purpose)
-      body.cfm_allocationamount = amt;                  // Decimal
-      body.cfm_tax              = tax;                  // Decimal
-      body.cfm_volumediscount   = vol;                  // Decimal
-      body.cfm_earlypaymentdisc = early;                // Decimal
-      body.cfm_adminfees        = admin;                // Decimal
-      body.cfm_rejection        = reject;               // Decimal
-      body.cfm_grossamount      = gross;                // Decimal
-      console.log('Allocation child payload:', JSON.stringify(body));
-      try{await postRow(SETTINGS.childSet,body);childOk++;}
-      catch(e){childFail++;if(!firstChildErr)firstChildErr=e.message;}
-    }
-    if(childFail>0 && childOk===0){
-      try{await deleteRow(SETTINGS.parentSet,parentId);}catch(_){}
-      throw new Error('Child save failed: '+firstChildErr);
-    }
+    perAch.forEach(function(owners){ owners.forEach(function(o){ ALL_OWNERS.push(o); }); });
 
-    // ── ADD to AR Aging "Pending AR Verification" (create-only, once) ──────────
-    // Tied directly to the successful creation of THIS Daily Collection record.
-    // Uses the Daily Collection's AR Aging lookup (the selected company) to find
-    // the exact AR Aging record. Add-only; treats null as 0; never creates a row.
-    const arAgingId = SELECTED_CO && SELECTED_CO.id;
-    const netToAdd  = N(parentBody.cfm_collectedamountnet);
-    const added = await addToArAgingPending(arAgingId, netToAdd);
-    if(added){
-      console.log('AR Aging pending-confirmation updated for', arAgingId);
-    }else{
-      // Non-fatal: the Daily Collection was created; the AR Aging update just
-      // didn't apply (no lookup, no matching record, or read/patch issue).
-      console.warn('AR Aging pending-confirmation NOT updated (see logs above).');
-    }
-
-    toast('Entry saved','Saved as Awaiting documents — upload a document to move it to Pending AR Verification. Recorded '+childOk+' allocation'+(childOk===1?'':'s')+(childFail?', '+childFail+' failed':''),childFail?'alert':'success');
-    closeDrawer();
-    await reload();
-  }catch(err){
-    toast('Save failed',err.message,'alert');
-  }finally{
-    SAVING=false;
-    btn.innerHTML=origHtml;
-    checkSum();
+    st.textContent="";
+    console.log("[loadAll] total owners loaded:", ALL_OWNERS.length);
+    buildFilters();
+    render();
+  }catch(e){
+    st.style.color="var(--danger)"; st.textContent=e.message; console.error(e);
+    if(body) body.innerHTML="<tr><td colspan='6' class='empty'>Couldn't load data: "+e.message+"</td></tr>";
   }
 }
 
-async function reload(){
-  const tbody=document.getElementById('dc-body');
-  tbody.innerHTML=Array.from({length:4},()=>'<tr class="skel-row"><td colspan="11"><div class="skel" style="width:'+(60+Math.random()*30)+'%"></div></td></tr>').join('');
-  try{
-    await discoverAllBinds();
-    const [rawEntries,rawCompanies,methods]=await Promise.all([loadEntries(),loadCompanies(),loadMethodChoices()]);
-    METHOD_CHOICES=methods;
-    const sel=document.getElementById('fld-method');
-    sel.innerHTML='<option value="">Select…</option>'+methods.map(m=>'<option value="'+m.value+'">'+esc(m.label)+'</option>').join('');
-    COMPANIES=rawCompanies;                        // set FIRST — normaliseEntry joins against this
-    ENTRIES=rawEntries.map(normaliseEntry);
-    const counts=await loadAllocationCounts(ENTRIES.map(e=>e.id));
-    ENTRIES.forEach(e=>e.allocCount=counts[e.id]||0);
-    buildFilterOptions();
-    renderTable();
-  }catch(err){
-    tbody.innerHTML='<tr><td colspan="11" class="state-cell"><div class="state-icon error"><i class="fa-solid fa-circle-exclamation"></i></div><div class="state-title">Couldn\'t load entries</div><div class="state-msg">'+esc(err.message)+'</div></td></tr>';
-    toast('Load error',err.message,'alert');
-  }
-}
-
-/* ========================================================================
-   Documents (SharePoint via Power Automate flow)
-   folderName = "{Ref}_{GUID}"  ·  flow handles action = upload | list | delete
-   ======================================================================== */
-let DOCS_FOLDER=null, DOCS_READONLY=false, DOCS_ID=null, DOCS_REF=null;
-
-function docsFolderName(entry){
-  // Human-readable: "CompanyName - Code - dd-mm-yyyy - (full GUID)"
-  // SharePoint-forbidden chars removed: " * : < > ? / \ |  (and trailing dots/spaces)
-  const strip = s => String(s==null?'':s).replace(/["*:<>?/\\|]/g,'').replace(/\s+/g,' ').trim();
-  const name = strip(entry.companyName) || 'Company';
-  const code = strip(entry.companyCode) || 'NA';
-  // Date Only → dd-mm-yyyy
-  let dateStr = 'NODATE';
-  if(entry.date){
-    const d = new Date(entry.date);
-    if(!isNaN(d)){
-      const dd = String(d.getDate()).padStart(2,'0');
-      const mm = String(d.getMonth()+1).padStart(2,'0');
-      dateStr = dd+'-'+mm+'-'+d.getFullYear();
-    }
-  }
-  const guid = (entry.id||'').replace(/[{}]/g,'') || 'no-guid';
-  const refInParen = strip(entry.ref) || 'REF';
-  // Ref (autonumber) shown in parentheses for readability
-  return name+' - '+code+' - '+dateStr+' - ('+refInParen+')';
-}
-function docExt(name){return (name||'').split('.').pop().toLowerCase();}
-function docIconClass(ext){
-  if(ext==='pdf')return 'pdf';
-  if(['png','jpg','jpeg','gif','webp','bmp','svg','heic'].includes(ext))return 'img';
-  if(['doc','docx','rtf','txt'].includes(ext))return 'doc';
-  if(['xls','xlsx','xlsb','csv'].includes(ext))return 'xls';
-  return '';
-}
-function docIcon(ext){
-  if(ext==='pdf')return 'fa-file-pdf';
-  if(['png','jpg','jpeg','gif','webp','bmp','svg','heic'].includes(ext))return 'fa-file-image';
-  if(['doc','docx','rtf','txt'].includes(ext))return 'fa-file-word';
-  if(['xls','xlsx','xlsb','csv'].includes(ext))return 'fa-file-excel';
-  if(['ppt','pptx'].includes(ext))return 'fa-file-powerpoint';
-  if(['zip','rar','7z'].includes(ext))return 'fa-file-zipper';
-  return 'fa-file';
-}
-function fmtBytes(b){
-  b=Number(b||0);
-  if(!b)return '';
-  if(b<1024)return b+' B';
-  if(b<1048576)return (b/1024).toFixed(0)+' KB';
-  return (b/1048576).toFixed(1)+' MB';
-}
-async function docsFlow(payload){
-  if(!SETTINGS.docsFlowUrl) throw new Error('Documents flow URL is not configured.');
-  const r=await fetch(SETTINGS.docsFlowUrl,{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify(payload)
+// ================= filters =================
+function buildFilters(){
+  const monthSel=document.getElementById("f-month");
+  if(!ALL_OWNERS.length){ monthSel.innerHTML="<option value=''>No data</option>"; rebuildOwnerFilter(); render(); return; }
+  const months=[...new Set(ALL_OWNERS.map(function(o){return o.month;}))].sort(function(a,b){return b-a;});
+  const prevM=monthSel.value;
+  monthSel.innerHTML="";
+  months.forEach(function(m){
+    const o=document.createElement("option"); o.value=m; o.textContent=MONTHS[m]||m; monthSel.appendChild(o);
   });
-  if(!r.ok){const t=await r.text();throw new Error('Flow '+r.status+': '+t.slice(0,200));}
-  const txt=await r.text();
-  try{return txt?JSON.parse(txt):null;}catch(_){return txt;}
+  if(prevM && months.includes(parseInt(prevM,10))) monthSel.value=prevM;
+  monthSel.onchange=function(){ rebuildOwnerFilter(); render(); };
+
+  rebuildOwnerFilter();
+}
+function rebuildOwnerFilter(){
+  const m=parseInt(document.getElementById("f-month").value,10);
+  const ownerSel=document.getElementById("f-owner");
+  const prev=ownerSel.value;
+  const names=[...new Set(ALL_OWNERS.filter(function(o){return o.month===m;}).map(function(o){return o.name;}))].sort();
+  ownerSel.innerHTML="<option value=''>All owners</option>";
+  names.forEach(function(n){ const o=document.createElement("option"); o.value=n; o.textContent=n; ownerSel.appendChild(o); });
+  if(prev && names.includes(prev)) ownerSel.value=prev;
+  ownerSel.onchange=render;
+}
+function currentView(){
+  const m=parseInt(document.getElementById("f-month").value,10);
+  const owner=document.getElementById("f-owner").value;
+  return ALL_OWNERS.filter(function(o){ return o.month===m && (!owner || o.name===owner); });
 }
 
-// Called from openDrawerEdit — entry is the record, readOnly=true for locked statuses
-function initDocsSection(entry, readOnly){
-  const sec=document.getElementById('docs-sec');
-  // Hidden entirely if no flow configured, or on create (record not saved yet)
-  if(!SETTINGS.docsFlowUrl || !entry || !entry.id){
-    sec.style.display='none';
-    return;
-  }
-  DOCS_FOLDER = docsFolderName(entry);
-  DOCS_ID  = (entry.id||'').replace(/[{}]/g,'');   // clean GUID for Dataverse update
-  DOCS_REF = entry.ref || '';
-  DOCS_READONLY = !!readOnly;
-  sec.style.display='';
-  document.getElementById('docs-upload-label').style.display = readOnly ? 'none' : '';
+// ================= render =================
+function render(){
+  const owners=currentView();
+  const m=parseInt(document.getElementById("f-month").value,10);
+  document.getElementById("hdr-month").textContent = MONTHS[m]?("· "+MONTHS[m].toUpperCase()):"";
 
-  // Upload-only mode: flow only supports "upload" — no listing/deleting yet.
-  if(SETTINGS.docsUploadOnly){
-    document.getElementById('docs-count').textContent='';
-    document.getElementById('docs-note').textContent = readOnly
-      ? 'This entry is locked — uploading is disabled.'
-      : 'Any file type. Files are uploaded to SharePoint.';
-    document.getElementById('docs-list').innerHTML =
-      '<div class="docs-empty"><i class="fa-solid fa-cloud-arrow-up"></i>'+
-      (readOnly ? 'Documents cannot be viewed here yet.' : 'Click Upload to attach files to this collection.')+
-      '</div>';
-    return;   // do NOT call loadDocs (list not implemented)
-  }
+  const totalPlanned=sum(owners,function(o){ return sum(o.weeks,function(w){return w.plan;}); });
+  const totalAchieved=sum(owners,function(o){ return sum(o.weeks,function(w){return w.actual;}); });
+  const rate=totalPlanned>0?(totalAchieved/totalPlanned*100):0;
 
-  document.getElementById('docs-note').textContent = readOnly
-    ? 'This entry is locked — documents are view-only.'
-    : 'Any file type. Stored on SharePoint, not in Dataverse.';
-  document.getElementById('docs-count').textContent='';
-  loadDocs();
+  document.getElementById("sum-planned").textContent=Math.round(totalPlanned);
+  document.getElementById("sum-planned-note").textContent="across "+owners.length+" task owner"+(owners.length===1?"":"s");
+  document.getElementById("sum-achieved").textContent=Math.round(totalAchieved);
+  document.getElementById("sum-rate").textContent=rate.toFixed(1)+"%";
+  document.getElementById("sum-rate-bar").style.width=Math.min(100,rate).toFixed(1)+"%";
+  document.getElementById("owners-title").textContent="Task owners "+owners.length;
+
+  const body=document.getElementById("owners-body"); body.innerHTML="";
+  if(!owners.length){ body.innerHTML="<tr><td colspan='6' class='empty'>No task owners for this selection.</td></tr>"; renderChart(owners); return; }
+
+  owners.forEach(function(o,idx){
+    const planned=sum(o.weeks,function(w){return w.plan;});
+    const achieved=sum(o.weeks,function(w){return w.actual;});
+    const p=planned>0?(achieved/planned*100):0;
+    const col=AVATAR_COLORS[idx%AVATAR_COLORS.length];
+
+    const tr=document.createElement("tr"); tr.className="owner-row";
+    tr.innerHTML=
+      "<td><div class='who'>"+
+        "<button class='caret' onclick='toggleWeeks("+idx+")' id='caret-"+idx+"'>▸</button>"+
+        "<div class='ava' style='background:"+col[0]+";color:"+col[1]+"'>"+o.initials+"</div>"+
+        "<div><div class='nm'>"+o.name+"</div><div class='tags'><span class='chip'>"+o.weeks.length+" weeks</span></div></div>"+
+      "</div></td>"+
+      "<td class='num planned'>"+Math.round(planned)+"</td>"+
+      "<td class='num achieved'>"+Math.round(achieved)+"</td>"+
+      "<td class='num pct "+pctClass(p)+"'>"+p.toFixed(1)+"%</td>"+
+      "<td class='num'><span class='month-chip'>▦ "+(MONTHS[o.month]||o.month)+"</span></td>"+
+      "<td class='num'><button class='del' title='Remove'>🗑</button></td>";
+    body.appendChild(tr);
+
+    const wtr=document.createElement("tr"); wtr.className="weeks-row"; wtr.id="weeks-"+idx; wtr.style.display="none";
+    const cell=document.createElement("td"); cell.colSpan=6;
+    const grid=document.createElement("div"); grid.className="weeks-grid";
+    o.weeks.forEach(function(w,wi){
+      const prog=w.plan>0?Math.min(100,w.actual/w.plan*100):0;
+      const d=document.createElement("div"); d.className="wk";
+      d.innerHTML=
+        "<div class='wtitle'>Week "+(w.number||wi+1)+"</div>"+
+        "<div class='pair'>"+
+          "<div><small>Plan</small><input type='text' value='"+w.plan+"' readonly/></div>"+
+          "<div><small>Actual</small><input type='text' inputmode='numeric' value='"+w.actual+"' onchange='onActualChange("+idx+","+wi+",this.value)' id='act-"+idx+"-"+wi+"'/></div>"+
+        "</div>"+
+        "<div class='wbar'><span id='wbar-"+idx+"-"+wi+"' style='width:"+prog.toFixed(0)+"%'></span></div>";
+      grid.appendChild(d);
+    });
+    cell.appendChild(grid); wtr.appendChild(cell); body.appendChild(wtr);
+  });
+  renderChart(owners);
 }
-
-async function loadDocs(){
-  const list=document.getElementById('docs-list');
-  list.innerHTML='<div class="doc-uploading"><i class="fa-solid fa-spinner fa-spin"></i> Loading documents…</div>';
-  try{
-    const res=await docsFlow({action:'list', folderName:DOCS_FOLDER});
-    // Normalise: flow may return an array, {value:[...]}, or an "empty/not found" marker
-    let files=[];
-    if(Array.isArray(res)) files=res;
-    else if(res && Array.isArray(res.value)) files=res.value;
-    else if(res && Array.isArray(res.files)) files=res.files;
-    // A "folder not found" result (no files yet) is NOT an error — just show empty state
-    renderDocs(files);
-  }catch(err){
-    // Treat "folder/list not found" (record has no uploads yet) as an empty list, quietly.
-    const msg=(err&&err.message)||'';
-    const notFound = /not\s*found|404|does not exist|itemnotfound|list not found|no\s*such/i.test(msg);
-    if(notFound){
-      renderDocs([]);   // show the normal "No documents yet" empty state
-    }else{
-      // Real error (network, auth, flow crash) — show it, but softly
-      list.innerHTML='<div class="docs-empty"><i class="fa-solid fa-circle-info"></i> Couldn\'t load documents right now. '+
-        (DOCS_READONLY?'':'You can still upload — click Upload.')+'</div>';
-      document.getElementById('docs-count').textContent='';
-    }
-  }
+function toggleWeeks(idx){
+  const row=document.getElementById("weeks-"+idx); const c=document.getElementById("caret-"+idx);
+  const open=row.style.display!=="none"; row.style.display=open?"none":"table-row"; c.textContent=open?"▸":"▾";
 }
-
-function renderDocs(files){
-  const list=document.getElementById('docs-list');
-  document.getElementById('docs-count').textContent = files.length ? '('+files.length+')' : '';
-  if(!files.length){
-    list.innerHTML='<div class="docs-empty"><i class="fa-solid fa-folder-open"></i>'+
-      (DOCS_READONLY?'No documents attached.':'No documents yet — click Upload to attach files.')+'</div>';
-    return;
-  }
-  list.innerHTML=files.map(f=>{
-    const name=f.name||'file';
-    const ext=docExt(name);
-    const url=f.url||'#';
-    const path=(f.path||'').replace(/"/g,'&quot;');
-    const size=fmtBytes(f.size);
-    const delBtn = DOCS_READONLY ? '' :
-      '<button class="del" title="Delete" onclick="deleteDoc(\''+encodeURIComponent(f.path||'')+'\',\''+esc(name)+'\')"><i class="fa-solid fa-trash"></i></button>';
-    return '<div class="doc-row">'+
-      '<div class="doc-ico '+docIconClass(ext)+'"><i class="fa-solid '+docIcon(ext)+'"></i></div>'+
-      '<div class="doc-meta"><div class="doc-name" title="'+esc(name)+'">'+esc(name)+'</div>'+
-        '<div class="doc-sub">'+esc(ext.toUpperCase())+(size?' · '+size:'')+'</div></div>'+
-      '<div class="doc-act">'+
-        '<a href="'+esc(url)+'" target="_blank" rel="noopener" title="Open"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>'+
-        delBtn+
-      '</div>'+
-    '</div>';
-  }).join('');
-}
-
-function fileToBase64(file){
-  return new Promise((res,rej)=>{
-    const r=new FileReader();
-    r.onload=()=>res(String(r.result).split(',')[1]);   // strip data: prefix
-    r.onerror=()=>rej(new Error('Could not read '+file.name));
-    r.readAsDataURL(file);
+function renderChart(owners){
+  const cb=document.getElementById("chart-body"); cb.innerHTML="";
+  owners.forEach(function(o){
+    const planned=sum(o.weeks,function(w){return w.plan;});
+    const achieved=sum(o.weeks,function(w){return w.actual;});
+    const p=planned>0?(achieved/planned*100):0;
+    const color=p>=35?"var(--amber)":"var(--danger)";
+    const row=document.createElement("div"); row.className="crow";
+    row.innerHTML=
+      "<div class='cname'>"+o.name+"</div>"+
+      "<div class='ctrack'><span style='width:"+Math.min(100,p).toFixed(1)+"%;background:"+color+"'></span></div>"+
+      "<div class='cval'>"+Math.round(achieved)+" / "+Math.round(planned)+"</div>"+
+      "<div class='cpct' style='color:"+color+"'>"+p.toFixed(1)+"%</div>";
+    cb.appendChild(row);
   });
 }
 
-// After a successful upload, if the entry is still Awaiting documents (or null),
-// promote it to Pending AR Verification — both in Dataverse and in the local cache.
-async function promoteAfterUpload(){
-  if(!DOCS_ID) return;
-  const cleanId = DOCS_ID.replace(/[{}]/g,'').toLowerCase();
-  const e = ENTRIES.find(x=> (x.id||'').replace(/[{}]/g,'').toLowerCase() === cleanId);
-  const cur = e ? e.status : null;
-  if(cur===AR_STATUS.AWAITING_DOCS || cur==null){
-    try{
-      await patchRow(SETTINGS.parentSet, DOCS_ID, { cfm_statusaction: AR_STATUS.PENDING_VERIFY });
-      if(e){
-        e.status = AR_STATUS.PENDING_VERIFY;
-        e.statusLabel = AR_STATUS_LABEL[AR_STATUS.PENDING_VERIFY];
-      }
-      toast('Status updated','Moved to Pending AR Verification.','success');
-      // Refresh the in-drawer status pill + banner if the drawer is still open on this entry
-      if(EDIT_ID===entryIdFor(cleanId)){
-        refreshDrawerStatus(e);
-      }
-    }catch(err){
-      toast('Status not updated','Documents uploaded, but status could not change: '+err.message,'alert');
-    }
+// ================= actual change -> save week + resum stf_value =================
+async function onActualChange(oIdx,wIdx,val){
+  const st=document.getElementById("status");
+  const owner=currentView()[oIdx]; const wk=owner.weeks[wIdx];
+  wk.actual=num(val);
+  st.style.color="var(--muted)"; st.textContent="Saving actual…";
+  try{
+    await dvPatch(SET_WEEK, wk.id, { "cfm_actual": wk.actual });
+    const totalActual=sum(owner.weeks,function(w){return w.actual;});
+    await dvPatch(SET_BREAKDOWN, owner.breakdownId, { "stf_value": totalActual });
+    const bar=document.getElementById("wbar-"+oIdx+"-"+wIdx);
+    if(bar) bar.style.width=(wk.plan>0?Math.min(100,wk.actual/wk.plan*100):0).toFixed(0)+"%";
+    render();
+    const row=document.getElementById("weeks-"+oIdx); if(row){ row.style.display="table-row"; const c=document.getElementById("caret-"+oIdx); if(c)c.textContent="▾"; }
+    st.style.color="var(--success)"; st.textContent="Saved.";
+  }catch(e){ st.style.color="var(--danger)"; st.textContent=e.message; console.error(e); }
+}
+
+// ================= export =================
+function exportCsv(){
+  const owners=currentView();
+  let rows=[["Task owner","Monthly planned","Monthly achieved","Achievement %","Month"]];
+  owners.forEach(function(o){
+    const pl=sum(o.weeks,function(w){return w.plan;}), ac=sum(o.weeks,function(w){return w.actual;});
+    const p=pl>0?(ac/pl*100).toFixed(1):"0.0";
+    rows.push([o.name,Math.round(pl),Math.round(ac),p+"%",MONTHS[o.month]||o.month]);
+  });
+  const csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(",");}).join("\n");
+  const blob=new Blob([csv],{type:"text/csv"}); const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download="visits-planned-actual.csv"; a.click(); URL.revokeObjectURL(url);
+}
+
+
+// ================= config =================
+// (shared) const API = "https://org319b4ea9.crm4.dynamics.com/api/data/v9.2";
+// (shared) const SET_ACHIEVEMENT = "pm_kpiachievments";
+const SET_KPI         = "strategy_kpises";
+// (shared) const SET_BREAKDOWN   = "stf_kpiachievmentbreakdowns";
+const SET_EMPLOYEE    = "hr_employees";
+// (shared) const SET_WEEK        = "cfm_collectionplanweeks";
+
+// (shared) const KPI_NAME_FIELD = "strategy_newcolumn";
+const KPI_CODE_FIELD = "cr18c_kpicode";
+// (shared) const EMP_NAME_FIELD  = "hr_fullname";
+// (shared) const DEFAULT_KPI_NAME = "No. of Visits";
+const BU_ID = "0a650dd0-5d4f-f011-877a-6045bd9979f4";
+const BREAKDOWN_TYPE = 5;
+
+// Confirmed nav property (schema names are case-sensitive):
+//   stf_kpiachievmentbreakdown_Total -> "stf_Total" (pm_kpiachievment)
+const NAV_TOTAL_CONFIRMED    = "stf_Total";
+const NAV_EMPLOYEE_CONFIRMED = "stf_Employee"; // confirmed
+// (shared) NAV_WEEK_BRK_CANDIDATES declared in dashboard scope
+
+// (shared) MONTHS
+
+// ================= auth =================
+// (shared) getToken / authHeaders / dvGet
+// (shared) dvPost
+
+// ================= year-from-month =================
+function resolveYear(m){
+  const now = new Date(); const cm = now.getMonth()+1; let y = now.getFullYear();
+  if (m < cm-6) y+=1; else if (m > cm+6) y-=1; return y;
+}
+function refreshYear(){
+  const m = parseInt(document.getElementById("month").value,10);
+  document.getElementById("year-out").textContent = resolveYear(m);
+}
+
+// ================= step 1 mode toggle =================
+let mode = "existing";
+function setMode(m){
+  mode = m;
+  document.getElementById("btn-existing").classList.toggle("on", m==="existing");
+  document.getElementById("btn-new").classList.toggle("on", m==="new");
+  document.getElementById("pane-existing").style.display = m==="existing"?"block":"none";
+  document.getElementById("pane-new").style.display = m==="new"?"block":"none";
+  if(typeof syncFooterChips==="function") syncFooterChips();
+}
+
+// ================= step 1 loaders =================
+async function loadAchievements(){
+  const q = "$select=pm_kpiachievmentid,pm_name,pm_month,pm_year"
+          + "&$expand=pm_kpi($select="+KPI_NAME_FIELD+")"
+          + "&$filter=statecode eq 0&$orderby=createdon desc";
+  const data = await dvGet(API+"/"+SET_ACHIEVEMENT+"?"+q);
+  const sel = document.getElementById("ach-select"); sel.innerHTML="";
+  if (!data.value.length){ sel.innerHTML="<option value=''>No achievements yet</option>"; return; }
+  let def = -1;
+  data.value.forEach(function(a,i){
+    const name = (a.pm_kpi && a.pm_kpi[KPI_NAME_FIELD]) || "(KPI)";
+    const period = (MONTHS[a.pm_month]||a.pm_month)+" "+a.pm_year;
+    const opt = document.createElement("option");
+    opt.value = a.pm_kpiachievmentid; opt.textContent = name+" — "+period;
+    sel.appendChild(opt);
+    if (def===-1 && name.trim().toLowerCase()===DEFAULT_KPI_NAME.toLowerCase()) def=i;
+  });
+  sel.selectedIndex = def!==-1?def:0;
+}
+async function loadKpis(){
+  const q = "$select="+KPI_NAME_FIELD+","+KPI_CODE_FIELD+"&$filter=statecode eq 0&$orderby=createdon desc";
+  const data = await dvGet(API+"/"+SET_KPI+"?"+q);
+  const sel = document.getElementById("kpi-select"); sel.innerHTML="";
+  let def=0;
+  data.value.forEach(function(k,i){
+    const name = k[KPI_NAME_FIELD]||"(unnamed KPI)";
+    const code = k[KPI_CODE_FIELD]?" — "+k[KPI_CODE_FIELD]:"";
+    const opt = document.createElement("option");
+    opt.value = k.strategy_kpisid; opt.textContent = name+code;
+    sel.appendChild(opt);
+    if (name.trim().toLowerCase()===DEFAULT_KPI_NAME.toLowerCase()) def=i;
+  });
+  if (data.value.length) sel.selectedIndex=def;
+}
+
+// employees cached for owner dropdowns
+let EMPLOYEES = [];
+async function loadEmployees(){
+  const q = "$select="+EMP_NAME_FIELD+"&$filter=statecode eq 0&$orderby="+EMP_NAME_FIELD;
+  const data = await dvGet(API+"/"+SET_EMPLOYEE+"?"+q);
+  EMPLOYEES = data.value.map(function(e){ return { id:e.hr_employeeid, name:e[EMP_NAME_FIELD]||"(unnamed)" }; });
+}
+
+// ================= step 1 create achievement =================
+async function createAchievement(args){
+  return dvPost(SET_ACHIEVEMENT, {
+    "pm_month": args.month,
+    "pm_year": args.year,
+    "pm_kpi@odata.bind": "/"+SET_KPI+"("+args.kpiId+")",
+    "pm_businessunit@odata.bind": "/businessunits("+args.buId+")"
+  });
+}
+
+// ================= step 1 continue =================
+
+function showStep(n){
+  const s1=document.getElementById("step1"), s2=document.getElementById("step2");
+  const t1=document.getElementById("stp-1"), t2=document.getElementById("stp-2");
+  const bc=document.getElementById("btn-cancel"), bb=document.getElementById("btn-back");
+  const bcont=document.getElementById("btn-continue"), bcreate=document.getElementById("btn-create-kpi");
+  if(n===1){
+    s1.style.display="block"; s2.style.display="none";
+    t1.className="step active"; t2.className="step";
+    t1.querySelector(".scircle").textContent="1";
+    bc.style.display=""; bb.style.display="none"; bcont.style.display=""; bcreate.style.display="none";
+  }else{
+    s1.style.display="none"; s2.style.display="block";
+    t1.className="step done"; t2.className="step active";
+    t1.querySelector(".scircle").textContent="✓";
+    bc.style.display="none"; bb.style.display=""; bcont.style.display="none"; bcreate.style.display="";
   }
 }
-// Resolve the original entry id (with any casing/braces) from a cleaned id
-function entryIdFor(cleanId){
-  const e = ENTRIES.find(x=> (x.id||'').replace(/[{}]/g,'').toLowerCase() === cleanId);
-  return e ? e.id : null;
-}
-// Update the AR Status pill in the co-panel + the proof banner after promotion
-function refreshDrawerStatus(e){
-  if(!e) return;
-  const panelStatus = document.querySelector('#co-panel .kv:nth-child(2) .v');
-  if(panelStatus){
-    const cls = statusPillClass(e.status);
-    const ico = statusIcon(e.status);
-    panelStatus.innerHTML = '<span class="pill '+cls+'"><i class="fa-solid '+ico+'"></i> '+esc(displayStatusLabel(e))+'</span>';
+function syncFooterChips(){
+  const footKpi=document.getElementById("foot-kpi");
+  const footMonth=document.getElementById("foot-month");
+  const kpiSel=document.getElementById(mode==="existing"?"ach-select":"kpi-select");
+  if(footKpi){
+    const kpiTxt=(kpiSel && kpiSel.selectedOptions && kpiSel.selectedOptions[0])?kpiSel.selectedOptions[0].textContent:"KPI";
+    footKpi.textContent=kpiTxt.split(" — ")[0];
   }
-  const proofEl=document.getElementById('proof-note');
-  if(proofEl){
-    proofEl.style.background='';
-    proofEl.style.borderColor='';
-    proofEl.innerHTML='<i class="fa-solid fa-clock" style="color:var(--warning)"></i> <span>Now <strong>Pending AR Verification</strong> — AR will review the uploaded documents.</span>';
+  const mSel=document.getElementById("month");
+  if(footMonth && mSel && mSel.options[mSel.selectedIndex]){
+    footMonth.textContent=mSel.options[mSel.selectedIndex].textContent;
   }
 }
 
-async function onDocsSelected(fileList){
-  if(DOCS_READONLY){toast('Locked','This entry is locked — cannot upload.','alert');return;}
-  const files=Array.from(fileList||[]);
-  if(!files.length)return;
-  document.getElementById('docs-file-input').value='';   // reset so same file can re-trigger
-  const list=document.getElementById('docs-list');
-  // Remove the "empty / click Upload" placeholder before showing uploaded rows
-  const empty=list.querySelector('.docs-empty');
-  if(empty) empty.remove();
-  let ok=0,fail=0,firstErr='';
-  for(const file of files){
-    // Progress row
-    const prog=document.createElement('div');
-    prog.className='doc-uploading';
-    prog.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Uploading '+esc(file.name)+'…';
-    list.prepend(prog);
-    try{
-      const b64=await fileToBase64(file);
-      await docsFlow({
-        action:'upload',
-        folderName:DOCS_FOLDER,
-        collectionId:DOCS_ID,      // GUID → flow updates the Daily Collection record
-        collectionRef:DOCS_REF,
-        fileName:file.name,
-        fileContentBase64:b64
+async function onContinue(){
+  const status = document.getElementById("wiz-status");
+  const btn = document.getElementById("btn-continue");
+  status.style.color="var(--muted)"; btn.disabled=true;
+  try{
+    let achievementId;
+    if (mode==="existing"){
+      achievementId = document.getElementById("ach-select").value;
+      if (!achievementId) throw new Error("Select an achievement first.");
+    } else {
+      status.textContent="Saving…";
+      const month = parseInt(document.getElementById("month").value,10);
+      const year = resolveYear(month);
+      const kpiId = document.getElementById("kpi-select").value;
+      if (!kpiId) throw new Error("No KPI selected.");
+      const ach = await createAchievement({ kpiId:kpiId, month:month, year:year, buId:BU_ID });
+      achievementId = ach.pm_kpiachievmentid;
+    }
+    window.__achievementId = achievementId;
+
+    // move to step 2
+    const achRef=document.getElementById("ach-ref"); if(achRef) achRef.textContent=achievementId;
+    showStep(2); syncFooterChips();
+    if (!EMPLOYEES.length) await loadEmployees();
+    if (!document.querySelectorAll(".owner-card").length) addOwner(); // seed one row
+  }catch(e){
+    status.style.color="var(--danger)"; status.textContent=e.message; console.error(e);
+  }finally{ btn.disabled=false; }
+}
+function backToStep1(){ showStep(1); }
+
+// ================= step 2: weeks + owners grid =================
+let weeks = 4;
+function changeWeeks(d){
+  weeks = Math.max(1, Math.min(53, weeks + d));
+  document.getElementById("weeks-val").textContent = weeks;
+  document.querySelectorAll(".owner-card").forEach(rebuildWeekInputs);
+  recalcTotals();
+}
+function empOptions(selectedId){
+  return EMPLOYEES.map(function(e){
+    const s = e.id===selectedId?" selected":"";
+    return "<option value='"+e.id+"'"+s+">"+e.name+"</option>";
+  }).join("");
+}
+let ownerSeq = 0;
+function addOwner(){
+  const id = "owner-"+(ownerSeq++);
+  const div = document.createElement("div");
+  div.className = "owner-card"; div.id = id;
+  div.innerHTML =
+    "<button class='del' title='Remove' onclick=\"this.parentNode.remove();recalcTotals();\">🗑</button>"+
+    "<label>Task owner</label>"+
+    "<select class='emp'>"+empOptions(null)+"</select>"+
+    "<div class='wk-inputs'></div>";
+  document.getElementById("owners").appendChild(div);
+  rebuildWeekInputs(div);
+  recalcTotals();
+}
+function rebuildWeekInputs(card){
+  const wrap = card.querySelector(".wk-inputs");
+  // preserve existing values
+  const prev = {};
+  wrap.querySelectorAll("input.plan").forEach(function(inp){ prev[inp.dataset.wk] = inp.value; });
+  let html = "";
+  for (let w=1; w<=weeks; w++){
+    const v = prev[w] !== undefined ? prev[w] : "1";
+    html += "<div class='wk'><label>Week "+w+"</label>"+
+            "<input type='text' inputmode='numeric' class='plan' data-wk='"+w+"' value='"+v+"' oninput='recalcTotals()'/></div>";
+  }
+  html += "<div class='rowtotal'><div class='lbl'>Row total</div><div class='num rt'>0</div></div>";
+  wrap.innerHTML = html;
+}
+// (shared) num
+function recalcTotals(){
+  let grand = 0;
+  document.querySelectorAll(".owner-card").forEach(function(card){
+    let sum = 0;
+    card.querySelectorAll("input.plan").forEach(function(inp){ sum += num(inp.value); });
+    card.querySelector(".rt").textContent = Math.round(sum);
+    grand += sum;
+  });
+  document.getElementById("total-planned").textContent = Math.round(grand);
+}
+
+// ================= step 2: create everything =================
+function isoWeekRange(){ // simple placeholder week dating from today
+  const base = new Date();
+  return function(w){
+    const from = new Date(base); from.setDate(base.getDate() + (w-1)*7);
+    const to = new Date(from); to.setDate(from.getDate()+6);
+    return { from: from.toISOString(), to: to.toISOString() };
+  };
+}
+async function createBreakdown(navTotal, navEmp, args){
+  const body = { "stf_breakdowntype": BREAKDOWN_TYPE, "comp_breakdowntarget": args.target, "stf_value": args.value };
+  body[navTotal+"@odata.bind"] = "/"+SET_ACHIEVEMENT+"("+args.achievementId+")";
+  body[navEmp+"@odata.bind"]   = "/"+SET_EMPLOYEE+"("+args.employeeId+")";
+  return dvPost(SET_BREAKDOWN, body);
+}
+// (shared) WEEK_NAV_OK declared in dashboard scope
+async function createWeek(args){
+  const body = {
+    "cfm_weeknumber": args.weekNumber,
+    "cfm_plan": args.plan,
+    "cfm_actual": args.actual,           // null on create; updated later
+    "cfm_weekfrom": args.from,
+    "cfm_weekto": args.to
+  };
+  // link week row to the OWNER'S BREAKDOWN
+  body[NAV_WEEK_BRK+"@odata.bind"] = "/"+SET_BREAKDOWN+"("+args.breakdownId+")";
+  return dvPost(SET_WEEK, body);
+}
+
+async function onCreateAll(){
+  const st = document.getElementById("wiz-status");
+  const btn = document.getElementById("btn-create-kpi");
+  const achievementId = window.__achievementId;
+  const cards = Array.from(document.querySelectorAll(".owner-card"));
+  if (!achievementId){ st.style.color="var(--danger)"; st.textContent="No achievement id."; return; }
+  if (!cards.length){ st.style.color="var(--danger)"; st.textContent="Add at least one task owner."; return; }
+
+  // validate
+  for (const card of cards){
+    if (!card.querySelector(".emp").value){ st.style.color="var(--danger)"; st.textContent="Select a task owner in every row."; return; }
+  }
+
+  st.style.color="var(--muted)"; st.textContent="Creating…"; btn.disabled=true;
+  const weekDate = isoWeekRange();
+  let created = 0, weekRecs = 0;
+  try{
+    for (const card of cards){
+      const employeeId = card.querySelector(".emp").value;
+      const plans = Array.from(card.querySelectorAll("input.plan")).map(function(i){ return num(i.value); });
+      const target = plans.reduce(function(a,b){ return a+b; }, 0); // sum of plan => breakdown target
+      // breakdown value = sum of actual; on create there is no actual yet => 0
+      const brk = await createBreakdown(NAV_TOTAL_CONFIRMED, NAV_EMPLOYEE_CONFIRMED, {
+        achievementId: achievementId, employeeId: employeeId, target: target, value: 0
       });
-      ok++;
-      if(SETTINGS.docsUploadOnly){
-        // No list endpoint — show a confirmed "uploaded" chip in place of the progress row
-        const ext=docExt(file.name);
-        prog.className='doc-row';
-        prog.innerHTML='<div class="doc-ico '+docIconClass(ext)+'"><i class="fa-solid '+docIcon(ext)+'"></i></div>'+
-          '<div class="doc-meta"><div class="doc-name" title="'+esc(file.name)+'">'+esc(file.name)+'</div>'+
-          '<div class="doc-sub"><i class="fa-solid fa-check" style="color:var(--green-dark)"></i> Uploaded · '+fmtBytes(file.size)+'</div></div>';
+      created++;
+
+      // one collectionplanweek per week, linked to THIS OWNER'S breakdown
+      const breakdownId = brk.stf_kpiachievmentbreakdownid;
+      for (let w=1; w<=plans.length; w++){
+        const d = weekDate(w);
+        await createWeek({
+          breakdownId: breakdownId,
+          weekNumber: w, plan: plans[w-1], actual: null,
+          from: d.from, to: d.to
+        });
+        weekRecs++;
       }
-    }catch(err){fail++;if(!firstErr)firstErr=err.message;prog.remove();}
-    if(!SETTINGS.docsUploadOnly) prog.remove();
-  }
-  if(ok)   toast('Upload complete', ok+' file'+(ok===1?'':'s')+' attached'+(fail?', '+fail+' failed':''), fail?'alert':'success');
-  if(!ok&&fail) toast('Upload failed', firstErr,'alert');
-
-  // ── After first successful upload: Awaiting documents → Pending AR Verification ──
-  if(ok){
-    await promoteAfterUpload();
-  }
-
-  if(!SETTINGS.docsUploadOnly) await loadDocs();
+    }
+    st.style.color="var(--success)";
+    st.textContent = "Done. Created "+created+" breakdown(s) and "+weekRecs+" week row(s). "+
+                     "Breakdown target = sum of plan; breakdown value = sum of actual (updates when actuals change).";
+    console.log("All records created for achievement", achievementId);
+    afterWizardCreated(achievementId);
+  }catch(e){
+    st.style.color="var(--danger)"; st.textContent=e.message; console.error(e);
+  }finally{ btn.disabled=false; }
 }
 
-async function deleteDoc(encPath,name){
-  if(DOCS_READONLY)return;
-  const path=decodeURIComponent(encPath||'');
-  if(!confirm('Delete "'+name+'"? This cannot be undone.'))return;
+
+
+
+// ================= create-wizard modal controls =================
+function openWizard(){
+  document.getElementById("wizard-overlay").classList.add("open");
+  showStep(1);
+  document.getElementById("owners").innerHTML="";
+  document.getElementById("wiz-status").textContent="";
+  wizInit();
+}
+function closeWizard(){ document.getElementById("wizard-overlay").classList.remove("open"); }
+async function wizInit(){
   try{
-    await docsFlow({action:'delete', folderName:DOCS_FOLDER, filePath:path});
-    toast('Deleted', name,'success');
-    await loadDocs();
-  }catch(err){
-    toast('Delete failed', err.message,'alert');
+    document.getElementById("month").value=String(new Date().getMonth()+1);
+    refreshYear();
+    const mEl=document.getElementById("month");
+    mEl.addEventListener("change", function(){ refreshYear(); syncFooterChips(); });
+    await Promise.all([ loadAchievements(), loadKpis(), (EMPLOYEES.length?Promise.resolve():loadEmployees()) ]);
+    showStep(1); syncFooterChips();
+  }catch(e){
+    document.getElementById("wiz-status").style.color="var(--danger)";
+    document.getElementById("wiz-status").textContent=e.message; console.error(e);
   }
 }
 
-const TI={success:'fa-circle-check',alert:'fa-triangle-exclamation',info:'fa-circle-info'};
-function toast(title,msg,kind){
-  const el=document.createElement('div');
-  el.className='toast '+(kind||'info');
-  el.innerHTML='<div class="toast-icon"><i class="fa-solid '+(TI[kind||'info'])+'"></i></div><div class="toast-body"><div class="toast-title">'+esc(title)+'</div>'+(msg?'<div class="toast-msg">'+esc(msg)+'</div>':'')+'</div>';
-  document.getElementById('toast-rack').appendChild(el);
-  setTimeout(()=>{el.style.opacity='0';el.style.transform='translateX(50px)';},4200);
-  setTimeout(()=>el.remove(),4700);
+// after wizard creates records, close modal + reload dashboard, jump to that month
+function afterWizardCreated(achievementId){
+  closeWizard();
+  loadAll().then(function(){
+    const created=ALL_OWNERS.find(function(o){return o.achievementId===achievementId;});
+    if(created){ document.getElementById("f-month").value=created.month; rebuildOwnerFilter(); render(); }
+  });
 }
 
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('drawer').classList.contains('open'))closeDrawer();});
-document.addEventListener('DOMContentLoaded',()=>{
-  document.getElementById('fld-method').addEventListener('change',checkSum);
-  document.getElementById('fld-date').addEventListener('change',checkSum);
-  reload();
-});
+// ================= init =================
+(async function init(){
+  try{ await loadAll(); }
+  catch(e){
+    console.error("init failed:", e);
+    const b=document.getElementById("owners-body");
+    if(b) b.innerHTML="<tr><td colspan='6' class='empty'>Load error: "+(e.message||e)+"</td></tr>";
+  }
+})();
 </script>
 </body>
 </html>

@@ -26,6 +26,13 @@ export const dataSourcesInfo = {
     "dataSourceType": "Dataverse",
     "apis": {}
   },
+  "cfm_collectionplanweeks": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cfm_collectionplanweekid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
   "cfm_dailycollections": {
     "tableId": "",
     "version": "",
@@ -40,6 +47,13 @@ export const dataSourcesInfo = {
     "dataSourceType": "Dataverse",
     "apis": {}
   },
+  "cfm_highriskcompanieses": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cfm_highriskcompaniesid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
   "cfm_insurancecompanies": {
     "tableId": "",
     "version": "",
@@ -51,6 +65,13 @@ export const dataSourcesInfo = {
     "tableId": "",
     "version": "",
     "primaryKey": "cfm_slaid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "cfm_weeklytargetses": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cfm_weeklytargetsid",
     "dataSourceType": "Dataverse",
     "apis": {}
   },
@@ -86,6 +107,34 @@ export const dataSourcesInfo = {
     "tableId": "",
     "version": "",
     "primaryKey": "cr301_visitid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "hr_employees": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "hr_employeeid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "pm_kpiachievments": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "pm_kpiachievmentid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "stf_kpiachievmentbreakdowns": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "stf_kpiachievmentbreakdownid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "strategy_kpises": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "strategy_kpisid",
     "dataSourceType": "Dataverse",
     "apis": {}
   },

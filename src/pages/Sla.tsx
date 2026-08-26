@@ -31,12 +31,6 @@ const SLA_SELECT = [
 
 const TAG = { COLLECTION: 766340000, AR: 766340001, AP: 766340002 } as const;
 const TAG_LABEL: Record<number, string> = { 766340000: 'Collection', 766340001: 'AR', 766340002: 'AP' };
-const TAG_PILLS = [
-  { value: null as number | null, label: 'All' },
-  { value: TAG.COLLECTION as number, label: 'Collection' },
-  { value: TAG.AR as number, label: 'AR' },
-  { value: TAG.AP as number, label: 'AP' },
-];
 
 const SLA_TYPE = { DATE: 766340000, HOURS: 766340001 } as const;
 const SLA_TYPE_LABEL: Record<number, string> = { 766340000: 'Date', 766340001: 'Hours' };
@@ -48,12 +42,6 @@ const SLA_TYPE_OPTIONS = [
 function formattedValue(record: unknown, attribute: string): string {
   const raw = (record as Record<string, unknown>)[`${attribute}@OData.Community.Display.V1.FormattedValue`];
   return typeof raw === 'string' ? raw : '';
-}
-
-function tagPillClass(v: number | null): string {
-  if (v === TAG.AR) return 'sla-tag-ar';
-  if (v === TAG.AP) return 'sla-tag-ap';
-  return 'sla-tag-collection';
 }
 
 interface UserOption {
@@ -173,7 +161,8 @@ export default function SlaPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [query, setQuery] = useState('');
-  const [tagFilter, setTagFilter] = useState<number | null>(TAG.COLLECTION);
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
 
   const [toastMsg, setToastMsg] = useState('');
   const [toastOn, setToastOn] = useState(false);
@@ -183,7 +172,6 @@ export default function SlaPage() {
   const [editId, setEditId] = useState<string | null>(null);
 
   const [formAction, setFormAction] = useState('');
-  const [formTag, setFormTag] = useState(String(TAG.COLLECTION));
   const [formSlaType, setFormSlaType] = useState(String(SLA_TYPE.HOURS));
   const [formSlaValue, setFormSlaValue] = useState('');
   const [formDept1, setFormDept1] = useState('');
@@ -240,28 +228,39 @@ export default function SlaPage() {
     load();
   }, []);
 
+  // This page is Collection-only now (the Tag picker was removed from the create/edit
+  // form and every rule saved through it is tagged Collection) — the list matches that,
+  // filtering to Collection-tagged rows rather than showing legacy AR/AP/untagged ones.
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
-      if (tagFilter != null && r.tag !== tagFilter) return false;
+      if (r.tag !== TAG.COLLECTION) return false;
       if (q && !`${r.action} ${r.department1} ${r.department2} ${r.responsibleName}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [rows, query, tagFilter]);
+  }, [rows, query]);
 
-  const kpis = useMemo(() => {
-    const total = rows.length;
-    const collection = rows.filter((r) => r.tag === TAG.COLLECTION).length;
-    const ar = rows.filter((r) => r.tag === TAG.AR).length;
-    const ap = rows.filter((r) => r.tag === TAG.AP).length;
-    return { total, collection, ar, ap };
-  }, [rows]);
+  useEffect(() => {
+    setPage(1);
+  }, [query]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const clampedPage = Math.min(page, totalPages);
+  const pageRows = filtered.slice((clampedPage - 1) * pageSize, (clampedPage - 1) * pageSize + pageSize);
+
+  function pagerButtons(): (number | 'ellipsis')[] {
+    const pages: (number | 'ellipsis')[] = [];
+    for (let p = 1; p <= totalPages; p++) {
+      if (p === 1 || p === totalPages || Math.abs(p - clampedPage) <= 1) pages.push(p);
+      else if (Math.abs(p - clampedPage) === 2) pages.push('ellipsis');
+    }
+    return pages;
+  }
 
   function openCreateDrawer() {
     setMode('create');
     setEditId(null);
     setFormAction('');
-    setFormTag(String(TAG.COLLECTION));
     setFormSlaType(String(SLA_TYPE.HOURS));
     setFormSlaValue('');
     setFormDept1('');
@@ -282,7 +281,6 @@ export default function SlaPage() {
     setMode('edit');
     setEditId(row.id);
     setFormAction(row.action === '—' ? '' : row.action);
-    setFormTag(String(row.tag ?? TAG.COLLECTION));
     setFormSlaType(String(row.slaType ?? SLA_TYPE.HOURS));
     setFormSlaValue(row.slaValue);
     setFormDept1(row.department1);
@@ -312,7 +310,7 @@ export default function SlaPage() {
     try {
       const body: Record<string, unknown> = {
         cfm_action: formAction.trim(),
-        cfm_tagename: parseInt(formTag, 10),
+        cfm_tagename: TAG.COLLECTION,
         cfm_slatype: parseInt(formSlaType, 10),
         cfm_slanoofhoursordate: formSlaValue.trim() || null,
         cfm_department1: formDept1.trim() || null,
@@ -348,51 +346,11 @@ export default function SlaPage() {
         <div className="acc-head">
           <div>
             <h1 className="acc-title">SLA</h1>
-            <div className="acc-sub">Escalation and deduction rules per department and action — Collection, AR and AP.</div>
           </div>
           <div className="acc-actions">
             <button className="acc-btn acc-btn-primary" onClick={openCreateDrawer}>
               <i className="fa-solid fa-plus"></i> Create SLA rule
             </button>
-          </div>
-        </div>
-
-        <div className="kpi-grid">
-          <div className="kpi-card">
-            <div className="kpi-top">
-              <span className="kpi-icon kpi-icon-gold">
-                <i className="fa-solid fa-file-contract"></i>
-              </span>
-              <span className="kpi-label">Total SLA rules</span>
-            </div>
-            <div className="kpi-value">{loading ? '—' : kpis.total}</div>
-          </div>
-          <div className="kpi-card kpi-gold">
-            <div className="kpi-top">
-              <span className="kpi-icon kpi-icon-gold">
-                <i className="fa-solid fa-hand-holding-dollar"></i>
-              </span>
-              <span className="kpi-label">Collection</span>
-            </div>
-            <div className="kpi-value">{loading ? '—' : kpis.collection}</div>
-          </div>
-          <div className="kpi-card kpi-info">
-            <div className="kpi-top">
-              <span className="kpi-icon kpi-icon-info">
-                <i className="fa-solid fa-scale-balanced"></i>
-              </span>
-              <span className="kpi-label">AR</span>
-            </div>
-            <div className="kpi-value">{loading ? '—' : kpis.ar}</div>
-          </div>
-          <div className="kpi-card kpi-warn">
-            <div className="kpi-top">
-              <span className="kpi-icon kpi-icon-warn">
-                <i className="fa-solid fa-file-invoice-dollar"></i>
-              </span>
-              <span className="kpi-label">AP</span>
-            </div>
-            <div className="kpi-value">{loading ? '—' : kpis.ap}</div>
           </div>
         </div>
 
@@ -409,21 +367,11 @@ export default function SlaPage() {
             </div>
           </div>
 
-          <div className="dm-category-bar">
-            <span className="dm-category-label">Tag</span>
-            {TAG_PILLS.map((p) => (
-              <button key={String(p.value)} className={`dm-cat-pill${tagFilter === p.value ? ' active' : ''}`} onClick={() => setTagFilter(p.value)}>
-                {p.label}
-              </button>
-            ))}
-          </div>
-
           <div className="dm-tablewrap">
             <table>
               <thead>
                 <tr>
                   <th>Action</th>
-                  <th>Tag</th>
                   <th>Type</th>
                   <th>SLA</th>
                   <th>Department 1</th>
@@ -437,7 +385,7 @@ export default function SlaPage() {
                 {loading ? (
                   Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: 9 }).map((__, j) => (
+                      {Array.from({ length: 8 }).map((__, j) => (
                         <td key={j}>
                           <div className="acc-skel"></div>
                         </td>
@@ -446,7 +394,7 @@ export default function SlaPage() {
                   ))
                 ) : loadError ? (
                   <tr>
-                    <td colSpan={9}>
+                    <td colSpan={8}>
                       <div className="acc-state">
                         <i className="fa-solid fa-triangle-exclamation"></i>
                         Could not load SLA rules.
@@ -457,7 +405,7 @@ export default function SlaPage() {
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={9}>
+                    <td colSpan={8}>
                       <div className="acc-state">
                         <i className="fa-solid fa-inbox"></i>
                         No SLA rules match your filters.
@@ -465,12 +413,9 @@ export default function SlaPage() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((r) => (
+                  pageRows.map((r) => (
                     <tr key={r.id} className="dm-row" onClick={() => openEditDrawer(r)}>
                       <td className="dm-company">{r.action}</td>
-                      <td>
-                        <span className={`sla-pill ${tagPillClass(r.tag)}`}>{r.tagLabel}</span>
-                      </td>
                       <td>{r.slaTypeLabel}</td>
                       <td>{r.slaValue || '—'}</td>
                       <td>
@@ -490,6 +435,32 @@ export default function SlaPage() {
               </tbody>
             </table>
           </div>
+          {!loading && !loadError && filtered.length > 0 && (
+            <div className="acc-foot">
+              <span>
+                {filtered.length} SLA rule{filtered.length !== 1 ? 's' : ''}
+              </span>
+              <div className="acc-pg">
+                <button disabled={clampedPage <= 1} onClick={() => setPage(clampedPage - 1)}>
+                  ‹
+                </button>
+                {pagerButtons().map((p, i) =>
+                  p === 'ellipsis' ? (
+                    <span key={`e${i}`} style={{ padding: '0 4px' }}>
+                      …
+                    </span>
+                  ) : (
+                    <button key={p} className={p === clampedPage ? 'active' : ''} onClick={() => setPage(p)}>
+                      {p}
+                    </button>
+                  )
+                )}
+                <button disabled={clampedPage >= totalPages} onClick={() => setPage(clampedPage + 1)}>
+                  ›
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -511,27 +482,15 @@ export default function SlaPage() {
             <input placeholder="e.g. Follow up on rejected collection" value={formAction} onChange={(e) => setFormAction(e.target.value)} />
           </div>
 
-          <div className="dm-fld-row">
-            <div className="acc-fld">
-              <label>Tag</label>
-              <select value={formTag} onChange={(e) => setFormTag(e.target.value)}>
-                {TAG_PILLS.filter((p) => p.value != null).map((p) => (
-                  <option key={p.value} value={p.value as number}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="acc-fld">
-              <label>SLA type</label>
-              <select value={formSlaType} onChange={(e) => setFormSlaType(e.target.value)}>
-                {SLA_TYPE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="acc-fld">
+            <label>SLA type</label>
+            <select value={formSlaType} onChange={(e) => setFormSlaType(e.target.value)}>
+              {SLA_TYPE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="acc-fld">

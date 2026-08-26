@@ -1,0 +1,119 @@
+/* Weekly Targets & Achievement — matches the rest of the app's shared light
+   look (Visits Log / Accounts / Agents): kpi-grid summary cards, a plain white
+   table with a light header row, and acc-visit-status pill badges for
+   Achievement %. Chrome (buttons, drawer, KPI cards, table shell) comes from
+   shared.css; this file covers only what's specific to this page — the
+   expandable group/week table rows and the BU typeahead in the create drawer. */
+
+/* Any acc-btn on this page dims properly when disabled — shared.css never
+   defined this, so a disabled "Save Updates" otherwise looked identical to an
+   active button (heavy, clickable-looking) with nothing to actually click. */
+.wt-page .acc-btn:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
+
+/* Header action buttons are fully pill-shaped on this page (design ask),
+   distinct from the ~9px radius shared.css uses everywhere else. */
+.wt-page .acc-actions .acc-btn{border-radius:999px}
+
+/* "+ New" is the one gold-filled action — distinct from the dark "Save
+   updates" button next to it once there are pending edits. */
+.acc-btn-gold{background:var(--gold);color:#fff;border-color:var(--gold)}
+.acc-btn-gold:hover{background:var(--hover-btn-primary);border-color:var(--hover-btn-primary)}
+
+.wt-count-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;
+  padding:0 6px;border-radius:999px;background:rgba(255,255,255,.22);color:#fff;font-size:11px;font-weight:700}
+
+/* Single, centered call-to-action for the true "nothing here yet" state —
+   replaces two separate orphaned "no data" messages (one of which used to sit
+   inside the cards grid and render off to one side instead of centered). */
+.wt-empty-hero{background:var(--card);border:1px solid var(--line);border-radius:14px;
+  box-shadow:var(--shadow);padding:56px 24px;margin-bottom:20px;display:flex;flex-direction:column;
+  align-items:center;text-align:center;gap:6px}
+.wt-empty-icon{width:72px;height:72px;border-radius:50%;background:var(--goldbg);color:var(--gold);
+  display:flex;align-items:center;justify-content:center;font-size:26px;margin-bottom:14px}
+.wt-empty-hero h3{margin:0;font-family:'Outfit',sans-serif;font-weight:700;font-size:19px;color:var(--ink)}
+.wt-empty-hero p{margin:6px 0 0;color:var(--muted);font-size:13.5px;max-width:420px}
+.wt-empty-note{display:inline-flex;align-items:center;gap:6px;margin:14px 0 20px;color:var(--muted);font-size:12px}
+.wt-empty-note i{color:var(--muted);font-size:12px;margin:0}
+
+.wt-tbl-scroll{overflow:auto;max-height:70vh}
+.wt-tbl{width:100%;border-collapse:separate;border-spacing:0;min-width:960px}
+.wt-tbl thead{position:sticky;top:0;z-index:5}
+.wt-tbl thead th{background:#fbf8f2;color:var(--muted);font-weight:600;font-size:12px;
+  padding:12px 16px;text-align:left;white-space:nowrap;letter-spacing:.02em;border-bottom:1px solid var(--line)}
+.wt-tbl thead th.wt-numeric{text-align:right}
+.wt-tbl tbody td{padding:11px 16px;border-bottom:1px solid var(--line);font-size:13.5px;
+  color:var(--ink);vertical-align:middle;white-space:nowrap;background:var(--card)}
+.wt-tbl tbody td.wt-numeric{text-align:right;font-variant-numeric:tabular-nums}
+.wt-col-bold{font-family:'Outfit',sans-serif;font-weight:600}
+
+.wt-tbl tbody tr.wt-group-row{cursor:pointer}
+.wt-tbl tbody tr.wt-group-row td{background:#fbf8f2}
+.wt-tbl tbody tr.wt-group-row:hover td{background:var(--hover-bg)}
+.wt-tbl tbody tr.wt-week-row:hover td{background:var(--hover-bg)}
+
+/* "Weeks" cell reads as a small dropdown/select rather than a plain pill —
+   bordered box + chevron, matching the rest of the app's select styling. */
+.wt-weeks-select{display:inline-flex;align-items:center;justify-content:space-between;gap:10px;
+  min-width:92px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);
+  font-size:12.5px;font-weight:500;color:var(--ink)}
+.wt-weeks-select i{font-size:10px;color:var(--muted)}
+
+.wt-tbl tfoot{position:sticky;bottom:0}
+.wt-tbl tfoot td{font-weight:500;color:var(--ink);border-top:2px solid var(--gold);padding:12px 16px;background:#fbf8f2}
+
+.wt-pct-input{display:inline-flex;align-items:center;gap:4px;justify-content:flex-end}
+.wt-pct-input input{width:56px;padding:5px 6px;border:1px solid var(--line);border-radius:7px;
+  font-family:'Inter';font-size:12.5px;text-align:right;background:#fbf8f2;color:var(--ink)}
+.wt-pct-input input:focus{outline:none;border-color:var(--gold);background:#fff}
+.wt-pct-input span{color:var(--muted);font-size:12px}
+
+.wt-num-input{width:110px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;
+  font-family:'Inter';font-size:12.5px;text-align:right;background:#fbf8f2;color:var(--ink)}
+.wt-num-input:focus{outline:none;border-color:var(--gold);background:#fff}
+
+/* BU typeahead — used inside the "New Weekly Target" drawer */
+.wt-lookup{position:relative}
+.wt-lookup-results{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:20;
+  background:var(--card);border:1px solid var(--line);border-radius:9px;box-shadow:var(--shadow);
+  max-height:220px;overflow-y:auto;display:none}
+.wt-lookup-results.open{display:block}
+.wt-lookup-item{padding:9px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--line)}
+.wt-lookup-item:last-child{border-bottom:none}
+.wt-lookup-item:hover{background:var(--hover-bg)}
+.wt-lookup-empty{padding:12px;font-size:12px;color:var(--muted);text-align:center}
+.wt-selected-bu{display:inline-flex;align-items:center;gap:8px;margin-top:8px;padding:5px 12px;
+  background:var(--goldbg);border-radius:999px;font-size:12.5px;color:var(--brown);font-weight:500}
+.wt-selected-bu button{all:unset;cursor:pointer;color:var(--gold);font-weight:700;padding:0 2px;line-height:1}
+
+/* Responsive — the shell/sidebar already collapses to an off-canvas overlay
+   below 760px (Layout.tsx); this page still needs its own action bar to wrap
+   instead of overflowing (shared.css's .acc-actions never wraps), the empty
+   hero to shrink its padding, and the drawer's field row to stack. The table
+   itself is intentionally left to horizontal-scroll inside .wt-tbl-scroll
+   (same pattern Collection Plan uses for its wide table) rather than trying
+   to cram nine data columns into a phone width. */
+@media(max-width:900px){
+  .wt-page .acc-head{flex-wrap:wrap;row-gap:12px}
+  .wt-page .acc-actions{flex-wrap:wrap;width:100%}
+}
+@media(max-width:760px){
+  .wt-page{padding:14px}
+  .wt-page .acc-actions .acc-btn{flex:1 1 calc(50% - 4px);justify-content:center}
+  .wt-empty-hero{padding:36px 16px}
+  .wt-empty-icon{width:56px;height:56px;font-size:20px;margin-bottom:10px}
+  .wt-empty-hero h3{font-size:17px}
+}
+@media(max-width:480px){
+  .wt-page .acc-actions .acc-btn{flex:1 1 100%}
+  .wt-page .kpi-grid{grid-template-columns:1fr}
+}
+
+/* Dark theme */
+:root[data-theme="dark"] .wt-tbl thead th{background:#232820}
+:root[data-theme="dark"] .wt-tbl tfoot td{background:#232820}
+:root[data-theme="dark"] .wt-tbl tbody tr.wt-group-row td{background:#232820}
+:root[data-theme="dark"] .wt-pct-input input,
+:root[data-theme="dark"] .wt-num-input{background:#1c2118;color:var(--ink);border-color:var(--line)}
+:root[data-theme="dark"] .wt-pct-input input:focus,
+:root[data-theme="dark"] .wt-num-input:focus{background:#232920}
+:root[data-theme="dark"] .wt-lookup-results{background:var(--card);border-color:var(--line)}

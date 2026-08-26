@@ -39,6 +39,8 @@ export type Cr301_agentsstatuscode = keyof typeof Cr301_agentsstatuscode;
 
 export interface Cr301_agentsBase {
   anoyer_isfinance?: boolean;
+  "cfm_Employee@odata.bind"?: string;
+  cfm_iscollection?: boolean;
   cr18c_area?: Cr301_agentscr18c_area;
   cr18c_specialization?: Cr301_agentscr18c_specialization;
   "cr301_Agent@odata.bind": string;
@@ -46,6 +48,7 @@ export interface Cr301_agentsBase {
   cr301_newcolumn: string;
   "cr301_SalesTeam@odata.bind": string;
   importsequencenumber?: number;
+  "ms_BU@odata.bind"?: string;
   overriddencreatedon?: string;
   statecode: Cr301_agentsstatecode;
   statuscode?: Cr301_agentsstatuscode;
@@ -55,6 +58,8 @@ export interface Cr301_agentsBase {
 
 export interface Cr301_agents extends Cr301_agentsBase {
   anoyer_isfinancename?: string;
+  cfm_employeename?: string;
+  cfm_iscollectionname?: string;
   cr18c_areaname?: string;
   cr18c_specializationname?: string;
   cr301_agentname?: string;
@@ -79,6 +84,7 @@ export interface Cr301_agents extends Cr301_agentsBase {
   modifiedon?: string;
   modifiedonbehalfbyname?: string;
   modifiedonbehalfbyyominame: string;
+  ms_buname?: string;
   ownerid: string;
   owneridname: string;
   owneridtype: string;
@@ -87,6 +93,8 @@ export interface Cr301_agents extends Cr301_agentsBase {
   statecodename?: string;
   statuscodename?: string;
   versionnumber?: number;
+  cfm_employee?: object;
+  _cfm_employee_value?: string;
   cr301_agent?: object;
   _cr301_agent_value?: string;
   cr301_salesteam?: object;
@@ -99,6 +107,8 @@ export interface Cr301_agents extends Cr301_agentsBase {
   _modifiedby_value?: string;
   modifiedonbehalfby?: object;
   _modifiedonbehalfby_value?: string;
+  ms_bu?: object;
+  _ms_bu_value?: string;
   owningbusinessunit?: object;
   _owningbusinessunit_value?: string;
   owningteam?: object;
