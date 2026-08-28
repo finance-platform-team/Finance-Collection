@@ -12,6 +12,7 @@ import type { Hr_employees } from '../generated/models/Hr_employeesModel';
 import { operationErrorMessage } from '../lib/errors';
 import { fetchAll } from '../lib/dataverse';
 import { visitStatusClass } from '../lib/visitStatus';
+import { escapeForCsv, downloadCsv } from '../lib/csvExport';
 import './Visits.css';
 
 const VISIT_KPI_NAME = 'No. of Visits';
@@ -533,7 +534,6 @@ export default function VisitsPage() {
   }
 
   function exportCsv() {
-    const escapeForCsv = (value: string) => `"${value.replace(/"/g, '""')}"`;
     const header = ['Task Owner', 'Task Owner 2', 'Company', 'Company Code', 'Visit Date', 'Visit Status', 'Visit Type', 'Revisit Date', 'Comments'];
     const rows = view.map((v) => [
       v.owner,
@@ -546,14 +546,7 @@ export default function VisitsPage() {
       fmtDate(v.revisit),
       v.notes,
     ]);
-    const csv = [header, ...rows].map((r) => r.map(escapeForCsv).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'visits_log.csv';
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadCsv('visits_log.csv', [header, ...rows].map((r) => r.map(escapeForCsv).join(',')));
   }
 
   function pagerButtons() {

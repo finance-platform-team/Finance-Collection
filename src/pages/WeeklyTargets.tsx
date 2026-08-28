@@ -8,6 +8,7 @@ import type { Pm_kpiachievments, Pm_kpiachievmentsBase, Pm_kpiachievmentspm_mont
 import type { Cfm_collectionplanweeks, Cfm_collectionplanweeksBase } from '../generated/models/Cfm_collectionplanweeksModel';
 import { operationErrorMessage } from '../lib/errors';
 import { KSA_BU_CODES, type Region } from '../lib/useRegion';
+import { escapeForCsv, downloadCsv } from '../lib/csvExport';
 import './WeeklyTargets.css';
 
 /**
@@ -103,10 +104,6 @@ async function fetchAll<T>(
     guard++;
   } while (token && guard < 50);
   return out;
-}
-
-function escapeForCsv(value: string | number): string {
-  return `"${String(value).replace(/"/g, '""')}"`;
 }
 
 interface BuAggregate {
@@ -590,13 +587,7 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
         );
       });
     });
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `weekly_targets_${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadCsv(`weekly_targets_${new Date().toISOString().slice(0, 10)}.csv`, lines);
   }
 
   return (

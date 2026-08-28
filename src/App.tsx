@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Layout, { type PageKey } from './components/Layout';
+import AndalusiaLoader from './components/AndalusiaLoader';
 import { useRegion } from './lib/useRegion';
 import { DEFAULT_PAGE } from './lib/featureFlags';
 import CollectionPlanPage from './pages/CollectionPlan';
@@ -16,6 +17,14 @@ import VisitPlanPage from './pages/VisitPlan';
 function App() {
   const [page, setPage] = useState<PageKey>(DEFAULT_PAGE);
   const [region, setRegion] = useRegion();
+  const [booting, setBooting] = useState(true);
+
+  useEffect(() => {
+    const id = setTimeout(() => setBooting(false), 600);
+    return () => clearTimeout(id);
+  }, []);
+
+  if (booting) return <AndalusiaLoader />;
 
   return (
     <Layout active={page} onNavigate={setPage} region={region} onRegionChange={setRegion}>

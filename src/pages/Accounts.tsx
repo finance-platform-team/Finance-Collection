@@ -9,6 +9,7 @@ import { Cr301_agentsService } from '../generated/services/Cr301_agentsService';
 import { Cr301_visitscr301_visitstatus, Cr301_visitscr301_visittype } from '../generated/models/Cr301_visitsModel';
 import { operationErrorMessage } from '../lib/errors';
 import { visitStatusClass } from '../lib/visitStatus';
+import { escapeForCsv, downloadCsv } from '../lib/csvExport';
 import './Accounts.css';
 
 const TYPE_INSURANCE: Cr301_accountscr301_accounttype = 983080002;
@@ -81,10 +82,6 @@ function classBadgeClass(cls: string): string {
   if (cls === 'B') return 'acc-cls-B';
   if (cls === 'C') return 'acc-cls-C';
   return 'acc-cls-none';
-}
-
-function escapeForCsv(value: string | number): string {
-  return `"${String(value).replace(/"/g, '""')}"`;
 }
 
 /** Target Visit is capped at 5 digits (max 99999) — strip anything past that as it's typed. */
@@ -534,14 +531,7 @@ export default function AccountsPage() {
   function exportCsv() {
     const header = ['Account Name', 'Account Code', 'Classification', 'Type', 'Target Visit'];
     const rows = view.map((a) => [a.name, a.code === '—' ? '0' : a.code, a.cls, a.typeName, a.target]);
-    const csv = [header, ...rows].map((r) => r.map(escapeForCsv).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'accounts.csv';
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadCsv('accounts.csv', [header, ...rows].map((r) => r.map(escapeForCsv).join(',')));
   }
 
   function pagerButtons() {

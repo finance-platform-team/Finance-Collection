@@ -14,6 +14,9 @@ import { operationErrorMessage } from '../lib/errors';
 import { fetchAll } from '../lib/dataverse';
 import type { DocFile } from '../lib/docs';
 import { docExt, docIconClass, docIcon, fmtBytes, fileToBase64, docsFlow, listDocs, uploadDoc } from '../lib/docs';
+import { useConfirm } from '../lib/useConfirm';
+import { sanitizeAmountInput, MAX_ENTRY_VALUE } from '../lib/numberEntry';
+import { downloadCsv } from '../lib/csvExport';
 import './DailyCollection.css';
 
 /**
@@ -214,7 +217,7 @@ function normaliseEntry(row: Cfm_dailycollections, companies: CompanyOption[]): 
     id: row.cfm_dailycollectionid,
     ref: row.cfm_name || '—',
     entity: co ? co.entityName || '—' : row.cfm_entityfx || '—',
-    companyCode: co ? co.code || '—' : '—',
+    companyCode: co ? co.code || '' : '',
     companyName: co ? co.name || '—' : row.cfm_companynamefx || '—',
     companyId: coId,
     bankAccountId: row._cfm_bankaccount_value || '',
@@ -483,6 +486,7 @@ export default function DailyCollectionPage() {
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
 
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string }>({ id: '', name: '' });
 
@@ -512,11 +516,13 @@ export default function DailyCollectionPage() {
   const [formDate, setFormDate] = useState('');
   const [formMethod, setFormMethod] = useState('');
   const [formNet, setFormNet] = useState('');
+  const [formNetError, setFormNetError] = useState<string | null>(null);
   const [formPaymentRef, setFormPaymentRef] = useState('');
   const [formBankAccountId, setFormBankAccountId] = useState('');
   const [formNote, setFormNote] = useState('');
 
   const [allocs, setAllocs] = useState<AllocRow[]>([]);
+  const [allocErrors, setAllocErrors] = useState<Record<string, string | null>>({});
   const [originalChildIds, setOriginalChildIds] = useState<string[]>([]);
   const [allocsLoading, setAllocsLoading] = useState(false);
   const [allocsError, setAllocsError] = useState('');
@@ -532,6 +538,7 @@ export default function DailyCollectionPage() {
   const [toastMsg, setToastMsg] = useState('');
   const [toastOn, setToastOn] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const { confirm, dialog } = useConfirm();
 
   function showToast(msg: string, durationMs = 3200) {
     setToastMsg(msg);
@@ -750,7 +757,13 @@ export default function DailyCollectionPage() {
   }
 
   function updateAllocRow(idx: number, field: keyof Omit<AllocRow, 'childId'>, value: string) {
-    setAllocs((prev) => prev.map((a, i) => (i === idx ? { ...a, [field]: field === 'month' ? value : Number(value) || 0 } : a)));
+    if (field === 'month') {
+      setAllocs((prev) => prev.map((a, i) => (i === idx ? { ...a, month: value } : a)));
+      return;
+    }
+    const { value: clean, message } = sanitizeAmountInput(value);
+    setAllocErrors((prev) => ({ ...prev, [`${idx}-${field}`]: message }));
+    setAllocs((prev) => prev.map((a, i) => (i === idx ? { ...a, [field]: Number(clean) || 0 } : a)));
   }
 
   function removeAllocRow(idx: number) {
@@ -944,7 +957,7 @@ export default function DailyCollectionPage() {
 
   async function deleteDoc(path: string, name: string) {
     if (locked || !editEntry) return;
-    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    if (!(await confirm({ title: `Delete "${name}"?`, message: 'This cannot be undone.', danger: true, confirmLabel: 'Delete' }))) return;
     const folder = docsFolderName(editEntry);
     try {
       await docsFlow({ action: 'delete', folderName: folder, filePath: path });
@@ -1092,6 +1105,121 @@ export default function DailyCollectionPage() {
     }
   }
 
+  function downloadImportTemplate() {
+    downloadCsv('daily_collection_import_template.csv', [IMPORT_COLUMNS.map(escapeForCsv).join(',')]);
+  }
+
+  async function importCsvFile(file: File) {
+    setImportBusy(true);
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+      if (rows.length < 2) throw new Error('No data rows found in the file.');
+
+      const headerRow = rows[0].map(normaliseHeader);
+      const colIndex = (label: string) => headerRow.indexOf(normaliseHeader(label));
+      const idx = {
+        companyCode: colIndex('Company Code'),
+        bankAccount: colIndex('Bank Account'),
+        date: colIndex('Collection Date'),
+        method: colIndex('Payment Method'),
+        net: colIndex('Net Amount'),
+        paymentRef: colIndex('Payment Reference'),
+        note: colIndex('Note'),
+        allocMonth: colIndex('Allocate To Month'),
+        allocAmount: colIndex('Allocation Amount'),
+        tax: colIndex('Tax'),
+        vol: colIndex('Volume Discount'),
+        early: colIndex('Early Payment Discount'),
+        admin: colIndex('Admin Fees'),
+        reject: colIndex('Rejection'),
+      };
+      const missingCols = Object.entries(idx)
+        .filter(([, i]) => i === -1)
+        .map(([k]) => k);
+      if (missingCols.length) throw new Error(`Template is missing column(s): ${missingCols.join(', ')}.`);
+
+      const dataRows = rows.slice(1);
+      const errors: string[] = [];
+      let created = 0;
+
+      for (let i = 0; i < dataRows.length; i++) {
+        const r = dataRows[i];
+        const rowNum = i + 2; // +1 for header row, +1 for 1-based row numbers a user sees in Excel
+        const code = (r[idx.companyCode] || '').trim();
+        const company = companies.find((c) => c.code.trim().toLowerCase() === code.toLowerCase());
+        if (!company) {
+          errors.push(`Row ${rowNum}: company code "${code}" not found.`);
+          continue;
+        }
+
+        const bankText = (r[idx.bankAccount] || '').trim();
+        const bank = bankAccounts.find(
+          (b) => bankAccountLabel(b).toLowerCase() === bankText.toLowerCase() || b.name.trim().toLowerCase() === bankText.toLowerCase() || (b.code && b.code.trim().toLowerCase() === bankText.toLowerCase())
+        );
+        if (!bank) {
+          errors.push(`Row ${rowNum}: bank account "${bankText}" not found.`);
+          continue;
+        }
+
+        const date = (r[idx.date] || '').trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          errors.push(`Row ${rowNum}: collection date must be YYYY-MM-DD, got "${date}".`);
+          continue;
+        }
+
+        const methodText = (r[idx.method] || '').trim().toLowerCase();
+        const methodOpt = PAYMENT_METHOD_OPTIONS.find((o) => o.label.toLowerCase() === methodText);
+        if (!methodOpt) {
+          errors.push(`Row ${rowNum}: payment method must be Cheque or Bank transfer, got "${r[idx.method]}".`);
+          continue;
+        }
+
+        const net = Number(r[idx.net]);
+        if (!Number.isFinite(net) || net < 0) {
+          errors.push(`Row ${rowNum}: net amount must be a positive number.`);
+          continue;
+        }
+        if (net > MAX_ENTRY_VALUE) {
+          errors.push(`Row ${rowNum}: net amount exceeds the maximum allowed value of ${MAX_ENTRY_VALUE.toLocaleString('en-US')}.`);
+          continue;
+        }
+
+        const result = await createDailyCollectionEntry({
+          companyId: company.id,
+          bankAccountId: bank.id,
+          date,
+          method: methodOpt.value,
+          net,
+          paymentRef: (r[idx.paymentRef] || '').trim(),
+          note: (r[idx.note] || '').trim(),
+          allocMonth: normaliseMonthValue(r[idx.allocMonth] || ''),
+          allocAmount: N(r[idx.allocAmount]),
+          tax: N(r[idx.tax]),
+          vol: N(r[idx.vol]),
+          early: N(r[idx.early]),
+          admin: N(r[idx.admin]),
+          reject: N(r[idx.reject]),
+        });
+        if (result.success) created++;
+        else errors.push(`Row ${rowNum}: ${result.error}`);
+      }
+
+      await load();
+      if (errors.length) {
+        const shown = errors.slice(0, 3).join(' ');
+        const more = errors.length > 3 ? ` (+${errors.length - 3} more)` : '';
+        showToast(`Imported ${created} of ${dataRows.length} row${dataRows.length === 1 ? '' : 's'}. ${errors.length} failed: ${shown}${more}`, 9000);
+      } else {
+        showToast(`Imported ${created} row${created === 1 ? '' : 's'}.`);
+      }
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Import failed.', 4500);
+    } finally {
+      setImportBusy(false);
+    }
+  }
+
   return (
     <>
       <div className="acc-wrap">
@@ -1104,6 +1232,22 @@ export default function DailyCollectionPage() {
             <button className="acc-btn" onClick={load}>
               <i className="fa-solid fa-rotate"></i> Reload
             </button>
+            <button className="acc-btn" onClick={downloadImportTemplate}>
+              <i className="fa-solid fa-file-csv"></i> Template
+            </button>
+            <label className={`acc-btn dc-import-btn${importBusy ? ' dc-import-busy' : ''}`}>
+              <i className={`fa-solid ${importBusy ? 'fa-spinner fa-spin' : 'fa-file-import'}`}></i> {importBusy ? 'Importing…' : 'Import CSV'}
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                disabled={importBusy}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (file) importCsvFile(file);
+                }}
+              />
+            </label>
             <button className="acc-btn acc-btn-primary" onClick={openDrawerCreate}>
               <i className="fa-solid fa-plus"></i> New entry
             </button>
@@ -1266,7 +1410,7 @@ export default function DailyCollectionPage() {
                           <span className="dc-pill dc-pill-entity">{r.entity}</span>
                         </td>
                         <td>
-                          <span className="dc-code">{r.companyCode}</span>
+                          <span className="dc-code">{r.companyCode || '—'}</span>
                         </td>
                         <td className="dc-company">{r.companyName}</td>
                         <td>{fmtDate(r.date)}</td>
@@ -1448,7 +1592,20 @@ export default function DailyCollectionPage() {
               <label>
                 Collected amount (net) <span className="dc-req">*</span>
               </label>
-              <input type="number" step="any" min={0} placeholder="0.00" value={formNet} disabled={locked} onChange={(e) => setFormNet(e.target.value)} />
+              <input
+                type="number"
+                step="any"
+                min={0}
+                placeholder="0.00"
+                value={formNet}
+                disabled={locked}
+                onChange={(e) => {
+                  const { value, message } = sanitizeAmountInput(e.target.value);
+                  setFormNet(value);
+                  setFormNetError(message);
+                }}
+              />
+              {formNetError && <div className="field-error">{formNetError}</div>}
             </div>
             <div className="acc-fld">
               <label>Payment reference #</label>
@@ -1540,26 +1697,32 @@ export default function DailyCollectionPage() {
                       <div className="dc-alloc-fg">
                         <div className="dc-alloc-fg-lbl">Amount</div>
                         <input className="dc-alloc-inp" type="number" step="any" value={a.amount || ''} disabled={readOnlyCard || locked} onChange={(e) => updateAllocRow(idx, 'amount', e.target.value)} />
+                        {allocErrors[`${idx}-amount`] && <div className="field-error">{allocErrors[`${idx}-amount`]}</div>}
                       </div>
                       <div className="dc-alloc-fg">
                         <div className="dc-alloc-fg-lbl">Tax</div>
                         <input className="dc-alloc-inp" type="number" step="any" value={a.tax || ''} disabled={readOnlyCard || locked} onChange={(e) => updateAllocRow(idx, 'tax', e.target.value)} />
+                        {allocErrors[`${idx}-tax`] && <div className="field-error">{allocErrors[`${idx}-tax`]}</div>}
                       </div>
                       <div className="dc-alloc-fg">
                         <div className="dc-alloc-fg-lbl">Volume discount</div>
                         <input className="dc-alloc-inp" type="number" step="any" value={a.vol || ''} disabled={readOnlyCard || locked} onChange={(e) => updateAllocRow(idx, 'vol', e.target.value)} />
+                        {allocErrors[`${idx}-vol`] && <div className="field-error">{allocErrors[`${idx}-vol`]}</div>}
                       </div>
                       <div className="dc-alloc-fg">
                         <div className="dc-alloc-fg-lbl">Early payment disc</div>
                         <input className="dc-alloc-inp" type="number" step="any" value={a.early || ''} disabled={readOnlyCard || locked} onChange={(e) => updateAllocRow(idx, 'early', e.target.value)} />
+                        {allocErrors[`${idx}-early`] && <div className="field-error">{allocErrors[`${idx}-early`]}</div>}
                       </div>
                       <div className="dc-alloc-fg">
                         <div className="dc-alloc-fg-lbl">Admin fees</div>
                         <input className="dc-alloc-inp" type="number" step="any" value={a.admin || ''} disabled={readOnlyCard || locked} onChange={(e) => updateAllocRow(idx, 'admin', e.target.value)} />
+                        {allocErrors[`${idx}-admin`] && <div className="field-error">{allocErrors[`${idx}-admin`]}</div>}
                       </div>
                       <div className="dc-alloc-fg">
                         <div className="dc-alloc-fg-lbl">Rejection</div>
                         <input className="dc-alloc-inp" type="number" step="any" value={a.reject || ''} disabled={readOnlyCard || locked} onChange={(e) => updateAllocRow(idx, 'reject', e.target.value)} />
+                        {allocErrors[`${idx}-reject`] && <div className="field-error">{allocErrors[`${idx}-reject`]}</div>}
                       </div>
                       <div className="dc-alloc-fg wide">
                         <div className="dc-alloc-fg-lbl">
@@ -1739,6 +1902,7 @@ export default function DailyCollectionPage() {
       </aside>
 
       <div className={`acc-toast${toastOn ? ' on' : ''}`}>{toastMsg}</div>
+      {dialog}
     </>
   );
 }

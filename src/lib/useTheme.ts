@@ -4,7 +4,7 @@ export type Theme = 'light' | 'dark';
 
 const THEME_KEY = 'app-theme';
 
-function readStoredTheme(): Theme {
+export function readStoredTheme(): Theme {
   try {
     return window.localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light';
   } catch {

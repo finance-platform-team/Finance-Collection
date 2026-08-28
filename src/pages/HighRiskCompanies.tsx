@@ -6,6 +6,7 @@ import type { Cfm_aragings } from '../generated/models/Cfm_aragingsModel';
 import { operationErrorMessage } from '../lib/errors';
 import { fetchAll } from '../lib/dataverse';
 import { KSA_BU_CODES, type Region } from '../lib/useRegion';
+import { escapeForCsv, downloadCsv } from '../lib/csvExport';
 import './HighRiskCompanies.css';
 
 /**
@@ -81,10 +82,6 @@ function monthKeyOf(iso: string | null | undefined): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function escapeForCsv(value: string | number): string {
-  return `"${String(value).replace(/"/g, '""')}"`;
 }
 
 interface AragingLite {
@@ -434,14 +431,7 @@ export default function HighRiskCompaniesPage({ region }: HighRiskCompaniesPageP
       r.status != null ? STATUS_LABEL[r.status] || '' : '',
       r.comment,
     ]);
-    const csv = [header, ...body].map((r) => r.map(escapeForCsv).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'high_risk_companies.csv';
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadCsv('high_risk_companies.csv', [header, ...body].map((r) => r.map(escapeForCsv).join(',')));
   }
 
   return (

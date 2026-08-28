@@ -7,6 +7,7 @@ import type { Cfm_aragings, Cfm_aragingsBase } from '../generated/models/Cfm_ara
 import type { Cfm_insurancecompanies } from '../generated/models/Cfm_insurancecompaniesModel';
 import { operationErrorMessage } from '../lib/errors';
 import { KSA_BU_CODES, type Region } from '../lib/useRegion';
+import { escapeForCsv, downloadCsv } from '../lib/csvExport';
 import './CollectionPlan.css';
 
 /**
@@ -225,10 +226,6 @@ async function fetchAll<T>(run: (skipToken?: string) => Promise<{ success: boole
     guard++;
   } while (token && guard < 50);
   return out;
-}
-
-function escapeForCsv(value: string | number): string {
-  return `"${String(value).replace(/"/g, '""')}"`;
 }
 
 const INS_VIA_LABEL: Record<PlanRow['insVia'], string> = {
@@ -582,13 +579,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
           .join(',')
       )
     );
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `collection_plan_${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadCsv(`collection_plan_${new Date().toISOString().slice(0, 10)}.csv`, lines);
     showToast(`Exported ${filtered.length} rows to CSV.`);
   }
 

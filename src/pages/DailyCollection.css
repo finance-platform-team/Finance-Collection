@@ -7,6 +7,13 @@
 /* Wider drawer — the allocation cards need more room than the default 420px. */
 .dc-drawer{width:520px}
 
+/* CSV import trigger — an acc-btn-styled <label> wrapping an invisible file input,
+   same hidden-input-overlay trick as .dc-docs-upload-btn (shared.css) but sized to
+   sit in the page's own header action bar instead of the documents drawer section. */
+.dc-import-btn{position:relative;overflow:hidden;cursor:pointer}
+.dc-import-btn input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+.dc-import-busy{opacity:.7;pointer-events:none}
+
 /* Filter bar */
 .dc-filter-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex:1;min-width:0}
 .dc-search{min-width:200px;flex:1 1 220px;max-width:280px}

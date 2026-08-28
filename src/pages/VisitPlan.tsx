@@ -11,7 +11,10 @@ import type { Hr_employees } from '../generated/models/Hr_employeesModel';
 import type { Strategy_kpises } from '../generated/models/Strategy_kpisesModel';
 import { operationErrorMessage } from '../lib/errors';
 import { fetchAll } from '../lib/dataverse';
+import { escapeForCsv, downloadCsv } from '../lib/csvExport';
+import { useConfirm } from '../lib/useConfirm';
 import './VisitPlan.css';
+
 
 /**
  * "Visits — Planned & Actual" — mirrors Ref.html's standalone wizard/dashboard,
@@ -27,7 +30,7 @@ const BREAKDOWN_TYPE = 5;
 
 const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-const ACHIEVEMENT_SELECT = ['pm_kpiachievmentid', 'pm_month', 'pm_year', '_pm_kpi_value'];
+const ACHIEVEMENT_SELECT = ['pm_kpiachievmentid', 'pm_month', 'pm_year', '_pm_kpi_value', 'pm_actual', 'pm_target'];
 const BREAKDOWN_SELECT = ['stf_kpiachievmentbreakdownid', 'stf_value', 'comp_breakdowntarget', '_stf_total_value', '_stf_employee_value'];
 const WEEK_SELECT = ['cfm_collectionplanweekid', 'cfm_weeknumber', 'cfm_plan', 'cfm_actual', '_cfm_kpiachievementbreakdown_value'];
 
@@ -77,9 +80,6 @@ function isoWeekRange(weekIndex: number): { from: string; to: string } {
   to.setDate(from.getDate() + 6);
   return { from: from.toISOString(), to: to.toISOString() };
 }
-function escapeForCsv(value: string | number): string {
-  return `"${String(value).replace(/"/g, '""')}"`;
-}
 function monthKeyOf(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, '0')}`;
 }
@@ -101,6 +101,7 @@ interface OwnerRow {
   employeeId: string;
   name: string;
   target: number;
+  value: number;
   weeks: WeekRow[];
 }
 
@@ -161,6 +162,8 @@ export default function VisitPlanPage() {
 
   const [toastMsg, setToastMsg] = useState('');
   const [toastOn, setToastOn] = useState(false);
+
+  const { confirm, dialog } = useConfirm();
 
   // ---- wizard state ----
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -241,16 +244,16 @@ export default function VisitPlanPage() {
         achRows.length === 0
           ? Promise.resolve([])
           : fetchAll<Stf_kpiachievmentbreakdowns>(
-              (skipToken) =>
-                Stf_kpiachievmentbreakdownsService.getAll({
-                  select: BREAKDOWN_SELECT,
-                  filter: `(${achIdFilter}) and statecode eq 0`,
-                  orderBy: ['createdon asc'],
-                  maxPageSize: 5000,
-                  skipToken,
-                }),
-              'Could not load KPI achievement breakdowns.'
-            ),
+            (skipToken) =>
+              Stf_kpiachievmentbreakdownsService.getAll({
+                select: BREAKDOWN_SELECT,
+                filter: `(${achIdFilter}) and statecode eq 0`,
+                orderBy: ['createdon asc'],
+                maxPageSize: 5000,
+                skipToken,
+              }),
+            'Could not load KPI achievement breakdowns.'
+          ),
         fetchAll<Cfm_collectionplanweeks>(
           (skipToken) =>
             Cfm_collectionplanweeksService.getAll({ select: WEEK_SELECT, filter: 'statecode eq 0', orderBy: ['cfm_weeknumber asc'], maxPageSize: 5000, skipToken }),
@@ -287,9 +290,42 @@ export default function VisitPlanPage() {
           employeeId,
           name: employeeMap.get(employeeId) || '(owner)',
           target: N(b.comp_breakdowntarget),
+          value: N(b.stf_value),
           weeks: weeksByBrk.get(b.stf_kpiachievmentbreakdownid) || [],
         });
       });
+
+      // Keep roll-ups in sync: each breakdown's "value" is the sum of its weeks'
+      // actuals (weeks are populated by an external actuals feed, not edited here),
+      // and each KPI achievement's actual/target are the sum of its breakdowns'
+      // value/target. Recomputed on every load so the achievement-level numbers
+      // never drift from what the week-level data actually says.
+      try {
+        const achAggregates = new Map<string, { actual: number; target: number }>();
+        const breakdownUpdates: Promise<unknown>[] = [];
+        owners.forEach((o) => {
+          const actualSum = o.weeks.reduce((s, w) => s + w.actual, 0);
+          if (actualSum !== o.value) {
+            breakdownUpdates.push(Stf_kpiachievmentbreakdownsService.update(o.breakdownId, { stf_value: actualSum }));
+            o.value = actualSum;
+          }
+          const agg = achAggregates.get(o.achievementId) || { actual: 0, target: 0 };
+          agg.actual += actualSum;
+          agg.target += o.target;
+          achAggregates.set(o.achievementId, agg);
+        });
+        if (breakdownUpdates.length) await Promise.all(breakdownUpdates);
+
+        const achievementUpdates: Promise<unknown>[] = [];
+        achAggregates.forEach((agg, achId) => {
+          const ach = achById.get(achId);
+          if (!ach || (N(ach.pm_actual) === agg.actual && N(ach.pm_target) === agg.target)) return;
+          achievementUpdates.push(Pm_kpiachievmentsService.update(achId, { pm_actual: agg.actual, pm_target: agg.target }));
+        });
+        if (achievementUpdates.length) await Promise.all(achievementUpdates);
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : 'Could not sync KPI achievement roll-ups.', 4000);
+      }
 
       setAchievements(
         achRows.map((a) => ({ id: a.pm_kpiachievmentid, kpiName: formattedValue(a, '_pm_kpi_value') || '(KPI)', month: N(a.pm_month), year: N(a.pm_year) }))
@@ -463,6 +499,18 @@ export default function VisitPlanPage() {
       const brkResult = await Stf_kpiachievmentbreakdownsService.update(owner.breakdownId, { comp_breakdowntarget: totalPlan });
       if (!brkResult.success) throw new Error(operationErrorMessage(brkResult.error, 'Could not update breakdown target.'));
 
+      // Roll the new breakdown target up into its KPI achievement's target too,
+      // so pm_target always reflects the sum of every breakdown's target without
+      // waiting for a full page reload.
+      try {
+        const siblingTarget = allOwners
+          .filter((o) => o.achievementId === owner.achievementId && o.breakdownId !== owner.breakdownId)
+          .reduce((s, o) => s + o.target, 0);
+        await Pm_kpiachievmentsService.update(owner.achievementId, { pm_target: siblingTarget + totalPlan });
+      } catch {
+        // non-fatal: the next full load re-syncs this from scratch
+      }
+
       setAllOwners((prev) =>
         prev.map((o) => (o.breakdownId !== owner.breakdownId ? o : { ...o, target: totalPlan, weeks: o.weeks.map((w) => (w.id === week.id ? { ...w, plan: value } : w)) }))
       );
@@ -481,7 +529,8 @@ export default function VisitPlanPage() {
   }
 
   async function deleteOwner(owner: OwnerRow) {
-    if (!window.confirm(`Remove "${owner.name}"? This deletes their plan weeks and cannot be undone.`)) return;
+    const ok = await confirm({ title: `Remove ${owner.name}?`, message: 'This deletes their plan weeks and cannot be undone.', danger: true, confirmLabel: 'Remove' });
+    if (!ok) return;
     try {
       await Promise.all(owner.weeks.map((w) => Cfm_collectionplanweeksService.delete(w.id)));
       await Stf_kpiachievmentbreakdownsService.delete(owner.breakdownId);
@@ -503,13 +552,7 @@ export default function VisitPlanPage() {
       const t = ownerTotals(o);
       lines.push([o.name, Math.round(t.planned), Math.round(t.achieved), t.rate.toFixed(1) + '%', `${MONTHS[o.month] || o.month} ${o.year}`].map(escapeForCsv).join(','));
     });
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'visits_planned_actual.csv';
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadCsv('visits_planned_actual.csv', lines);
   }
 
   // ================= wizard =================
@@ -1035,7 +1078,7 @@ export default function VisitPlanPage() {
                 {mode === 'existing' ? (
                   <div className="vp-field">
                     <label>KPI achievement</label>
-                    <select disabled value={selectedAchievementId} onChange={() => {}}>
+                    <select disabled value={selectedAchievementId} onChange={() => { }}>
                       {achievements.length === 0 ? (
                         <option value="">No achievements yet</option>
                       ) : (
@@ -1054,7 +1097,7 @@ export default function VisitPlanPage() {
                       <label>
                         KPI <span className="vp-badge-ro">read only</span>
                       </label>
-                      <select disabled value={selectedKpiId} onChange={() => {}}>
+                      <select disabled value={selectedKpiId} onChange={() => { }}>
                         {kpis.length === 0 ? (
                           <option value="">Loading KPIs…</option>
                         ) : (
@@ -1086,7 +1129,7 @@ export default function VisitPlanPage() {
                         <label>
                           Business unit <span className="vp-badge-ro">read only</span>
                         </label>
-                        <select disabled value={BU_ID} onChange={() => {}}>
+                        <select disabled value={BU_ID} onChange={() => { }}>
                           <option value={BU_ID}>AHQ</option>
                         </select>
                       </div>
@@ -1191,6 +1234,7 @@ export default function VisitPlanPage() {
       </div>
 
       <div className={`acc-toast${toastOn ? ' on' : ''}`}>{toastMsg}</div>
+      {dialog}
     </>
   );
 }

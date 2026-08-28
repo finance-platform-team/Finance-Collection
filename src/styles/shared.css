@@ -192,6 +192,26 @@ input.acc-f:focus{outline:none;border-color:var(--gold);background:#fff}
 .acc-err{background:var(--badbg);color:var(--bad);padding:9px 12px;border-radius:8px;
   font-size:12.5px;margin-bottom:14px;display:none}
 .acc-err.on{display:block}
+.field-error{color:var(--bad);font-size:11.5px;margin-top:4px}
+
+/* Confirm dialog — shared modal used in place of window.confirm(), styled to match
+   the app's existing card/shadow language (VisitPlan's wizard modal and Layout's
+   region picker are the two prior one-off precedents for this look). z-index sits
+   above every other overlay in the app (region picker scrim is the highest at 200)
+   so a confirm can layer on top of any drawer/modal already open. */
+.acc-modal-overlay{position:fixed;inset:0;background:rgba(20,14,8,.5);display:flex;
+  align-items:center;justify-content:center;z-index:210;padding:16px;opacity:0;
+  pointer-events:none;transition:.15s}
+.acc-modal-overlay.on{opacity:1;pointer-events:auto}
+.acc-modal{background:var(--card);border-radius:16px;max-width:420px;width:100%;
+  padding:24px 26px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.acc-modal h2{margin:0 0 8px;font-family:'Outfit',sans-serif;font-weight:700;
+  font-size:18px;color:var(--ink)}
+.acc-modal p{margin:0 0 20px;color:var(--muted);font-size:13.5px;line-height:1.5}
+.acc-modal-actions{display:flex;justify-content:flex-end;gap:8px}
+.acc-btn-danger{background:var(--bad);color:#fff;border-color:var(--bad)}
+.acc-btn-danger:hover{background:#8f2a2a;border-color:#8f2a2a}
+:root[data-theme="dark"] .acc-btn-danger:hover{background:#c96665;border-color:#c96665}
 
 /* Documents (SharePoint upload/list/delete) — shared by any drawer that lists,
    uploads to, or deletes from a SharePoint folder via the docs Power Automate flow. */

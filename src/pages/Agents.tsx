@@ -4,6 +4,7 @@ import { SystemusersService } from '../generated/services/SystemusersService';
 import { Hr_employeesService } from '../generated/services/Hr_employeesService';
 import type { Cr301_agentsBase } from '../generated/models/Cr301_agentsModel';
 import { operationErrorMessage } from '../lib/errors';
+import { escapeForCsv, downloadCsv } from '../lib/csvExport';
 import './Agents.css';
 
 /**
@@ -273,17 +274,9 @@ export default function AgentsPage() {
   }
 
   function exportCsv() {
-    const escapeForCsv = (value: string) => `"${value.replace(/"/g, '""')}"`;
     const header = ['Agent Name', 'Agent User', 'Title'];
     const rows = view.map((a) => [a.name, a.user, a.title]);
-    const csv = [header, ...rows].map((r) => r.map(escapeForCsv).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'agents.csv';
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadCsv('agents.csv', [header, ...rows].map((r) => r.map(escapeForCsv).join(',')));
   }
 
   function pagerButtons() {
