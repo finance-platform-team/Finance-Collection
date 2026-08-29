@@ -888,7 +888,13 @@ export default function VisitsPage() {
             Cancel
           </button>
           <button className="acc-btn acc-btn-primary" disabled={saving} onClick={handleSave}>
-            {saving ? 'Saving…' : 'Save Visit'}
+            {saving ? (
+              <>
+                <i className="fa-solid fa-spinner fa-spin"></i> Saving…
+              </>
+            ) : (
+              'Save Visit'
+            )}
           </button>
         </div>
       </aside>

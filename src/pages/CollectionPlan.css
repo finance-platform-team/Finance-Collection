@@ -33,8 +33,11 @@
   display:inline-flex;align-items:center;gap:5px;transition:all .15s;white-space:nowrap}
 .cp-clear:hover{color:var(--bad);background:var(--badbg)}
 
-/* Wide grouped table — full column set, original order */
-.cp-tbl-scroll{overflow:auto;max-height:70vh;position:relative}
+/* Wide grouped table — full column set, original order. Hidden below the md breakpoint
+   in favor of .cp-cards (see the mobile-first responsive section at the end of this file)
+   since collapsing all ~26 columns into a phone-width table would need horizontal scroll
+   regardless — the card list is the mobile-first base, this is the md+ enhancement. */
+.cp-tbl-scroll{overflow:auto;max-height:70vh;position:relative;display:none}
 .cp-tbl{width:100%;border-collapse:separate;border-spacing:0;min-width:2500px}
 .cp-tbl thead{position:sticky;top:0;z-index:5}
 .cp-tbl thead tr.cp-head-row th{background:#fbf8f2;color:var(--muted);font-weight:500;
@@ -145,6 +148,77 @@
 
 @media(max-width:700px){
   .cp-detail-grid-2, .cp-detail-grid-3{grid-template-columns:1fr 1fr}
+}
+
+/* ========================================================================
+ * Mobile-first responsive layout. Base rules below target small screens;
+ * each @media(min-width) block overrides upward for larger tiers, matching
+ * this app's existing breakpoint conventions (480 / 700-760 / 900) rather
+ * than inventing new ones (see HighRiskCompanies.css / WeeklyTargets.css
+ * for the same 900/760/480 tiering on an identical header+KPI+table page).
+ * ======================================================================== */
+
+/* Header — wraps instead of overflowing once title + action buttons don't fit. */
+@media(max-width:900px){
+  .cp-page .acc-head{flex-wrap:wrap;row-gap:12px}
+}
+
+/* Export/Reload collapse to icon-only, but stay real ≥44px tap targets. */
+@media(max-width:480px){
+  .cp-page .acc-actions{width:100%}
+  .cp-page .acc-actions .acc-btn{flex:1;min-width:44px;min-height:44px;justify-content:center}
+  .cp-page .cp-btn-label{display:none}
+}
+
+/* KPI cards — 1 col mobile, 2 on sm, 3 on md, 6 in a row on xl. Scoped to .cp-page so it
+   wins by specificity over shared.css's generic `.kpi-grid` breakpoint without touching
+   any other page's KPI grid. Sub-value truncates; the big number never does. */
+.cp-page .kpi-grid{grid-template-columns:1fr}
+@media(min-width:480px){
+  .cp-page .kpi-grid{grid-template-columns:repeat(2,1fr)}
+}
+@media(min-width:760px){
+  .cp-page .kpi-grid{grid-template-columns:repeat(3,1fr)}
+}
+@media(min-width:1200px){
+  .cp-page .kpi-grid{grid-template-columns:repeat(6,1fr)}
+}
+.cp-page .kpi-context{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Filter toolbar — full-width search, 2-per-row controls below md. */
+@media(max-width:760px){
+  .cp-page .cp-search{flex:1 1 100%;max-width:none}
+  .cp-page select.acc-f{flex:1 1 calc(50% - 5px);min-width:0}
+  .cp-page .cp-toggle,.cp-page .cp-clear{flex:1 1 calc(50% - 5px);justify-content:center}
+}
+
+/* Data table (md+) vs. mobile card list — mobile-first: cards are the base, the table
+   is the md+ enhancement. See the .cp-tbl-scroll{display:none} base rule above. */
+.cp-cards{display:flex;flex-direction:column;gap:10px;padding:2px}
+@media(min-width:760px){
+  .cp-cards{display:none}
+  .cp-tbl-scroll{display:block}
+}
+.cp-card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:14px;cursor:pointer;transition:background .12s,border-color .12s}
+.cp-card:hover{border-color:var(--hover-border)}
+.cp-card-skel{cursor:default}
+.cp-card-hdr{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.cp-card-title{font-family:'Outfit',sans-serif;font-weight:600;font-size:14.5px;
+  color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.cp-card-code{font-family:'JetBrains Mono',monospace;color:var(--gold);font-size:12px;margin-top:3px}
+.cp-card-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-top:12px}
+.cp-card-field{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cp-card-lbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.cp-card-val{font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Pagination — same wrap/tap-target treatment as the header actions. The dead
+   space that used to show up below this on mobile came from html/body's global
+   height:100% (shared.css) forcing the whole page to at least one viewport tall;
+   fixed directly at the source there instead of repositioning this bar. */
+@media(max-width:480px){
+  .cp-page .cp-pagination{justify-content:center}
+  .cp-page .acc-pg button{min-width:44px;min-height:44px}
 }
 
 /* Dark theme — the token redefinitions live globally in shared.css (:root[data-theme="dark"]),

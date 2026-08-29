@@ -622,6 +622,31 @@ export default function DailyCollectionPage() {
     load();
   }, []);
 
+  /**
+   * Patches one entry into local state after a successful save, instead of the old
+   * "reload everything" approach — saveEntry() used to follow every create/update with
+   * a full `load()`, which re-fetches every daily collection entry AND does an
+   * unfiltered fetch of the ENTIRE allocations table (loadAllocCounts) just to compute
+   * one row's count. That made every save slow, and worse, ran *inside* saveEntry's
+   * try/catch — a slow/failed reload after a genuinely successful save surfaced as a
+   * save error even though the entry was already created and already toasted. This
+   * re-fetches only the one changed record and is intentionally isolated in its own
+   * try/catch: any failure here is silently non-fatal (the list is at most one row
+   * stale until the user hits the existing Reload button), never overwriting a
+   * "saved" toast with a false error.
+   */
+  async function refreshEntryLocally(id: string, allocCount: number, isNew: boolean) {
+    try {
+      const fresh = await Cfm_dailycollectionsService.get(id, { select: ENTRY_SELECT });
+      if (!fresh.success || !fresh.data) return;
+      const row = normaliseEntry(fresh.data, companies);
+      row.allocCount = allocCount;
+      setEntries((prev) => (isNew ? [row, ...prev] : prev.map((e) => (e.id === id ? row : e))));
+    } catch {
+      /* best-effort — see comment above */
+    }
+  }
+
   useEffect(() => {
     getContext()
       .then(async (ctx) => {
@@ -992,7 +1017,7 @@ export default function DailyCollectionPage() {
         if (!allocsEditable) {
           showToast('Entry updated.');
           closeDrawer();
-          await load();
+          await refreshEntryLocally(editId, editEntry?.allocCount ?? 0, false);
           return;
         }
 
@@ -1045,7 +1070,7 @@ export default function DailyCollectionPage() {
               : 'Entry and allocations updated.'
         );
         closeDrawer();
-        await load();
+        await refreshEntryLocally(editId, allocs.length - childFail, false);
         return;
       }
 
@@ -1097,7 +1122,7 @@ export default function DailyCollectionPage() {
           (arAgingError ? ` AR Aging update failed: ${arAgingError}` : '')
       );
       closeDrawer();
-      await load();
+      await refreshEntryLocally(parentId, childOk, true);
     } catch (e) {
       setFormError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -1894,7 +1919,17 @@ export default function DailyCollectionPage() {
             </button>
             {!locked && (
               <button className="acc-btn acc-btn-primary" disabled={!canSave} onClick={saveEntry}>
-                {saving ? 'Saving…' : mode === 'create' ? 'Save entry' : mode === 'reedit' ? 'Re-submit entry' : 'Update entry'}
+                {saving ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin"></i> Saving…
+                  </>
+                ) : mode === 'create' ? (
+                  'Save entry'
+                ) : mode === 'reedit' ? (
+                  'Re-submit entry'
+                ) : (
+                  'Update entry'
+                )}
               </button>
             )}
           </div>

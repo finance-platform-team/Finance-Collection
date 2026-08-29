@@ -890,7 +890,13 @@ export default function AccountsPage() {
             Cancel
           </button>
           <button className="acc-btn acc-btn-primary" disabled={saving} onClick={handleSave}>
-            {saving ? 'Saving…' : 'Save Account'}
+            {saving ? (
+              <>
+                <i className="fa-solid fa-spinner fa-spin"></i> Saving…
+              </>
+            ) : (
+              'Save Account'
+            )}
           </button>
         </div>
       </aside>

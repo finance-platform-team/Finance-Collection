@@ -499,7 +499,13 @@ export default function AgentsPage() {
             Cancel
           </button>
           <button className="acc-btn acc-btn-primary" disabled={saving} onClick={handleSave}>
-            {saving ? 'Saving…' : 'Save Agent'}
+            {saving ? (
+              <>
+                <i className="fa-solid fa-spinner fa-spin"></i> Saving…
+              </>
+            ) : (
+              'Save Agent'
+            )}
           </button>
         </div>
       </aside>

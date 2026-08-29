@@ -738,7 +738,13 @@ export default function HighRiskCompaniesPage({ region }: HighRiskCompaniesPageP
               Cancel
             </button>
             <button className="acc-btn acc-btn-primary" disabled={!canSave} onClick={addHighRisk}>
-              {saving ? 'Adding…' : '+ Add high risk'}
+              {saving ? (
+                <>
+                  <i className="fa-solid fa-spinner fa-spin"></i> Adding…
+                </>
+              ) : (
+                '+ Add high risk'
+              )}
             </button>
           </div>
         </div>

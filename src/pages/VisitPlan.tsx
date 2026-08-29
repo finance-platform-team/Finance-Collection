@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { BusinessunitsService } from '../generated/services/BusinessunitsService';
 import { Pm_kpiachievmentsService } from '../generated/services/Pm_kpiachievmentsService';
 import { Stf_kpiachievmentbreakdownsService } from '../generated/services/Stf_kpiachievmentbreakdownsService';
 import { Cfm_collectionplanweeksService } from '../generated/services/Cfm_collectionplanweeksService';
@@ -24,9 +25,30 @@ import './VisitPlan.css';
  * couldn't resolve this table's metadata in this environment).
  */
 
-const BU_ID = '0e650dd0-5d4f-f011-877a-6045bd9979f4'; // AHQ
+const BU_NAME = 'AHQ';
+// Last-known-good id for BU_NAME, kept only as a fallback in case the by-name lookup
+// below ever fails (e.g. the record gets renamed) — resolveBuId() prefers the live
+// lookup and only falls back to this so a lookup failure never blocks the whole page.
+const FALLBACK_BU_ID = '0e650dd0-5d4f-f011-877a-6045bd9979f4';
 const DEFAULT_KPI_NAME = 'No. of Visits';
 const BREAKDOWN_TYPE = 5;
+
+/** Resolves the AHQ business unit's id by name instead of relying solely on a
+ * hardcoded GUID, which would silently point at the wrong (or no) record in any
+ * environment other than the one it was copied from — dev/test/prod each have
+ * their own businessunit ids for the same-named record. */
+async function resolveBuId(): Promise<string> {
+  try {
+    const res = await BusinessunitsService.getAll({
+      select: ['businessunitid'],
+      filter: `name eq '${BU_NAME}'`,
+    });
+    if (res.success && res.data?.length) return res.data[0].businessunitid;
+  } catch {
+    /* fall through to the fallback below */
+  }
+  return FALLBACK_BU_ID;
+}
 
 const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -146,6 +168,7 @@ export default function VisitPlanPage() {
   const [kpis, setKpis] = useState<KpiOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [buId, setBuId] = useState('');
 
   // Empty set = "All months". monthKey is `${year}-${month}` so same-named months
   // in different years (e.g. two "August"s a year apart) never collide.
@@ -194,7 +217,7 @@ export default function VisitPlanPage() {
       // this page — e.g. an org-wide headcount snapshot showed up here before this
       // fix). Resolve "No. of Visits"'s KPI id first and scope the achievement
       // query to it, so unrelated KPIs' achievements/breakdowns never load.
-      const [employeeRows, kpiRows] = await Promise.all([
+      const [employeeRows, resolvedBuId, kpiRows] = await Promise.all([
         fetchAll<Hr_employees>(
           (skipToken) =>
             Hr_employeesService.getAll({
@@ -206,6 +229,7 @@ export default function VisitPlanPage() {
             }),
           'Could not load task owners.'
         ),
+        resolveBuId(),
         fetchAll<Strategy_kpises>(
           (skipToken) =>
             Strategy_kpisesService.getAll({
@@ -218,6 +242,8 @@ export default function VisitPlanPage() {
           'Could not load KPIs.'
         ),
       ]);
+
+      setBuId(resolvedBuId);
 
       const defaultKpi = kpiRows.find((k) => (k.strategy_newcolumn || '').trim().toLowerCase() === DEFAULT_KPI_NAME.toLowerCase());
       if (!defaultKpi) throw new Error(`KPI "${DEFAULT_KPI_NAME}" not found.`);
@@ -624,13 +650,14 @@ export default function VisitPlanPage() {
         achievementId = selectedAchievementId;
       } else {
         if (!selectedKpiId) throw new Error('No KPI selected.');
+        if (!buId) throw new Error(`Business unit "${BU_NAME}" hasn't loaded yet — try again in a moment.`);
         const month = parseInt(newMonth, 10);
         const year = resolveYear(month);
         const body: Record<string, unknown> = {
           pm_month: month,
           pm_year: year,
           'pm_kpi@odata.bind': `/strategy_kpises(${selectedKpiId})`,
-          'pm_businessunit@odata.bind': `/businessunits(${BU_ID})`,
+          'pm_businessunit@odata.bind': `/businessunits(${buId})`,
         };
         const result = await Pm_kpiachievmentsService.create(body as unknown as Omit<Pm_kpiachievmentsBase, 'pm_kpiachievmentid'>);
         if (!result.success) throw new Error(operationErrorMessage(result.error, 'Could not create the KPI achievement.'));
@@ -1129,8 +1156,8 @@ export default function VisitPlanPage() {
                         <label>
                           Business unit <span className="vp-badge-ro">read only</span>
                         </label>
-                        <select disabled value={BU_ID} onChange={() => { }}>
-                          <option value={BU_ID}>AHQ</option>
+                        <select disabled value={buId} onChange={() => { }}>
+                          <option value={buId}>{BU_NAME}</option>
                         </select>
                       </div>
                     </div>
@@ -1221,11 +1248,23 @@ export default function VisitPlanPage() {
               )}
               {wizStep === 1 ? (
                 <button className="vp-wbtn-primary" disabled={wizBusy} onClick={onContinue}>
-                  {wizBusy ? 'Saving…' : <>Continue ›</>}
+                  {wizBusy ? (
+                    <>
+                      <i className="fa-solid fa-spinner fa-spin"></i> Saving…
+                    </>
+                  ) : (
+                    <>Continue ›</>
+                  )}
                 </button>
               ) : (
                 <button className="vp-wbtn-primary" disabled={wizBusy} onClick={onCreateAll}>
-                  {wizBusy ? 'Creating…' : '✓ Create KPI'}
+                  {wizBusy ? (
+                    <>
+                      <i className="fa-solid fa-spinner fa-spin"></i> Creating…
+                    </>
+                  ) : (
+                    '✓ Create KPI'
+                  )}
                 </button>
               )}
             </div>

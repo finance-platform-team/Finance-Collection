@@ -12,6 +12,13 @@ export const dataSourcesInfo = {
     "dataSourceType": "Dataverse",
     "apis": {}
   },
+  "businessunits": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "businessunitid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
   "cfm_aragings": {
     "tableId": "",
     "version": "",

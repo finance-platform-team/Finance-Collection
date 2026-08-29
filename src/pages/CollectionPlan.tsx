@@ -744,10 +744,10 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
           </div>
           <div className="acc-actions">
             <button className="acc-btn" onClick={exportCsv}>
-              <i className="fa-solid fa-file-arrow-down"></i> Export
+              <i className="fa-solid fa-file-arrow-down"></i> <span className="cp-btn-label">Export</span>
             </button>
             <button className="acc-btn" onClick={load}>
-              <i className="fa-solid fa-rotate"></i> Reload
+              <i className="fa-solid fa-rotate"></i> <span className="cp-btn-label">Reload</span>
             </button>
           </div>
         </div>
@@ -998,6 +998,87 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
                 </tfoot>
               )}
             </table>
+          </div>
+
+          {/* Mobile-only card list (CSS-toggled with .cp-tbl-scroll — see CollectionPlan.css).
+              The table is ~26 columns; rather than cram every field into a phone card, each
+              card shows the identity/priority fields and tapping it opens the same detail
+              drawer the desktop table row already opens (openDetail), which already lists
+              every field. */}
+          <div className="cp-cards">
+            {loading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <div className="cp-card cp-card-skel" key={i}>
+                  <div className="acc-skel" style={{ width: `${55 + ((i * 13) % 35)}%` }}></div>
+                </div>
+              ))
+            ) : loadError ? (
+              <div className="acc-state">
+                <i className="fa-solid fa-triangle-exclamation"></i>
+                Couldn't load Collection Plan.
+                <br />
+                <small>{loadError}</small>
+              </div>
+            ) : pageRows.length === 0 ? (
+              <div className="acc-state">
+                <i className="fa-solid fa-filter-circle-xmark"></i>
+                No records match the current filters.
+              </div>
+            ) : (
+              pageRows.map((r) => (
+                <div key={r.id} className="cp-card" onClick={() => openDetail(r.id)}>
+                  <div className="cp-card-hdr">
+                    <div className="cp-card-title" dir="auto">
+                      {r.name}
+                    </div>
+                    {r.customerClass && r.customerClass !== '—' ? (
+                      <span className={`acc-cls cp-cls-badge ${classBadgeClass(r.customerClass)}`}>{r.customerClass}</span>
+                    ) : (
+                      <span className="cp-chip-miss">—</span>
+                    )}
+                  </div>
+                  <div className="cp-card-code">{r.code}</div>
+                  <div className="cp-card-grid">
+                    <div className="cp-card-field">
+                      <span className="cp-card-lbl">BU</span>
+                      <span className="cp-card-val">{r.buText || '—'}</span>
+                    </div>
+                    <div className="cp-card-field">
+                      <span className="cp-card-lbl">Supervisor</span>
+                      <span className="cp-card-val">{r.supervisor || '—'}</span>
+                    </div>
+                    <div className="cp-card-field">
+                      <span className="cp-card-lbl">Task owner</span>
+                      <span className="cp-card-val">{r.taskOwner || '—'}</span>
+                    </div>
+                    <div className="cp-card-field">
+                      <span className="cp-card-lbl">Payment term</span>
+                      <span className="cp-card-val">{r.paymentTerm || '—'}</span>
+                    </div>
+                    <div className="cp-card-field">
+                      <span className="cp-card-lbl">Company type</span>
+                      <span className="cp-card-val">{r.companyType || '—'}</span>
+                    </div>
+                    <div className="cp-card-field">
+                      <span className="cp-card-lbl">Early payment</span>
+                      <span className="cp-card-val">{fmt(r.early)}</span>
+                    </div>
+                    <div className="cp-card-field">
+                      <span className="cp-card-lbl">Total dues</span>
+                      <span className="cp-card-val">{fmt(r.totalDues)}</span>
+                    </div>
+                    <div className="cp-card-field">
+                      <span className="cp-card-lbl">Target</span>
+                      <span className="cp-card-val">{fmt(r.target)}</span>
+                    </div>
+                    <div className="cp-card-field">
+                      <span className="cp-card-lbl">Total collected</span>
+                      <span className="cp-card-val">{fmt(r.collected)}</span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
 
           {!loading && !loadError && filtered.length > 0 && (

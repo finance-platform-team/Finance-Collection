@@ -112,6 +112,13 @@
 }
 
 @media(max-width:760px){
+  /* The sidebar is off-canvas (position:fixed) at this width, so it no longer
+     occupies any space in the .acc-shell flex row for min-height:100vh to justify
+     stretching against — .acc-content-col/.acc-main's flex:1 was forcing every
+     page to be at least a full viewport tall even when its real content (e.g. a
+     short mobile card list) was much shorter, leaving a dead blank gap below it. */
+  .acc-shell{min-height:auto}
+
   .acc-scrim-mobile.on{opacity:1;pointer-events:auto}
   .acc-sidebar{position:fixed;left:0;top:0;width:230px;transform:translateX(-100%);
     transition:transform .2s}
@@ -122,8 +129,14 @@
   .acc-sidebar.mobile-open{transform:translateX(0)}
 
   .acc-mobile-menu-btn{display:flex;align-items:center;justify-content:center;
-    position:fixed;top:14px;left:14px;width:40px;height:40px;border-radius:10px;
+    position:fixed;top:14px;left:14px;width:44px;height:44px;border-radius:10px;
     background:var(--shell-bg-2);color:#fff;border:1px solid var(--shell-line);
-    box-shadow:0 4px 14px rgba(0,0,0,.25);font-size:16px;cursor:pointer;z-index:66}
-  .acc-mobile-menu-btn:hover{background:var(--shell-active-bg)}
+    box-shadow:0 4px 14px rgba(0,0,0,.25);font-size:16px;cursor:pointer;z-index:66;
+    transition:background .15s,border-color .15s}
+  /* --shell-active-bg is a translucent WHITE meant for hover states painted over the
+     dark sidebar's own background — applied to this small standalone button it washed
+     the whole thing out toward the page's light background, leaving the icon barely
+     visible. Darken toward --shell-bg instead (stays high-contrast with the white
+     icon) and pick up the brand gold accent on the border for a clear affordance. */
+  .acc-mobile-menu-btn:hover{background:var(--shell-bg);border-color:var(--shell-accent)}
 }

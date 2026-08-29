@@ -964,7 +964,13 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
             Cancel
           </button>
           <button className="acc-btn acc-btn-primary" disabled={creating} onClick={handleCreate}>
-            {creating ? 'Creating…' : 'Create Plan'}
+            {creating ? (
+              <>
+                <i className="fa-solid fa-spinner fa-spin"></i> Creating…
+              </>
+            ) : (
+              'Create Plan'
+            )}
           </button>
         </div>
       </aside>

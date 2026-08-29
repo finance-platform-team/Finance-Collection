@@ -965,7 +965,13 @@ export default function DisputeManagementPage() {
               Cancel
             </button>
             <button className="acc-btn acc-btn-primary" disabled={!canCreate} onClick={saveCreate}>
-              {saving ? 'Saving…' : 'Create dispute case'}
+              {saving ? (
+                <>
+                  <i className="fa-solid fa-spinner fa-spin"></i> Saving…
+                </>
+              ) : (
+                'Create dispute case'
+              )}
             </button>
           </div>
         </div>

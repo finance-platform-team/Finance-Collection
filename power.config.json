@@ -108,6 +108,11 @@
           "entitySetName": "hr_employees",
           "logicalName": "hr_employee",
           "isHidden": false
+        },
+        "businessunits": {
+          "entitySetName": "businessunits",
+          "logicalName": "businessunit",
+          "isHidden": false
         }
       },
       "environmentVariableName": ""
