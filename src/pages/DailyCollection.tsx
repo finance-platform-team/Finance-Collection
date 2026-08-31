@@ -414,6 +414,19 @@ function normaliseMonthValue(text: string): string | null {
   return m ? `${m[1]}-${m[2]}-01` : null;
 }
 
+/** Accepts strict "YYYY-MM-DD" as-is; otherwise falls back to letting the
+ * browser parse it (handles "8/26/2026", "26 Aug 2026", etc.) — Excel
+ * routinely reformats a typed date to the locale's short date style even when
+ * the cell started as plain text, so a strict ISO-only check rejects normal
+ * usage far too often. */
+function normaliseDateValue(text: string): string | null {
+  const t = text.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 interface ImportRowInput {
   companyId: string;
   bankAccountId: string;
@@ -490,6 +503,9 @@ export default function DailyCollectionPage() {
 
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string }>({ id: '', name: '' });
 
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+
   const [query, setQuery] = useState('');
   const [entityFilter, setEntityFilter] = useState('');
   const [methodFilter, setMethodFilter] = useState('');
@@ -545,6 +561,161 @@ export default function DailyCollectionPage() {
     setToastOn(true);
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToastOn(false), durationMs);
+  }
+
+  function downloadCsv(filename: string, rows: (string | number)[][]) {
+    const csv = rows.map((r) => r.map(escapeForCsv).join(',')).join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportImportTemplate() {
+    const sample = [
+      'EXAMPLE-DELETE-THIS-ROW',
+      'Example Bank Account',
+      new Date().toISOString().slice(0, 10),
+      'Cheque',
+      10000,
+      'REF-001',
+      'Sample note — delete this row before importing',
+      new Date().toISOString().slice(0, 7),
+      10000,
+      0,
+      0,
+      0,
+      0,
+      0,
+    ];
+    downloadCsv('daily_collection_import_template.csv', [Array.from(IMPORT_COLUMNS), sample]);
+  }
+
+  function openImportPicker() {
+    importInputRef.current?.click();
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // reset so re-selecting the same file re-fires onChange
+    if (!file) return;
+
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+      if (rows.length < 2) {
+        showToast('No data rows found in that file.');
+        return;
+      }
+      const header = rows[0].map(normaliseHeader);
+      const colIndex = new Map(IMPORT_COLUMNS.map((c) => [normaliseHeader(c), header.indexOf(normaliseHeader(c))]));
+      const missing = IMPORT_COLUMNS.filter((c) => (colIndex.get(normaliseHeader(c)) ?? -1) < 0);
+      if (missing.length) {
+        showToast(`File is missing column(s): ${missing.join(', ')}. Use Export template to get the right headers.`, 7000);
+        return;
+      }
+      const cell = (row: string[], colName: (typeof IMPORT_COLUMNS)[number]): string => (row[colIndex.get(normaliseHeader(colName))!] || '').trim();
+
+      const dataRows = rows.slice(1);
+      let ok = 0;
+      let fail = 0;
+      const errors: string[] = [];
+
+      for (let i = 0; i < dataRows.length; i++) {
+        const row = dataRows[i];
+        const rowLabel = `Row ${i + 2}`;
+        const companyCode = cell(row, 'Company Code');
+        const bankText = cell(row, 'Bank Account');
+        const dateText = cell(row, 'Collection Date (YYYY-MM-DD)');
+        const methodText = cell(row, 'Payment Method (Cheque or Bank transfer)');
+        const netText = cell(row, 'Net Amount');
+        const monthText = cell(row, 'Allocate To Month (YYYY-MM)');
+        const allocAmountText = cell(row, 'Allocation Amount');
+
+        const company = companies.find((c) => c.code.trim().toLowerCase() === companyCode.toLowerCase());
+        if (!company) {
+          fail++;
+          errors.push(`${rowLabel}: no company matches code "${companyCode}"`);
+          continue;
+        }
+        const bank = bankAccounts.find(
+          (b) => b.name.trim().toLowerCase() === bankText.toLowerCase() || b.code.trim().toLowerCase() === bankText.toLowerCase()
+        );
+        if (!bank) {
+          fail++;
+          errors.push(`${rowLabel}: no bank account matches "${bankText}"`);
+          continue;
+        }
+        const date = normaliseDateValue(dateText);
+        if (!date) {
+          fail++;
+          errors.push(`${rowLabel}: invalid Collection Date "${dateText}" (try YYYY-MM-DD, e.g. 2026-08-26)`);
+          continue;
+        }
+        const method = PAYMENT_METHOD_OPTIONS.find((o) => o.label.trim().toLowerCase() === methodText.toLowerCase());
+        if (!method) {
+          fail++;
+          errors.push(`${rowLabel}: Payment Method must be Cheque or Bank transfer, got "${methodText}"`);
+          continue;
+        }
+        const net = Number(netText);
+        if (!netText || Number.isNaN(net)) {
+          fail++;
+          errors.push(`${rowLabel}: invalid Net Amount "${netText}"`);
+          continue;
+        }
+        const allocMonth = normaliseMonthValue(monthText);
+        if (!allocMonth) {
+          fail++;
+          errors.push(`${rowLabel}: invalid Allocate To Month "${monthText}" (expected YYYY-MM)`);
+          continue;
+        }
+        // Allocation Amount defaults to Net Amount — the common case is one
+        // allocation covering the whole collected amount.
+        const allocAmount = allocAmountText ? Number(allocAmountText) : net;
+        if (Number.isNaN(allocAmount)) {
+          fail++;
+          errors.push(`${rowLabel}: invalid Allocation Amount "${allocAmountText}"`);
+          continue;
+        }
+
+        const result = await createDailyCollectionEntry({
+          companyId: company.id,
+          bankAccountId: bank.id,
+          date,
+          method: method.value,
+          net,
+          paymentRef: cell(row, 'Payment Reference'),
+          note: cell(row, 'Note'),
+          allocMonth,
+          allocAmount,
+          tax: Number(cell(row, 'Tax')) || 0,
+          vol: Number(cell(row, 'Volume Discount')) || 0,
+          early: Number(cell(row, 'Early Payment Discount')) || 0,
+          admin: Number(cell(row, 'Admin Fees')) || 0,
+          reject: Number(cell(row, 'Rejection')) || 0,
+        });
+        if (result.success) {
+          ok++;
+          if (result.error) errors.push(`${rowLabel}: ${result.error}`);
+        } else {
+          fail++;
+          errors.push(`${rowLabel}: ${result.error}`);
+        }
+      }
+
+      const summary = `Imported ${ok} of ${dataRows.length} row(s).`;
+      showToast(fail || errors.length ? `${summary} ${errors.slice(0, 3).join('; ')}${errors.length > 3 ? ` (+${errors.length - 3} more)` : ''}` : summary, errors.length ? 9000 : 4000);
+      if (ok > 0) await load();
+    } catch (err) {
+      showToast(`Import failed: ${err instanceof Error ? err.message : String(err)}`, 6000);
+    } finally {
+      setImporting(false);
+    }
   }
 
   async function loadCompanies(): Promise<CompanyOption[]> {
@@ -1257,6 +1428,7 @@ export default function DailyCollectionPage() {
             <button className="acc-btn" onClick={load}>
               <i className="fa-solid fa-rotate"></i> Reload
             </button>
+<<<<<<< ours
             <button className="acc-btn" onClick={downloadImportTemplate}>
               <i className="fa-solid fa-file-csv"></i> Template
             </button>
@@ -1273,6 +1445,15 @@ export default function DailyCollectionPage() {
                 }}
               />
             </label>
+=======
+            <button className="acc-btn" onClick={exportImportTemplate} title="Download a blank .csv with the columns Import expects">
+              <i className="fa-solid fa-file-export"></i> Export template
+            </button>
+            <button className="acc-btn" disabled={importing} onClick={openImportPicker} title="Bulk-create entries from a filled-in template">
+              <i className={`fa-solid ${importing ? 'fa-spinner fa-spin' : 'fa-file-import'}`}></i> {importing ? 'Importing…' : 'Import'}
+            </button>
+            <input ref={importInputRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={handleImportFile} />
+>>>>>>> theirs
             <button className="acc-btn acc-btn-primary" onClick={openDrawerCreate}>
               <i className="fa-solid fa-plus"></i> New entry
             </button>
