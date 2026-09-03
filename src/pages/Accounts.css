@@ -24,3 +24,23 @@
 .acc-bulkbar strong{font-family:'Outfit',sans-serif;font-weight:700}
 .acc-bulkbar-actions{display:flex;gap:8px;flex-shrink:0}
 :root[data-theme="dark"] .acc-bulkbar{background:rgba(165,132,91,.15)}
+
+/* Target vs Actual — one glanceable cell instead of two disconnected numbers. */
+.acc-ta{min-width:150px}
+.acc-ta-top{display:flex;align-items:baseline;gap:5px;font-variant-numeric:tabular-nums}
+.acc-ta-actual{font-family:'Outfit',sans-serif;font-weight:700;font-size:15px;color:var(--ink)}
+.acc-ta-sep{color:var(--muted);font-size:12px}
+.acc-ta-target{color:var(--muted);font-size:12px}
+.acc-ta-pct{margin-left:auto;font-family:'Outfit',sans-serif;font-weight:700;font-size:11px;
+  padding:1px 7px;border-radius:20px}
+.acc-ta-pct-ok{background:var(--okbg);color:var(--ok)}
+.acc-ta-pct-warn{background:var(--warnbg);color:var(--warn)}
+.acc-ta-pct-bad{background:var(--badbg);color:var(--bad)}
+.acc-ta-pct-none{background:#eee;color:#999}
+:root[data-theme="dark"] .acc-ta-pct-none{background:rgba(255,255,255,.08);color:#b9b6ac}
+.acc-ta-bar{height:5px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:6px}
+.acc-ta-bar>span{display:block;height:100%;border-radius:4px;transition:width .2s ease}
+.acc-ta-fill-ok{background:var(--ok)}
+.acc-ta-fill-warn{background:var(--warn)}
+.acc-ta-fill-bad{background:var(--bad)}
+.acc-ta-fill-none{background:var(--line)}

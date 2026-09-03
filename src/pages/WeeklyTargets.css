@@ -71,6 +71,10 @@
   font-family:'Inter';font-size:12.5px;text-align:right;background:#fbf8f2;color:var(--ink)}
 .wt-num-input:focus{outline:none;border-color:var(--gold);background:#fff}
 
+.wt-date-input{width:132px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;
+  font-family:'Inter';font-size:12.5px;background:#fbf8f2;color:var(--ink)}
+.wt-date-input:focus{outline:none;border-color:var(--gold);background:#fff}
+
 /* BU typeahead — used inside the "New Weekly Target" drawer */
 .wt-lookup{position:relative}
 .wt-lookup-results{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:20;
@@ -113,7 +117,10 @@
 :root[data-theme="dark"] .wt-tbl tfoot td{background:#232820}
 :root[data-theme="dark"] .wt-tbl tbody tr.wt-group-row td{background:#232820}
 :root[data-theme="dark"] .wt-pct-input input,
-:root[data-theme="dark"] .wt-num-input{background:#1c2118;color:var(--ink);border-color:var(--line)}
+:root[data-theme="dark"] .wt-num-input,
+:root[data-theme="dark"] .wt-date-input{background:#1c2118;color:var(--ink);border-color:var(--line)}
 :root[data-theme="dark"] .wt-pct-input input:focus,
-:root[data-theme="dark"] .wt-num-input:focus{background:#232920}
+:root[data-theme="dark"] .wt-num-input:focus,
+:root[data-theme="dark"] .wt-date-input:focus{background:#232920}
+:root[data-theme="dark"] .wt-date-input::-webkit-calendar-picker-indicator{filter:invert(1)}
 :root[data-theme="dark"] .wt-lookup-results{background:var(--card);border-color:var(--line)}

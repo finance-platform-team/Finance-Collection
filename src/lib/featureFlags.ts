@@ -5,6 +5,7 @@ export const ENABLED_PAGES = [
   'visits',
   'high-risk-companies',
   'visit-plan',
+  'visit-audit',
   'weekly-targets',
   'collection-plan',
   'daily-collection',

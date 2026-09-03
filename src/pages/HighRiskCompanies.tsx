@@ -1,3 +1,4 @@
+import Icon from '../components/Icon';
 import { useEffect, useMemo, useState } from 'react';
 import { Cfm_highriskcompaniesesService } from '../generated/services/Cfm_highriskcompaniesesService';
 import { Cfm_aragingsService } from '../generated/services/Cfm_aragingsService';
@@ -444,10 +445,10 @@ export default function HighRiskCompaniesPage({ region }: HighRiskCompaniesPageP
           </div>
           <div className="acc-actions">
             <button className="acc-btn acc-btn-primary" onClick={openDrawer}>
-              <i className="fa-solid fa-plus"></i> Add high risk
+              <Icon className="fa-solid fa-plus" /> Add high risk
             </button>
             <button className="acc-btn acc-btn-ghost" onClick={exportCsv}>
-              <i className="fa-solid fa-file-export"></i> Export
+              <Icon className="fa-solid fa-file-export" /> Export
             </button>
           </div>
         </div>
@@ -456,7 +457,7 @@ export default function HighRiskCompaniesPage({ region }: HighRiskCompaniesPageP
           <div className="kpi-card">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-gold">
-                <i className="fa-solid fa-triangle-exclamation"></i>
+                <Icon className="fa-solid fa-triangle-exclamation" />
               </span>
               <span className="kpi-label">Flagged companies</span>
             </div>
@@ -465,7 +466,7 @@ export default function HighRiskCompaniesPage({ region }: HighRiskCompaniesPageP
           <div className="kpi-card kpi-danger">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-danger">
-                <i className="fa-solid fa-sack-dollar"></i>
+                <Icon className="fa-solid fa-sack-dollar" />
               </span>
               <span className="kpi-label">Total dues (CP)</span>
             </div>
@@ -474,7 +475,7 @@ export default function HighRiskCompaniesPage({ region }: HighRiskCompaniesPageP
           <div className="kpi-card kpi-ok">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-ok">
-                <i className="fa-solid fa-hand-holding-dollar"></i>
+                <Icon className="fa-solid fa-hand-holding-dollar" />
               </span>
               <span className="kpi-label">Total collection (CP)</span>
             </div>
@@ -483,7 +484,7 @@ export default function HighRiskCompaniesPage({ region }: HighRiskCompaniesPageP
           <div className="kpi-card kpi-info">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-info">
-                <i className="fa-solid fa-circle-check"></i>
+                <Icon className="fa-solid fa-circle-check" />
               </span>
               <span className="kpi-label">Active</span>
             </div>
@@ -495,7 +496,7 @@ export default function HighRiskCompaniesPage({ region }: HighRiskCompaniesPageP
           <div className="tbl-hdr">
             <div className="dm-filter-bar">
               <div className="acc-search dm-search">
-                <i className="fa-solid fa-magnifying-glass"></i>
+                <Icon className="fa-solid fa-magnifying-glass" />
                 <input placeholder="Search company, code…" value={query} onChange={(e) => setQuery(e.target.value)} />
               </div>
               <select className="acc-f" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
@@ -516,7 +517,7 @@ export default function HighRiskCompaniesPage({ region }: HighRiskCompaniesPageP
               </select>
             </div>
             <div className="dm-count">
-              <i className="fa-solid fa-table"></i> Showing <strong>{filtered.length}</strong> of <strong>{regionRows.length}</strong>
+              <Icon className="fa-solid fa-table" /> Showing <strong>{filtered.length}</strong> of <strong>{regionRows.length}</strong>
             </div>
           </div>
 
@@ -550,7 +551,7 @@ export default function HighRiskCompaniesPage({ region }: HighRiskCompaniesPageP
                   <tr>
                     <td colSpan={9}>
                       <div className="acc-state">
-                        <i className="fa-solid fa-triangle-exclamation"></i>
+                        <Icon className="fa-solid fa-triangle-exclamation" />
                         Could not load high risk companies.
                         <br />
                         <small>{loadError}</small>
@@ -561,7 +562,7 @@ export default function HighRiskCompaniesPage({ region }: HighRiskCompaniesPageP
                   <tr>
                     <td colSpan={9}>
                       <div className="acc-state">
-                        <i className="fa-solid fa-inbox"></i>
+                        <Icon className="fa-solid fa-inbox" />
                         No high risk companies match your filters.
                       </div>
                     </td>
@@ -589,7 +590,7 @@ export default function HighRiskCompaniesPage({ region }: HighRiskCompaniesPageP
                               onClick={(e) => toggleStatusMenu(r.id, e.currentTarget)}
                             >
                               {r.status != null ? STATUS_LABEL[r.status] : '—'}
-                              <i className="fa-solid fa-chevron-down hr-status-caret"></i>
+                              <Icon className="fa-solid fa-chevron-down hr-status-caret" />
                             </button>
                             {statusOpenId === r.id && (
                               <div className={`hr-status-menu${statusMenuUp ? ' hr-status-menu-up' : ''}`} onMouseDown={(e) => e.stopPropagation()}>
@@ -603,13 +604,13 @@ export default function HighRiskCompaniesPage({ region }: HighRiskCompaniesPageP
                                     }}
                                   >
                                     {STATUS_LABEL[v]}
-                                    {v === r.status && <i className="fa-solid fa-check hr-status-item-check"></i>}
+                                    {v === r.status && <Icon className="fa-solid fa-check hr-status-item-check" />}
                                   </div>
                                 ))}
                               </div>
                             )}
                           </div>
-                          {cellState[statusKey] === 'saving' && <i className="fa-solid fa-spinner fa-spin hr-cell-ico"></i>}
+                          {cellState[statusKey] === 'saving' && <Icon className="fa-solid fa-spinner fa-spin hr-cell-ico" />}
                         </td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <input
@@ -619,8 +620,8 @@ export default function HighRiskCompaniesPage({ region }: HighRiskCompaniesPageP
                             onChange={(e) => setCommentDrafts((prev) => ({ ...prev, [r.id]: e.target.value }))}
                             onBlur={() => commitComment(r)}
                           />
-                          {cellState[commentKey] === 'saving' && <i className="fa-solid fa-spinner fa-spin hr-cell-ico"></i>}
-                          {cellState[commentKey] === 'saved' && <i className="fa-solid fa-check hr-cell-ico ok"></i>}
+                          {cellState[commentKey] === 'saving' && <Icon className="fa-solid fa-spinner fa-spin hr-cell-ico" />}
+                          {cellState[commentKey] === 'saved' && <Icon className="fa-solid fa-check hr-cell-ico ok" />}
                         </td>
                       </tr>
                     );
@@ -666,7 +667,7 @@ export default function HighRiskCompaniesPage({ region }: HighRiskCompaniesPageP
         <div className="acc-dhead">
           <h2>New · High Risk Company</h2>
           <button className="acc-dclose" onClick={closeDrawer}>
-            <i className="fa-solid fa-xmark"></i>
+            <Icon className="fa-solid fa-xmark" />
           </button>
         </div>
         <div className="acc-dbody">
@@ -740,7 +741,7 @@ export default function HighRiskCompaniesPage({ region }: HighRiskCompaniesPageP
             <button className="acc-btn acc-btn-primary" disabled={!canSave} onClick={addHighRisk}>
               {saving ? (
                 <>
-                  <i className="fa-solid fa-spinner fa-spin"></i> Adding…
+                  <Icon className="fa-solid fa-spinner fa-spin" /> Adding…
                 </>
               ) : (
                 '+ Add high risk'

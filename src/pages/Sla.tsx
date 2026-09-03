@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Cfm_slasService } from '../generated/services/Cfm_slasService';
 import { SystemusersService } from '../generated/services/SystemusersService';
+import { Cr301_agentsService } from '../generated/services/Cr301_agentsService';
 import type { Cfm_slas, Cfm_slasBase } from '../generated/models/Cfm_slasModel';
 import { operationErrorMessage } from '../lib/errors';
 import { fetchAll } from '../lib/dataverse';
+import type { Region } from '../lib/useRegion';
+import Icon from '../components/Icon';
 import './Sla.css';
 
 /**
@@ -39,6 +42,11 @@ const SLA_TYPE_OPTIONS = [
   { value: SLA_TYPE.DATE, label: 'Date' },
 ];
 
+// cfm_slas carries no company/BU field of its own — region is derived from
+// Responsible (a systemuser lookup) via that same user's cr301_agents record's
+// cr18c_area, the same source of truth Agents.tsx / Daily Collection use.
+const AREA_KSA = 989230004;
+
 function formattedValue(record: unknown, attribute: string): string {
   const raw = (record as Record<string, unknown>)[`${attribute}@OData.Community.Display.V1.FormattedValue`];
   return typeof raw === 'string' ? raw : '';
@@ -68,9 +76,10 @@ interface SlaRow {
   escalationRule: string;
   deduction: string;
   createdOn: string;
+  region: 'EG' | 'KSA' | '';
 }
 
-function normaliseSla(row: Cfm_slas): SlaRow {
+function normaliseSla(row: Cfm_slas, regionByUserId: Map<string, 'EG' | 'KSA'>): SlaRow {
   const tag = row.cfm_tagename == null ? null : Number(row.cfm_tagename);
   const slaType = row.cfm_slatype == null ? null : Number(row.cfm_slatype);
   return {
@@ -92,6 +101,7 @@ function normaliseSla(row: Cfm_slas): SlaRow {
     escalationRule: row.cfm_escalationrule || '',
     deduction: row.cfm_deduction || '',
     createdOn: row.createdon || '',
+    region: (row._cfm_responsible_value && regionByUserId.get(row._cfm_responsible_value)) || '',
   };
 }
 
@@ -154,7 +164,11 @@ function UserCombo({ users, initialName, onChange }: { users: UserOption[]; init
   );
 }
 
-export default function SlaPage() {
+interface SlaPageProps {
+  region: Region | null;
+}
+
+export default function SlaPage({ region }: SlaPageProps) {
   const [rows, setRows] = useState<SlaRow[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -204,19 +218,40 @@ export default function SlaPage() {
     return (res.data || []).filter((u) => u.fullname).map((u) => ({ id: u.systemuserid, name: u.fullname! }));
   }
 
+  async function loadRegionByUserId(): Promise<Map<string, 'EG' | 'KSA'>> {
+    const rows = await fetchAll<{ cr301_agentid: string; cr18c_area?: number; _cr301_agent_value?: string }>(
+      (skipToken) =>
+        Cr301_agentsService.getAll({
+          select: ['cr301_agentid', 'cr18c_area', '_cr301_agent_value'],
+          filter: 'cfm_iscollection eq true',
+          maxPageSize: 5000,
+          skipToken,
+        }),
+      'Could not load agents.'
+    );
+    const map = new Map<string, 'EG' | 'KSA'>();
+    rows.forEach((a) => {
+      if (a._cr301_agent_value && a.cr18c_area != null) {
+        map.set(a._cr301_agent_value, Number(a.cr18c_area) === AREA_KSA ? 'KSA' : 'EG');
+      }
+    });
+    return map;
+  }
+
   async function load() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [userOptions, slaRows] = await Promise.all([
+      const [userOptions, regionMap, slaRows] = await Promise.all([
         loadUsers(),
+        loadRegionByUserId(),
         fetchAll<Cfm_slas>(
           (skipToken) => Cfm_slasService.getAll({ select: SLA_SELECT, filter: 'statecode eq 0', orderBy: ['cfm_action asc'], maxPageSize: 5000, skipToken }),
           'Could not load SLA rules.'
         ),
       ]);
       setUsers(userOptions);
-      setRows(slaRows.map(normaliseSla));
+      setRows(slaRows.map((r) => normaliseSla(r, regionMap)));
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -231,18 +266,25 @@ export default function SlaPage() {
   // This page is Collection-only now (the Tag picker was removed from the create/edit
   // form and every rule saved through it is tagged Collection) — the list matches that,
   // filtering to Collection-tagged rows rather than showing legacy AR/AP/untagged ones.
+  // App-wide Region toggle (Layout header) — unset region on a rule counts as
+  // Egypt, same convention used everywhere else this filter appears.
+  const regionRows = useMemo(
+    () => (!region ? rows : rows.filter((r) => (region === 'KSA' ? r.region === 'KSA' : r.region !== 'KSA'))),
+    [rows, region]
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return rows.filter((r) => {
+    return regionRows.filter((r) => {
       if (r.tag !== TAG.COLLECTION) return false;
       if (q && !`${r.action} ${r.department1} ${r.department2} ${r.responsibleName}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [rows, query]);
+  }, [regionRows, query]);
 
   useEffect(() => {
     setPage(1);
-  }, [query]);
+  }, [query, region]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const clampedPage = Math.min(page, totalPages);
@@ -301,10 +343,46 @@ export default function SlaPage() {
     setDrawerOpen(false);
   }
 
-  const canSave = !saving && formAction.trim() !== '';
+  const canSave = !saving;
 
   async function saveSla() {
-    if (saving || !canSave) return;
+    if (saving) return;
+    if (!formAction.trim()) {
+      setFormError('Action is required.');
+      return;
+    }
+    if (!formSlaValue.trim()) {
+      setFormError(Number(formSlaType) === SLA_TYPE.DATE ? 'SLA date is required.' : 'SLA (number of hours) is required.');
+      return;
+    }
+    if (!formDept1.trim()) {
+      setFormError('Department 1 is required.');
+      return;
+    }
+    if (!formManager1) {
+      setFormError('Manager for Department 1 is required.');
+      return;
+    }
+    if (!formDept2.trim()) {
+      setFormError('Department 2 is required.');
+      return;
+    }
+    if (!formManager2) {
+      setFormError('Manager of Department 2 is required.');
+      return;
+    }
+    if (!formResponsible) {
+      setFormError('Responsible is required.');
+      return;
+    }
+    if (!formEscalation.trim()) {
+      setFormError('Escalation rule is required.');
+      return;
+    }
+    if (!formDeduction.trim()) {
+      setFormError('Deduction is required.');
+      return;
+    }
     setSaving(true);
     setFormError('');
     try {
@@ -349,7 +427,7 @@ export default function SlaPage() {
           </div>
           <div className="acc-actions">
             <button className="acc-btn acc-btn-primary" onClick={openCreateDrawer}>
-              <i className="fa-solid fa-plus"></i> Create SLA rule
+              <Icon className="fa-solid fa-plus" /> Create SLA rule
             </button>
           </div>
         </div>
@@ -358,12 +436,12 @@ export default function SlaPage() {
           <div className="tbl-hdr">
             <div className="dm-filter-bar">
               <div className="acc-search dm-search">
-                <i className="fa-solid fa-magnifying-glass"></i>
+                <Icon className="fa-solid fa-magnifying-glass" />
                 <input placeholder="Search action, department, responsible…" value={query} onChange={(e) => setQuery(e.target.value)} />
               </div>
             </div>
             <div className="dm-count">
-              <i className="fa-solid fa-table"></i> Showing <strong>{filtered.length}</strong> of <strong>{rows.length}</strong>
+              <Icon className="fa-solid fa-table" /> Showing <strong>{filtered.length}</strong> of <strong>{rows.length}</strong>
             </div>
           </div>
 
@@ -396,7 +474,7 @@ export default function SlaPage() {
                   <tr>
                     <td colSpan={8}>
                       <div className="acc-state">
-                        <i className="fa-solid fa-triangle-exclamation"></i>
+                        <Icon className="fa-solid fa-triangle-exclamation" />
                         Could not load SLA rules.
                         <br />
                         <small>{loadError}</small>
@@ -407,7 +485,7 @@ export default function SlaPage() {
                   <tr>
                     <td colSpan={8}>
                       <div className="acc-state">
-                        <i className="fa-solid fa-inbox"></i>
+                        <Icon className="fa-solid fa-inbox" />
                         No SLA rules match your filters.
                       </div>
                     </td>
@@ -469,7 +547,7 @@ export default function SlaPage() {
         <div className="acc-dhead">
           <h2>{mode === 'edit' ? 'Edit · SLA Rule' : 'New · SLA Rule'}</h2>
           <button className="acc-dclose" onClick={closeDrawer}>
-            <i className="fa-solid fa-xmark"></i>
+            <Icon className="fa-solid fa-xmark" />
           </button>
         </div>
         <div className="acc-dbody">
@@ -483,7 +561,9 @@ export default function SlaPage() {
           </div>
 
           <div className="acc-fld">
-            <label>SLA type</label>
+            <label>
+              SLA type <span className="dm-req">*</span>
+            </label>
             <select value={formSlaType} onChange={(e) => setFormSlaType(e.target.value)}>
               {SLA_TYPE_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -494,7 +574,9 @@ export default function SlaPage() {
           </div>
 
           <div className="acc-fld">
-            <label>{Number(formSlaType) === SLA_TYPE.DATE ? 'SLA date' : 'SLA (number of hours)'}</label>
+            <label>
+              {Number(formSlaType) === SLA_TYPE.DATE ? 'SLA date' : 'SLA (number of hours)'} <span className="dm-req">*</span>
+            </label>
             <input
               placeholder={Number(formSlaType) === SLA_TYPE.DATE ? 'e.g. 2026-09-01' : 'e.g. 24'}
               value={formSlaValue}
@@ -503,35 +585,49 @@ export default function SlaPage() {
           </div>
 
           <div className="acc-fld">
-            <label>Department 1</label>
+            <label>
+              Department 1 <span className="dm-req">*</span>
+            </label>
             <input placeholder="Department name" value={formDept1} onChange={(e) => setFormDept1(e.target.value)} />
           </div>
           <div className="acc-fld">
-            <label>Manager for Department 1</label>
+            <label>
+              Manager for Department 1 <span className="dm-req">*</span>
+            </label>
             <UserCombo key={`${editId || 'new'}-m1`} users={users} initialName={formManager1Name} onChange={setFormManager1} />
           </div>
 
           <div className="acc-fld">
-            <label>Department 2</label>
+            <label>
+              Department 2 <span className="dm-req">*</span>
+            </label>
             <input placeholder="Department name" value={formDept2} onChange={(e) => setFormDept2(e.target.value)} />
           </div>
           <div className="acc-fld">
-            <label>Manager of Department 2</label>
+            <label>
+              Manager of Department 2 <span className="dm-req">*</span>
+            </label>
             <UserCombo key={`${editId || 'new'}-m2`} users={users} initialName={formManager2Name} onChange={setFormManager2} />
           </div>
 
           <div className="acc-fld">
-            <label>Responsible</label>
+            <label>
+              Responsible <span className="dm-req">*</span>
+            </label>
             <UserCombo key={`${editId || 'new'}-resp`} users={users} initialName={formResponsibleName} onChange={setFormResponsible} />
           </div>
 
           <div className="acc-fld">
-            <label>Escalation rule</label>
+            <label>
+              Escalation rule <span className="dm-req">*</span>
+            </label>
             <textarea rows={3} placeholder="What happens if the SLA is missed…" value={formEscalation} onChange={(e) => setFormEscalation(e.target.value)} />
           </div>
 
           <div className="acc-fld">
-            <label>Deduction</label>
+            <label>
+              Deduction <span className="dm-req">*</span>
+            </label>
             <textarea rows={3} placeholder="Penalty / deduction applied…" value={formDeduction} onChange={(e) => setFormDeduction(e.target.value)} />
           </div>
         </div>

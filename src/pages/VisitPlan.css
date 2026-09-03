@@ -72,6 +72,11 @@
 .vp-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:6px}
 .vp-del:hover{color:var(--bad)}
 
+.vp-chip-inactive{color:var(--bad);border-color:var(--badbg);background:var(--badbg)}
+.vp-status-toggle{background:none;border:none;cursor:pointer;font-size:20px;padding:6px;color:var(--muted);line-height:1}
+.vp-status-toggle-active{color:var(--ok)}
+.vp-status-toggle:hover{opacity:0.75}
+
 /* week expand */
 .vp-weeks-row td{padding:0 16px 18px;background:var(--bg)}
 .vp-weeks-grid{display:flex;gap:12px;flex-wrap:wrap;padding-top:14px}
@@ -203,6 +208,21 @@
 @media(max-width:640px){
   .vp-row2{grid-template-columns:1fr}
   .vp-modal{padding:1.4rem 1.2rem 1rem}
+  /* The name|bar|value|pct flex row doesn't fit a phone width — reflow into
+     a small grid: name+pct on top, the bar spanning full width below it,
+     then the value line, instead of everything squeezing onto one row and
+     forcing the card to scroll horizontally. */
+  .vp-crow{
+    display:grid;
+    grid-template-columns:1fr auto;
+    grid-template-areas:"name pct" "track track" "val val";
+    row-gap:6px;
+    column-gap:12px;
+  }
+  .vp-cname{grid-area:name;width:auto}
+  .vp-cpct{grid-area:pct;width:auto}
+  .vp-ctrack{grid-area:track}
+  .vp-cval{grid-area:val;width:auto;text-align:left}
 }
 
 /* ===== dark theme ===== */

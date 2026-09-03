@@ -1,3 +1,4 @@
+import Icon from '../components/Icon';
 ﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Cfm_aragingsService } from '../generated/services/Cfm_aragingsService';
@@ -615,7 +616,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
           }}
         >
           <span className="cp-user-pick-name">{currentName || '— Assign —'}</span>
-          <i className="fa-solid fa-chevron-down cp-user-pick-caret"></i>
+          <Icon className="fa-solid fa-chevron-down cp-user-pick-caret" />
         </button>
       </div>
     );
@@ -638,7 +639,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
     return createPortal(
       <div className="cp-picker" style={{ top, left, width }} ref={pickerPopRef}>
         <div className="cp-picker-search">
-          <i className="fa-solid fa-magnifying-glass"></i>
+          <Icon className="fa-solid fa-magnifying-glass" />
           <input autoFocus placeholder="Search users…" value={pickerQuery} onChange={(e) => setPickerQuery(e.target.value)} />
         </div>
         <div className="cp-picker-list">
@@ -647,7 +648,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
             className={`cp-picker-opt cp-picker-clear${!currentId ? ' sel' : ''}`}
             onClick={() => pickUser(row, picker.which, '')}
           >
-            <i className="fa-solid fa-user-slash"></i> Unassigned
+            <Icon className="fa-solid fa-user-slash" /> Unassigned
           </button>
           {items.map((u) => (
             <button
@@ -657,7 +658,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
               onClick={() => pickUser(row, picker.which, u.id)}
             >
               <span className="cp-picker-opt-name">{u.name}</span>
-              {u.id === currentId && <i className="fa-solid fa-check"></i>}
+              {u.id === currentId && <Icon className="fa-solid fa-check" />}
             </button>
           ))}
           {!items.length && <div className="cp-picker-empty">No users match.</div>}
@@ -744,10 +745,10 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
           </div>
           <div className="acc-actions">
             <button className="acc-btn" onClick={exportCsv}>
-              <i className="fa-solid fa-file-arrow-down"></i> <span className="cp-btn-label">Export</span>
+              <Icon className="fa-solid fa-file-arrow-down" /> <span className="cp-btn-label">Export</span>
             </button>
             <button className="acc-btn" onClick={load}>
-              <i className="fa-solid fa-rotate"></i> <span className="cp-btn-label">Reload</span>
+              <Icon className="fa-solid fa-rotate" /> <span className="cp-btn-label">Reload</span>
             </button>
           </div>
         </div>
@@ -756,7 +757,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
           <div className="kpi-card">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-gold">
-                <i className="fa-solid fa-coins"></i>
+                <Icon className="fa-solid fa-coins" />
               </span>
               <span className="kpi-label">Total dues</span>
             </div>
@@ -767,7 +768,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
           <div className="kpi-card">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-gold">
-                <i className="fa-solid fa-bullseye"></i>
+                <Icon className="fa-solid fa-bullseye" />
               </span>
               <span className="kpi-label">Target plan</span>
             </div>
@@ -778,7 +779,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
           <div className="kpi-card kpi-ok">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-ok">
-                <i className="fa-solid fa-sack-dollar"></i>
+                <Icon className="fa-solid fa-sack-dollar" />
               </span>
               <span className="kpi-label">Total collected</span>
             </div>
@@ -791,7 +792,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
           <div className="kpi-card kpi-gold">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-gold">
-                <i className="fa-solid fa-hourglass-half"></i>
+                <Icon className="fa-solid fa-hourglass-half" />
               </span>
               <span className="kpi-label">Remaining dues</span>
             </div>
@@ -802,7 +803,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
           <div className="kpi-card kpi-warn">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-warn">
-                <i className="fa-solid fa-clock"></i>
+                <Icon className="fa-solid fa-clock" />
               </span>
               <span className="kpi-label">Pending confirmation</span>
             </div>
@@ -813,7 +814,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
           <div className="kpi-card kpi-info">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-info">
-                <i className="fa-solid fa-money-bill-trend-up"></i>
+                <Icon className="fa-solid fa-money-bill-trend-up" />
               </span>
               <span className="kpi-label">Pending confirmation + collected</span>
             </div>
@@ -826,7 +827,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
           <div className="tbl-hdr">
             <div className="cp-filter-bar">
               <div className="acc-search cp-search">
-                <i className="fa-solid fa-magnifying-glass"></i>
+                <Icon className="fa-solid fa-magnifying-glass" />
                 <input placeholder="Search company, code, owner…" value={query} onChange={(e) => setQuery(e.target.value)} />
               </div>
               <select className="acc-f" value={buFilter} onChange={(e) => setBuFilter(e.target.value)}>
@@ -854,14 +855,14 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
                 ))}
               </select>
               <button className={`cp-toggle${unassignedOnly ? ' active' : ''}`} onClick={() => setUnassignedOnly((v) => !v)}>
-                <i className="fa-solid fa-user-slash"></i> Unassigned only
+                <Icon className="fa-solid fa-user-slash" /> Unassigned only
               </button>
               <button className="cp-clear" onClick={clearFilters}>
-                <i className="fa-solid fa-xmark"></i> Clear
+                <Icon className="fa-solid fa-xmark" /> Clear
               </button>
             </div>
             <div className="cp-count">
-              <i className="fa-solid fa-table"></i> Showing <strong>{filtered.length}</strong> of <strong>{regionRows.length}</strong>
+              <Icon className="fa-solid fa-table" /> Showing <strong>{filtered.length}</strong> of <strong>{regionRows.length}</strong>
             </div>
           </div>
 
@@ -910,7 +911,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
                   <tr>
                     <td colSpan={26}>
                       <div className="acc-state">
-                        <i className="fa-solid fa-triangle-exclamation"></i>
+                        <Icon className="fa-solid fa-triangle-exclamation" />
                         Couldn't load Collection Plan.
                         <br />
                         <small>{loadError}</small>
@@ -921,7 +922,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
                   <tr>
                     <td colSpan={26}>
                       <div className="acc-state">
-                        <i className="fa-solid fa-filter-circle-xmark"></i>
+                        <Icon className="fa-solid fa-filter-circle-xmark" />
                         No records match the current filters.
                       </div>
                     </td>
@@ -973,7 +974,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
                 <tfoot>
                   <tr>
                     <td colSpan={3} className="cp-col-bold cp-group-end">
-                      <i className="fa-solid fa-square-poll-vertical" style={{ color: 'var(--gold)', marginRight: 6 }}></i>
+                      <Icon className="fa-solid fa-square-poll-vertical" style={{ color: 'var(--gold)', marginRight: 6 }} />
                       Total ({filtered.length})
                     </td>
                     <td colSpan={3} className="cp-group-end"></td>
@@ -1014,14 +1015,14 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
               ))
             ) : loadError ? (
               <div className="acc-state">
-                <i className="fa-solid fa-triangle-exclamation"></i>
+                <Icon className="fa-solid fa-triangle-exclamation" />
                 Couldn't load Collection Plan.
                 <br />
                 <small>{loadError}</small>
               </div>
             ) : pageRows.length === 0 ? (
               <div className="acc-state">
-                <i className="fa-solid fa-filter-circle-xmark"></i>
+                <Icon className="fa-solid fa-filter-circle-xmark" />
                 No records match the current filters.
               </div>
             ) : (
@@ -1138,7 +1139,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
                 </span>
               </h2>
               <button className="acc-dclose" onClick={closeDetail}>
-                <i className="fa-solid fa-xmark"></i>
+                <Icon className="fa-solid fa-xmark" />
               </button>
             </div>
             <div className="acc-dbody">

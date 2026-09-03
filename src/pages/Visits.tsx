@@ -1,3 +1,4 @@
+import Icon from '../components/Icon';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Cr301_visitsService } from '../generated/services/Cr301_visitsService';
 import { Cr301_accountsService } from '../generated/services/Cr301_accountsService';
@@ -5,6 +6,7 @@ import { Cr301_agentsService } from '../generated/services/Cr301_agentsService';
 import { Hr_employeesService } from '../generated/services/Hr_employeesService';
 import { Stf_kpiachievmentbreakdownsService } from '../generated/services/Stf_kpiachievmentbreakdownsService';
 import { Cfm_collectionplanweeksService } from '../generated/services/Cfm_collectionplanweeksService';
+import { Pm_kpiachievmentsService } from '../generated/services/Pm_kpiachievmentsService';
 import { Cr301_visitscr301_visitstatus } from '../generated/models/Cr301_visitsModel';
 import type { Cr301_visitsBase, Cr301_visitscr301_visittype } from '../generated/models/Cr301_visitsModel';
 import type { Cfm_collectionplanweeks } from '../generated/models/Cfm_collectionplanweeksModel';
@@ -13,9 +15,14 @@ import { operationErrorMessage } from '../lib/errors';
 import { fetchAll } from '../lib/dataverse';
 import { visitStatusClass } from '../lib/visitStatus';
 import { escapeForCsv, downloadCsv } from '../lib/csvExport';
+import type { Region } from '../lib/useRegion';
 import './Visits.css';
 
 const VISIT_KPI_NAME = 'No. of Visits';
+// Same cr18c_area choice on cr301_agents / same Egypt-vs-KSA mapping as
+// Agents.tsx and VisitPlan.tsx (KSA = the real KSA choice value, Egypt =
+// everything else, including unset).
+const AREA_KSA = 989230004;
 
 // First 3 words of a name, normalized — same tolerant match used on the Agents
 // page for Employee <-> System User, reused here for Agent <-> Employee since
@@ -30,21 +37,41 @@ type AdjustOutcome =
   | { status: 'no-employee' | 'no-breakdown' | 'no-week' | 'bad-date'; agentName: string }
   | { status: 'error'; agentName: string; message: string };
 
+// Same fixed calendar-day buckets VisitPlan.tsx uses when creating weeks
+// (1-10, 11-18, 19-25, 26-end-of-month) — must stay in sync with
+// MONTH_WEEK_BOUNDS there, since this is how a visit's date resolves to a
+// cfm_weeknumber to adjust.
+function monthDayBucket(day: number): number {
+  if (day <= 10) return 1;
+  if (day <= 18) return 2;
+  if (day <= 25) return 3;
+  return 4;
+}
+
 /**
  * For an agent + a reference date (the Visit's createdon), find that agent's
  * matching hr_employees record (by name), their active "No. of Visits" KPI
- * achievement breakdown for that date's year, and the Collection Plan Week
- * under that breakdown whose cfm_weeknumber matches the reference date's
- * day-of-month bucket (day 1-7 -> week 1, 8-14 -> week 2, 15-21 -> week 3,
- * ...) — then adjust that week's cfm_actual by `delta` (+1 for a
- * created/moved-in visit, -1 for a removed/moved-out one, clamped at 0).
+ * achievement breakdown for that DATE'S OWN MONTH+YEAR (not just year — a
+ * September visit must land on the September achievement, never fall back to
+ * August's), and the Collection Plan Week under that breakdown whose
+ * cfm_weeknumber matches the reference date's day-of-month bucket (day 1-10
+ * -> week 1, 11-18 -> week 2, 19-25 -> week 3, 26-end-of-month -> week 4) —
+ * then adjust that week's cfm_actual by `delta` (+1 for a created/moved-in
+ * visit, -1 for a removed/moved-out one, clamped at 0).
  *
- * Deliberately does NOT compare against cfm_weekfrom/cfm_weekto: those aren't
- * reliable real calendar boundaries (the create wizard in VisitPlan.tsx just
- * stamps them as sequential 7-day ranges from whenever the plan happened to be
- * created, not from a fixed month start), so date-range matching against them
- * can miss every week. cfm_weeknumber is the one plan-week-count-agnostic
- * anchor both this code and the plan's own week cards agree on.
+ * Resolves the breakdown by first finding this employee's own "No. of
+ * Visits" breakdown(s), then narrowing to whichever one's parent
+ * pm_kpiachievments has this exact pm_month/pm_year — anchoring on the
+ * employee's breakdowns first (a small, specific set) rather than searching
+ * achievements globally by month/year first, which can match the wrong
+ * record when more than one "No. of Visits" achievement exists for the same
+ * month (different BUs, or a duplicate from re-running the create wizard)
+ * and isn't the one this employee's breakdown actually belongs to.
+ *
+ * Deliberately does NOT compare against cfm_weekfrom/cfm_weekto: matching by
+ * cfm_weeknumber is the one plan-week-count-agnostic anchor both this code
+ * and the plan's own week cards agree on, and doesn't require the two pages
+ * to agree on exact date-range formatting.
  *
  * Mirrors what a Power Automate flow on cr301_visits would do, run inline
  * instead. Returns which step it stopped at rather than throwing, so the
@@ -63,16 +90,42 @@ async function adjustVisitPlanActual(agentName: string, referenceDateIso: string
 
     const referenceDate = new Date(referenceDateIso);
     if (Number.isNaN(referenceDate.getTime())) return { status: 'bad-date', agentName };
-    const year = referenceDate.getUTCFullYear();
-    const weekNumber = Math.ceil(referenceDate.getUTCDate() / 7);
+    // Local calendar date, not UTC: pm_month/pm_year on the achievement (set from
+    // `new Date().getMonth()` in VisitPlan.tsx) and the 1-10/11-18/19-25/26-31
+    // day buckets are both defined in local wall-clock terms. Reading UTC here
+    // instead disagreed near midnight in UTC+2/UTC+3 — a visit at 00:30 local on
+    // the 1st is still the last day of the prior month in UTC, so it missed the
+    // new month's achievement entirely ("no active KPI plan found").
+    const year = referenceDate.getFullYear();
+    const month = referenceDate.getMonth() + 1;
+    const weekNumber = monthDayBucket(referenceDate.getDate());
 
-    const breakdowns = await Stf_kpiachievmentbreakdownsService.getAll({
-      select: ['stf_kpiachievmentbreakdownid'],
-      filter: `_stf_employee_value eq ${employee.hr_employeeid} and pms_year eq ${year} and pms_kpinamefx eq '${VISIT_KPI_NAME}' and statecode eq 0`,
-      orderBy: ['createdon desc'],
+    // Anchor on the employee's OWN breakdowns first (a small, specific set),
+    // then narrow to whichever one's parent achievement is this exact
+    // month/year — rather than searching achievements globally by month/year
+    // first, which can match the wrong record when more than one "No. of
+    // Visits" achievement exists for the same month (different BUs, or a
+    // duplicate from re-running the create wizard) and isn't the one this
+    // employee's breakdown actually belongs to.
+    const employeeBreakdowns = await Stf_kpiachievmentbreakdownsService.getAll({
+      select: ['stf_kpiachievmentbreakdownid', '_stf_total_value'],
+      filter: `_stf_employee_value eq ${employee.hr_employeeid} and pms_kpinamefx eq '${VISIT_KPI_NAME}' and statecode eq 0`,
+      maxPageSize: 5000,
+    });
+    const candidates = (employeeBreakdowns.success ? employeeBreakdowns.data : undefined) || [];
+    const achIds = Array.from(new Set(candidates.map((b) => b._stf_total_value).filter((id): id is string => !!id)));
+    if (!achIds.length) return { status: 'no-breakdown', agentName };
+
+    const achFilter = achIds.map((id) => `pm_kpiachievmentid eq ${id}`).join(' or ');
+    const achievements = await Pm_kpiachievmentsService.getAll({
+      select: ['pm_kpiachievmentid'],
+      filter: `(${achFilter}) and pm_month eq ${month} and pm_year eq ${year} and statecode eq 0`,
       top: 1,
     });
-    const breakdownId = breakdowns.success ? breakdowns.data?.[0]?.stf_kpiachievmentbreakdownid : undefined;
+    const achievementId = achievements.success ? achievements.data?.[0]?.pm_kpiachievmentid : undefined;
+    if (!achievementId) return { status: 'no-breakdown', agentName };
+
+    const breakdownId = candidates.find((b) => b._stf_total_value === achievementId)?.stf_kpiachievmentbreakdownid;
     if (!breakdownId) return { status: 'no-breakdown', agentName };
 
     const weeks = await fetchAll<Cfm_collectionplanweeks>(
@@ -120,7 +173,7 @@ function describeAdjustOutcome(o: AdjustOutcome): string | null {
     case 'no-employee':
       return `no employee match for "${o.agentName}"`;
     case 'no-breakdown':
-      return `no active "No. of Visits" KPI plan found for "${o.agentName}" this year`;
+      return `no active "No. of Visits" KPI plan found for "${o.agentName}" this month`;
     case 'no-week':
       return `no Collection Plan Week found for "${o.agentName}"`;
     case 'bad-date':
@@ -182,6 +235,7 @@ interface AccountOption {
 interface AgentOption {
   id: string;
   name: string;
+  region: 'EG' | 'KSA' | '';
 }
 
 interface VisitRow {
@@ -200,6 +254,7 @@ interface VisitRow {
   statusLabel: string;
   revisit: string;
   notes: string;
+  region: 'EG' | 'KSA' | '';
 }
 
 type TypeFilter = '' | 'single' | 'double';
@@ -211,7 +266,11 @@ function fmtDate(iso: string): string {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-export default function VisitsPage() {
+interface VisitsPageProps {
+  region: Region | null;
+}
+
+export default function VisitsPage({ region }: VisitsPageProps) {
   const [visits, setVisits] = useState<VisitRow[]>([]);
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [agents, setAgents] = useState<AgentOption[]>([]);
@@ -265,7 +324,7 @@ export default function VisitsPage() {
           orderBy: ['cr301_acccountname'],
         }),
         Cr301_agentsService.getAll({
-          select: ['cr301_agentid', 'cr301_newcolumn'],
+          select: ['cr301_agentid', 'cr301_newcolumn', 'cr18c_area'],
           filter: 'cfm_iscollection eq true',
           orderBy: ['cr301_newcolumn'],
         }),
@@ -304,10 +363,14 @@ export default function VisitsPage() {
         name: a.cr301_acccountname || '(no name)',
         code: a.cr301_accountcode || '',
       }));
-      const agentOptions: AgentOption[] = (agentResult.data || []).map((a) => ({
-        id: a.cr301_agentid,
-        name: a.cr301_newcolumn || '(agent)',
-      }));
+      const agentOptions: AgentOption[] = (agentResult.data || []).map((a) => {
+        const areaValue = a.cr18c_area == null ? null : Number(a.cr18c_area);
+        return {
+          id: a.cr301_agentid,
+          name: a.cr301_newcolumn || '(agent)',
+          region: areaValue == null ? '' : areaValue === AREA_KSA ? 'KSA' : 'EG',
+        };
+      });
       const accMap = new Map(accountOptions.map((a) => [a.id, a]));
       const agentMap = new Map(agentOptions.map((a) => [a.id, a]));
 
@@ -335,6 +398,7 @@ export default function VisitsPage() {
           statusLabel: Cr301_visitscr301_visitstatus[r.cr301_visitstatus ?? VISIT_STATUS_OPEN] || '—',
           revisit: extra.cfm_revisitdate || '',
           notes: r.cr301_notes || '',
+          region: agent?.region || '',
         };
       });
 
@@ -370,7 +434,7 @@ export default function VisitsPage() {
 
   const view = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return visits.filter((v) => {
+    const matches = visits.filter((v) => {
       if (q && !`${v.owner} ${v.owner2} ${v.company} ${v.code} ${v.notes}`.toLowerCase().includes(q)) return false;
       if (statusFilter && String(v.status) !== statusFilter) return false;
       if (typeFilter === 'single' && v.isDouble) return false;
@@ -378,24 +442,29 @@ export default function VisitsPage() {
       if (monthFilter && v.date.slice(0, 7) !== monthFilter) return false;
       if (dateFrom && (!v.date || v.date.slice(0, 10) < dateFrom)) return false;
       if (dateTo && (!v.date || v.date.slice(0, 10) > dateTo)) return false;
+      // App-wide Region toggle (Layout header) — unset region on a visit's
+      // owner counts as Egypt, same "everything else is Egypt" convention
+      // useRegion.ts uses for BUs.
+      if (region && (region === 'KSA' ? v.region !== 'KSA' : v.region === 'KSA')) return false;
       return true;
     });
-  }, [visits, query, statusFilter, typeFilter, monthFilter, dateFrom, dateTo]);
+    return [...matches].sort((a, b) => b.createdon.localeCompare(a.createdon));
+  }, [visits, query, statusFilter, typeFilter, monthFilter, dateFrom, dateTo, region]);
 
   useEffect(() => {
     setPage(1);
-  }, [query, statusFilter, typeFilter, monthFilter, dateFrom, dateTo]);
+  }, [query, statusFilter, typeFilter, monthFilter, dateFrom, dateTo, region]);
 
   const totalPages = Math.max(1, Math.ceil(view.length / pageSize));
   const clampedPage = Math.min(page, totalPages);
   const pageRows = view.slice((clampedPage - 1) * pageSize, (clampedPage - 1) * pageSize + pageSize);
 
   const kpis = useMemo(() => {
-    const uniqueCompanies = new Set(visits.filter((v) => v.accountId).map((v) => v.accountId)).size;
-    const open = visits.filter((v) => v.status === VISIT_STATUS_OPEN).length;
-    const completed = visits.filter((v) => v.status === 983080001).length;
-    return { total: visits.length, uniqueCompanies, open, completed };
-  }, [visits]);
+    const uniqueCompanies = new Set(view.filter((v) => v.accountId).map((v) => v.accountId)).size;
+    const open = view.filter((v) => v.status === VISIT_STATUS_OPEN).length;
+    const completed = view.filter((v) => v.status === 983080001).length;
+    return { total: view.length, uniqueCompanies, open, completed };
+  }, [view]);
 
   const selectedAccount = useMemo(() => accounts.find((a) => a.id === formAccountId) || null, [accounts, formAccountId]);
 
@@ -534,7 +603,7 @@ export default function VisitsPage() {
   }
 
   function exportCsv() {
-    const header = ['Task Owner', 'Task Owner 2', 'Company', 'Company Code', 'Visit Date', 'Visit Status', 'Visit Type', 'Revisit Date', 'Comments'];
+    const header = ['Task Owner', 'Task Owner 2', 'Company', 'Company Code', 'Visit Date', 'Visit Status', 'Visit Type', 'Revisit Date', 'Comments', 'Created On', 'Region'];
     const rows = view.map((v) => [
       v.owner,
       v.owner2,
@@ -545,6 +614,8 @@ export default function VisitsPage() {
       v.isDouble ? 'Double' : 'Single',
       fmtDate(v.revisit),
       v.notes,
+      fmtDate(v.createdon),
+      v.region === 'KSA' ? 'KSA' : v.region === 'EG' ? 'Egypt' : '—',
     ]);
     downloadCsv('visits_log.csv', [header, ...rows].map((r) => r.map(escapeForCsv).join(',')));
   }
@@ -571,10 +642,10 @@ export default function VisitsPage() {
           </div>
           <div className="acc-actions">
             <button className="acc-btn acc-btn-primary" onClick={() => openDrawer()}>
-              <i className="fa-solid fa-plus"></i> Add Visit
+              <Icon className="fa-solid fa-plus" /> Add Visit
             </button>
             <button className="acc-btn" onClick={exportCsv}>
-              <i className="fa-solid fa-download"></i> Export
+              <Icon className="fa-solid fa-download" /> Export
             </button>
           </div>
         </div>
@@ -583,7 +654,7 @@ export default function VisitsPage() {
           <div className="kpi-card">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-gold">
-                <i className="fa-solid fa-clipboard-check"></i>
+                <Icon className="fa-solid fa-clipboard-check" />
               </span>
               <span className="kpi-label">Total visits</span>
             </div>
@@ -593,7 +664,7 @@ export default function VisitsPage() {
           <div className="kpi-card">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-gold">
-                <i className="fa-solid fa-building"></i>
+                <Icon className="fa-solid fa-building" />
               </span>
               <span className="kpi-label">Unique companies</span>
             </div>
@@ -603,7 +674,7 @@ export default function VisitsPage() {
           <div className="kpi-card kpi-warn">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-warn">
-                <i className="fa-solid fa-door-open"></i>
+                <Icon className="fa-solid fa-door-open" />
               </span>
               <span className="kpi-label">Open</span>
             </div>
@@ -615,7 +686,7 @@ export default function VisitsPage() {
           <div className="kpi-card kpi-ok">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-ok">
-                <i className="fa-solid fa-circle-check"></i>
+                <Icon className="fa-solid fa-circle-check" />
               </span>
               <span className="kpi-label">Completed</span>
             </div>
@@ -629,7 +700,7 @@ export default function VisitsPage() {
         <div className="tbl-shell">
           <div className="tbl-hdr">
             <div className="acc-search">
-              <i className="fa-solid fa-magnifying-glass"></i>
+              <Icon className="fa-solid fa-magnifying-glass" />
               <input placeholder="Search owner, company or notes…" value={query} onChange={(e) => setQuery(e.target.value)} />
             </div>
             <select className="acc-f" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -672,13 +743,15 @@ export default function VisitsPage() {
                 <th>Type</th>
                 <th>Revisit</th>
                 <th>Comments</th>
+                <th>Created On</th>
+                <th>Region</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: 8 }).map((__, j) => (
+                    {Array.from({ length: 10 }).map((__, j) => (
                       <td key={j}>
                         <div className="acc-skel"></div>
                       </td>
@@ -687,9 +760,9 @@ export default function VisitsPage() {
                 ))
               ) : loadError ? (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={10}>
                     <div className="acc-state">
-                      <i className="fa-solid fa-triangle-exclamation"></i>
+                      <Icon className="fa-solid fa-triangle-exclamation" />
                       Could not load visits.
                       <br />
                       <small>{loadError}</small>
@@ -698,9 +771,9 @@ export default function VisitsPage() {
                 </tr>
               ) : pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={10}>
                     <div className="acc-state">
-                      <i className="fa-solid fa-inbox"></i>
+                      <Icon className="fa-solid fa-inbox" />
                       No visits match your filters.
                     </div>
                   </td>
@@ -722,11 +795,11 @@ export default function VisitsPage() {
                       <td>
                         {v.isDouble ? (
                           <span className="vis-vt vis-vt-double">
-                            <i className="fa-solid fa-users"></i> Double
+                            <Icon className="fa-solid fa-users" /> Double
                           </span>
                         ) : (
                           <span className="vis-vt">
-                            <i className="fa-solid fa-user"></i> Single
+                            <Icon className="fa-solid fa-user" /> Single
                           </span>
                         )}
                       </td>
@@ -734,6 +807,8 @@ export default function VisitsPage() {
                       <td>
                         <div className="vis-notes">{v.notes || <span className="vis-muted">—</span>}</div>
                       </td>
+                      <td>{v.createdon ? fmtDate(v.createdon) : <span className="vis-muted">—</span>}</td>
+                      <td>{v.region ? (v.region === 'KSA' ? 'KSA' : 'Egypt') : <span className="vis-muted">—</span>}</td>
                     </tr>
                   );
                 })
@@ -785,11 +860,11 @@ export default function VisitsPage() {
       <aside className={`acc-drawer${drawerOpen ? ' on' : ''}`}>
         <div className="acc-dhead">
           <h2>
-            <i className={`fa-solid ${editId ? 'fa-pen' : 'fa-plus'}`} style={{ color: 'var(--gold)', fontSize: editId ? 15 : 16 }}></i>
+            <Icon className={`fa-solid ${editId ? 'fa-pen' : 'fa-plus'}`} style={{ color: 'var(--gold)', fontSize: editId ? 15 : 16 }} />
             {editId ? 'Edit Visit' : 'Add Visit'}
           </h2>
           <button className="acc-dclose" onClick={closeDrawer}>
-            <i className="fa-solid fa-xmark"></i>
+            <Icon className="fa-solid fa-xmark" />
           </button>
         </div>
         <div className="acc-dbody">
@@ -797,7 +872,7 @@ export default function VisitsPage() {
 
           <div className="acc-fld">
             <label>Company Name</label>
-            <select value={formAccountId} onChange={(e) => setFormAccountId(e.target.value)}>
+            <select value={formAccountId} disabled={!!editId} onChange={(e) => setFormAccountId(e.target.value)}>
               <option value="">— Select company —</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -816,7 +891,7 @@ export default function VisitsPage() {
 
           <div className="acc-fld">
             <label>Task Owner</label>
-            <select value={formAgentId} onChange={(e) => setFormAgentId(e.target.value)}>
+            <select value={formAgentId} disabled={!!editId} onChange={(e) => setFormAgentId(e.target.value)}>
               <option value="">— Select agent —</option>
               {agents.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -828,7 +903,7 @@ export default function VisitsPage() {
 
           <div className="acc-fld">
             <label>Visit Date</label>
-            <input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} />
+            <input type="date" value={formDate} disabled={!!editId} onChange={(e) => setFormDate(e.target.value)} />
           </div>
 
           <div className="acc-fld">
@@ -844,7 +919,7 @@ export default function VisitsPage() {
 
           <div className="acc-fld">
             <label>Visit Type</label>
-            <select value={formVisitType} onChange={(e) => setFormVisitType(e.target.value as 'single' | 'double')}>
+            <select value={formVisitType} disabled={!!editId} onChange={(e) => setFormVisitType(e.target.value as 'single' | 'double')}>
               <option value="single">Single visit</option>
               <option value="double">Double visit</option>
             </select>
@@ -853,7 +928,7 @@ export default function VisitsPage() {
           {formVisitType === 'double' && (
             <div className="acc-fld">
               <label>Task Owner 2</label>
-              <select value={formAgent2Id} onChange={(e) => setFormAgent2Id(e.target.value)}>
+              <select value={formAgent2Id} disabled={!!editId} onChange={(e) => setFormAgent2Id(e.target.value)}>
                 <option value="">— Second agent —</option>
                 {agents.map((a) => (
                   <option key={a.id} value={a.id}>
@@ -890,7 +965,7 @@ export default function VisitsPage() {
           <button className="acc-btn acc-btn-primary" disabled={saving} onClick={handleSave}>
             {saving ? (
               <>
-                <i className="fa-solid fa-spinner fa-spin"></i> Saving…
+                <Icon className="fa-solid fa-spinner fa-spin" /> Saving…
               </>
             ) : (
               'Save Visit'

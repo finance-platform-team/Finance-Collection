@@ -1,8 +1,9 @@
+import Icon from '../components/Icon';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { getClient } from '@microsoft/power-apps/data';
 import { dataSourcesInfo } from '../../.power/schemas/appschemas/dataSourcesInfo';
 import { Cr301_accountsService } from '../generated/services/Cr301_accountsService';
-import type { Cr301_accountsBase, Cr301_accountscr301_accounttype } from '../generated/models/Cr301_accountsModel';
+import type { Cr301_accountsBase, Cr301_accountscr301_accounttype, Cr301_accountscr301_country } from '../generated/models/Cr301_accountsModel';
 import { Cr301_accounttypesService } from '../generated/services/Cr301_accounttypesService';
 import { Cr301_visitsService } from '../generated/services/Cr301_visitsService';
 import { Cr301_agentsService } from '../generated/services/Cr301_agentsService';
@@ -10,6 +11,9 @@ import { Cr301_visitscr301_visitstatus, Cr301_visitscr301_visittype } from '../g
 import { operationErrorMessage } from '../lib/errors';
 import { visitStatusClass } from '../lib/visitStatus';
 import { escapeForCsv, downloadCsv } from '../lib/csvExport';
+import type { Region } from '../lib/useRegion';
+import { fetchAccountTargetSum, fetchVisitPlanTargetSum } from '../lib/targetComparison';
+import TargetFlagCard from '../components/TargetFlagCard';
 import './Accounts.css';
 
 const TYPE_INSURANCE: Cr301_accountscr301_accounttype = 983080002;
@@ -17,6 +21,15 @@ const TYPE_DIRECT: Cr301_accountscr301_accounttype = 766340001;
 const ACCOUNT_TYPE_OPTIONS: { value: Cr301_accountscr301_accounttype; label: string }[] = [
   { value: TYPE_INSURANCE, label: 'Insurance' },
   { value: TYPE_DIRECT, label: 'Direct' },
+];
+
+const REGION_EGYPT: Cr301_accountscr301_country = 983080000;
+const REGION_KSA: Cr301_accountscr301_country = 983080001;
+/** The business only operates Egypt / KSA accounts — cr301_country carries more
+ * legacy picklist values, but the Account form and column only ever show these two. */
+const REGION_OPTIONS: { value: Cr301_accountscr301_country; label: string }[] = [
+  { value: REGION_EGYPT, label: 'Egypt' },
+  { value: REGION_KSA, label: 'KSA' },
 ];
 
 /**
@@ -47,7 +60,10 @@ interface AccountRow {
   cls: string;
   type: number;
   typeName: string;
+  region: number | null;
+  regionName: string;
   target: number;
+  actual: number;
 }
 
 interface AccountVisitRow {
@@ -58,6 +74,16 @@ interface AccountVisitRow {
   statusLabel: string;
   typeLabel: string;
   notes: string;
+}
+
+/** yyyy-mm-dd bounds of the current calendar month, for the visits date-range filter's default. */
+function currentMonthRange(): { from: string; to: string } {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return { from: fmt(first), to: fmt(last) };
 }
 
 function fmtDate(iso: string): string {
@@ -84,12 +110,26 @@ function classBadgeClass(cls: string): string {
   return 'acc-cls-none';
 }
 
+const VISIT_STATUS_COMPLETED: Cr301_visitscr301_visitstatus = 983080001;
+
+/** Actual >= Target is "ok", within reach (50%+) is "warn", otherwise "bad". */
+function achievementTier(pct: number, target: number): 'ok' | 'warn' | 'bad' | 'none' {
+  if (target <= 0) return 'none';
+  if (pct >= 100) return 'ok';
+  if (pct >= 50) return 'warn';
+  return 'bad';
+}
+
 /** Target Visit is capped at 5 digits (max 99999) — strip anything past that as it's typed. */
 function clampTargetInput(raw: string): string {
   return raw.slice(0, 5);
 }
 
-export default function AccountsPage() {
+interface AccountsPageProps {
+  region: Region | null;
+}
+
+export default function AccountsPage({ region }: AccountsPageProps) {
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -104,8 +144,8 @@ export default function AccountsPage() {
   const [query, setQuery] = useState('');
   const [clsFilter, setClsFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
-  const [visitDateFrom, setVisitDateFrom] = useState('');
-  const [visitDateTo, setVisitDateTo] = useState('');
+  const [visitDateFrom, setVisitDateFrom] = useState(() => currentMonthRange().from);
+  const [visitDateTo, setVisitDateTo] = useState(() => currentMonthRange().to);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
 
@@ -115,6 +155,7 @@ export default function AccountsPage() {
   const [formCode, setFormCode] = useState('');
   const [formClsId, setFormClsId] = useState('');
   const [formAccountType, setFormAccountType] = useState(String(TYPE_INSURANCE));
+  const [formRegion, setFormRegion] = useState(String(REGION_KSA));
   const [formTarget, setFormTarget] = useState('2');
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -128,6 +169,10 @@ export default function AccountsPage() {
   const [toastMsg, setToastMsg] = useState('');
   const [toastOn, setToastOn] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const [flagLoading, setFlagLoading] = useState(true);
+  const [flagAccountTarget, setFlagAccountTarget] = useState<number | null>(null);
+  const [flagVisitPlanTarget, setFlagVisitPlanTarget] = useState<number | null>(null);
 
   function showToast(msg: string, durationMs = 2200) {
     setToastMsg(msg);
@@ -212,20 +257,39 @@ export default function AccountsPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const result = await Cr301_accountsService.getAll({
-        select: [
-          'cr301_accountid',
-          'cr301_acccountname',
-          'cr301_accountcode',
-          'cr301_accounttype',
-          'cfm_visittargetcollection',
-          '_cr301_accountclassification_value',
-        ],
-        filter: `cr301_accounttype eq ${TYPE_INSURANCE} or cr301_accounttype eq ${TYPE_DIRECT}`,
-        orderBy: ['createdon desc'],
-      });
+      const [result, visitResult] = await Promise.all([
+        Cr301_accountsService.getAll({
+          select: [
+            'cr301_accountid',
+            'cr301_acccountname',
+            'cr301_accountcode',
+            'cr301_accounttype',
+            'cr301_country',
+            'cfm_visittargetcollection',
+            '_cr301_accountclassification_value',
+          ],
+          filter: `cr301_accounttype eq ${TYPE_INSURANCE} or cr301_accounttype eq ${TYPE_DIRECT}`,
+          orderBy: ['createdon desc'],
+        }),
+        Cr301_visitsService.getAll({
+          select: ['cr301_visitid', '_cr301_account_value'],
+          filter: `cr301_visitstatus eq ${VISIT_STATUS_COMPLETED}`,
+        }),
+      ]);
       if (!result.success) {
         throw new Error(operationErrorMessage(result.error, 'Could not load accounts.'));
+      }
+      // Actual visits = count of this account's Completed visit records — the
+      // account's own cr301_monthactualvisits rollup only covers the current
+      // month and refreshes on Dataverse's own schedule, so it isn't a live
+      // "actual vs target" number.
+      const actualByAccount = new Map<string, number>();
+      if (visitResult.success) {
+        (visitResult.data || []).forEach((v) => {
+          const accId = v._cr301_account_value;
+          if (!accId) return;
+          actualByAccount.set(accId, (actualByAccount.get(accId) || 0) + 1);
+        });
       }
       const rows: AccountRow[] = (result.data || []).map((r) => ({
         id: r.cr301_accountid,
@@ -235,7 +299,10 @@ export default function AccountsPage() {
         cls: formattedValue(r, '_cr301_accountclassification_value').trim().toUpperCase().charAt(0),
         type: r.cr301_accounttype ?? TYPE_INSURANCE,
         typeName: (formattedValue(r, 'cr301_accounttype') || 'Insurance').trim(),
+        region: r.cr301_country ?? null,
+        regionName: formattedValue(r, 'cr301_country').trim(),
         target: r.cfm_visittargetcollection ?? 0,
+        actual: actualByAccount.get(r.cr301_accountid) || 0,
       }));
       setAccounts(rows);
     } catch (e) {
@@ -252,19 +319,46 @@ export default function AccountsPage() {
     load();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    setFlagLoading(true);
+    Promise.all([fetchAccountTargetSum(region), fetchVisitPlanTargetSum(region)])
+      .then(([accountSum, planSum]) => {
+        if (cancelled) return;
+        setFlagAccountTarget(accountSum);
+        setFlagVisitPlanTarget(planSum);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFlagAccountTarget(null);
+        setFlagVisitPlanTarget(null);
+      })
+      .finally(() => {
+        if (!cancelled) setFlagLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [region]);
+
+  const regionRows = useMemo(() => {
+    if (!region) return accounts;
+    return accounts.filter((a) => (region === 'KSA' ? a.region === REGION_KSA : a.region !== REGION_KSA));
+  }, [accounts, region]);
+
   const view = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return accounts.filter((a) => {
+    return regionRows.filter((a) => {
       if (q && !`${a.name} ${a.code}`.toLowerCase().includes(q)) return false;
       if (clsFilter && a.cls !== clsFilter) return false;
       if (typeFilter && String(a.type) !== typeFilter) return false;
       return true;
     });
-  }, [accounts, query, clsFilter, typeFilter]);
+  }, [regionRows, query, clsFilter, typeFilter]);
 
   useEffect(() => {
     setPage(1);
-  }, [query, clsFilter, typeFilter]);
+  }, [query, clsFilter, typeFilter, region]);
 
   const totalPages = Math.max(1, Math.ceil(view.length / pageSize));
   const clampedPage = Math.min(page, totalPages);
@@ -272,10 +366,12 @@ export default function AccountsPage() {
 
   const kpis = useMemo(() => {
     let targetSum = 0;
+    let actualSum = 0;
     view.forEach((a) => {
       targetSum += a.target;
+      actualSum += a.actual;
     });
-    return { total: view.length, targetSum };
+    return { total: view.length, targetSum, actualSum };
   }, [view]);
 
   const allViewSelected = view.length > 0 && view.every((a) => selectedIds.has(a.id));
@@ -397,6 +493,7 @@ export default function AccountsPage() {
       setFormCode(row.code === '—' ? '' : row.code);
       setFormClsId(row.clsId || '');
       setFormAccountType(String(row.type || TYPE_INSURANCE));
+      setFormRegion(String(row.region || REGION_KSA));
       setFormTarget(String(row.target || 0));
     } else {
       setEditId(null);
@@ -404,6 +501,7 @@ export default function AccountsPage() {
       setFormCode('');
       setFormClsId('');
       setFormAccountType(String(TYPE_INSURANCE));
+      setFormRegion(String(region === 'EG' ? REGION_EGYPT : REGION_KSA));
       setFormTarget('2');
     }
     setDrawerOpen(true);
@@ -479,6 +577,7 @@ export default function AccountsPage() {
         cr301_acccountname: name,
         cr301_accountcode: code,
         cr301_accounttype: (parseInt(formAccountType, 10) || TYPE_INSURANCE) as Cr301_accountscr301_accounttype,
+        cr301_country: (parseInt(formRegion, 10) || REGION_KSA) as Cr301_accountscr301_country,
         cfm_visittargetcollection: target,
       } as Partial<Omit<Cr301_accountsBase, 'cr301_accountid'>>;
 
@@ -529,8 +628,8 @@ export default function AccountsPage() {
   }
 
   function exportCsv() {
-    const header = ['Account Name', 'Account Code', 'Classification', 'Type', 'Target Visit'];
-    const rows = view.map((a) => [a.name, a.code === '—' ? '0' : a.code, a.cls, a.typeName, a.target]);
+    const header = ['Account Name', 'Account Code', 'Classification', 'Type', 'Region', 'Target Visit', 'Actual Visits'];
+    const rows = view.map((a) => [a.name, a.code === '—' ? '0' : a.code, a.cls, a.typeName, a.regionName || '—', a.target, a.actual]);
     downloadCsv('accounts.csv', [header, ...rows].map((r) => r.map(escapeForCsv).join(',')));
   }
 
@@ -556,10 +655,10 @@ export default function AccountsPage() {
           </div>
           <div className="acc-actions">
             <button className="acc-btn" onClick={exportCsv}>
-              <i className="fa-solid fa-download"></i> Export
+              <Icon className="fa-solid fa-download" /> Export
             </button>
             <button className="acc-btn acc-btn-primary" onClick={() => openDrawer()}>
-              <i className="fa-solid fa-plus"></i> Add Account
+              <Icon className="fa-solid fa-plus" /> Add Account
             </button>
           </div>
         </div>
@@ -568,7 +667,7 @@ export default function AccountsPage() {
           <div className="kpi-card">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-gold">
-                <i className="fa-solid fa-building-shield"></i>
+                <Icon className="fa-solid fa-building-shield" />
               </span>
               <span className="kpi-label">Total accounts</span>
             </div>
@@ -578,13 +677,26 @@ export default function AccountsPage() {
           <div className="kpi-card">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-gold">
-                <i className="fa-solid fa-bullseye"></i>
+                <Icon className="fa-solid fa-bullseye" />
               </span>
               <span className="kpi-label">Target visits</span>
             </div>
             <div className="kpi-value">{loading ? '—' : kpis.targetSum}</div>
             <div className="kpi-context">&nbsp;</div>
           </div>
+          <div className="kpi-card">
+            <div className="kpi-top">
+              <span className="kpi-icon kpi-icon-gold">
+                <Icon className="fa-solid fa-chart-simple" />
+              </span>
+              <span className="kpi-label">Actual visits</span>
+            </div>
+            <div className="kpi-value">{loading ? '—' : kpis.actualSum}</div>
+            <div className="kpi-context">
+              {loading ? <>&nbsp;</> : `${kpis.targetSum > 0 ? Math.round((kpis.actualSum / kpis.targetSum) * 100) : 0}% of target`}
+            </div>
+          </div>
+          <TargetFlagCard loading={flagLoading} accountTarget={flagAccountTarget} visitPlanTarget={flagVisitPlanTarget} />
         </div>
 
         {selectedIds.size > 0 && (
@@ -597,7 +709,7 @@ export default function AccountsPage() {
                 Clear
               </button>
               <button className="acc-btn acc-btn-primary" onClick={openBulkDrawer}>
-                <i className="fa-solid fa-bullseye"></i> Bulk Update Target
+                <Icon className="fa-solid fa-bullseye" /> Bulk Update Target
               </button>
             </div>
           </div>
@@ -606,7 +718,7 @@ export default function AccountsPage() {
         <div className="tbl-shell">
           <div className="tbl-hdr">
             <div className="acc-search">
-              <i className="fa-solid fa-magnifying-glass"></i>
+              <Icon className="fa-solid fa-magnifying-glass" />
               <input placeholder="Search name or code…" value={query} onChange={(e) => setQuery(e.target.value)} />
             </div>
             <select className="acc-f" value={clsFilter} onChange={(e) => setClsFilter(e.target.value)}>
@@ -654,14 +766,15 @@ export default function AccountsPage() {
                 <th>Account Code</th>
                 <th>Classification</th>
                 <th>Type</th>
-                <th className="acc-num">Target Visit</th>
+                <th>Region</th>
+                <th>Target vs Actual</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: 7 }).map((__, j) => (
+                    {Array.from({ length: 8 }).map((__, j) => (
                       <td key={j}>
                         <div className="acc-skel"></div>
                       </td>
@@ -670,9 +783,9 @@ export default function AccountsPage() {
                 ))
               ) : loadError ? (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <div className="acc-state">
-                      <i className="fa-solid fa-triangle-exclamation"></i>
+                      <Icon className="fa-solid fa-triangle-exclamation" />
                       Could not load accounts.
                       <br />
                       <small>{loadError}</small>
@@ -681,9 +794,9 @@ export default function AccountsPage() {
                 </tr>
               ) : pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <div className="acc-state">
-                      <i className="fa-solid fa-inbox"></i>
+                      <Icon className="fa-solid fa-inbox" />
                       No accounts match your filters.
                     </div>
                   </td>
@@ -710,7 +823,7 @@ export default function AccountsPage() {
                             title={expanded ? 'Hide visits' : 'Show all visits on this account'}
                             onClick={() => toggleExpand(a.id)}
                           >
-                            <i className={`fa-solid ${expanded ? 'fa-chevron-down' : 'fa-chevron-right'}`}></i>
+                            <Icon className={`fa-solid ${expanded ? 'fa-chevron-down' : 'fa-chevron-right'}`} />
                           </button>
                         </td>
                         <td className="acc-check" onClick={(e) => e.stopPropagation()}>
@@ -723,26 +836,51 @@ export default function AccountsPage() {
                         </td>
                         <td>
                           <span className="acc-typ">
-                            <i className="fa-solid fa-shield-heart" style={{ color: 'var(--gold)', fontSize: 12 }}></i>
+                            <Icon className="fa-solid fa-shield-heart" style={{ color: 'var(--gold)', fontSize: 12 }} />
                             {a.typeName}
                           </span>
                         </td>
-                        <td className="acc-num">{a.target}</td>
+                        <td>{a.regionName || '—'}</td>
+                        <td className="acc-ta">
+                          {(() => {
+                            const rawPct = a.target > 0 ? Math.round((a.actual / a.target) * 100) : 0;
+                            const barPct = a.target > 0 ? Math.min(100, (a.actual / a.target) * 100) : 0;
+                            const tier = achievementTier(rawPct, a.target);
+                            return (
+                              <>
+                                <div className="acc-ta-top">
+                                  <span className="acc-ta-actual">{a.actual}</span>
+                                  <span className="acc-ta-sep">/</span>
+                                  <span className="acc-ta-target">{a.target}</span>
+                                  <span
+                                    className={`acc-ta-pct acc-ta-pct-${tier}`}
+                                    title={a.target > 0 ? `${rawPct}% of target` : 'No target set'}
+                                  >
+                                    {a.target > 0 ? `${rawPct}%` : '—'}
+                                  </span>
+                                </div>
+                                <div className="acc-ta-bar">
+                                  <span className={`acc-ta-fill-${tier}`} style={{ width: `${barPct}%` }}></span>
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </td>
                       </tr>
                       {expanded && (
                         <tr className="acc-expand-row">
-                          <td colSpan={7}>
+                          <td colSpan={8}>
                             {visitState === 'loading' ? (
                               <div className="acc-state">
-                                <i className="fa-solid fa-spinner fa-spin"></i> Loading visits…
+                                <Icon className="fa-solid fa-spinner fa-spin" /> Loading visits…
                               </div>
                             ) : visitState === 'error' ? (
                               <div className="acc-state">
-                                <i className="fa-solid fa-triangle-exclamation"></i> Could not load visits.
+                                <Icon className="fa-solid fa-triangle-exclamation" /> Could not load visits.
                               </div>
                             ) : !visitRows || visitRows.length === 0 ? (
                               <div className="acc-state">
-                                <i className="fa-solid fa-inbox"></i>
+                                <Icon className="fa-solid fa-inbox" />
                                 {visitDateFrom || visitDateTo ? 'No visits in that date range for this account.' : 'No visits recorded for this account.'}
                               </div>
                             ) : (
@@ -834,7 +972,7 @@ export default function AccountsPage() {
         <div className="acc-dhead">
           <h2>{editId ? 'Edit Account' : 'Add Account'}</h2>
           <button className="acc-dclose" onClick={closeDrawer}>
-            <i className="fa-solid fa-xmark"></i>
+            <Icon className="fa-solid fa-xmark" />
           </button>
         </div>
         <div className="acc-dbody">
@@ -881,6 +1019,16 @@ export default function AccountsPage() {
             </select>
           </div>
           <div className="acc-fld">
+            <label>Region</label>
+            <select value={formRegion} onChange={(e) => setFormRegion(e.target.value)}>
+              {REGION_OPTIONS.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="acc-fld">
             <label>Account Target Visit</label>
             <input type="number" min={1} max={99999} maxLength={5} value={formTarget} onChange={(e) => setFormTarget(clampTargetInput(e.target.value))} />
           </div>
@@ -892,7 +1040,7 @@ export default function AccountsPage() {
           <button className="acc-btn acc-btn-primary" disabled={saving} onClick={handleSave}>
             {saving ? (
               <>
-                <i className="fa-solid fa-spinner fa-spin"></i> Saving…
+                <Icon className="fa-solid fa-spinner fa-spin" /> Saving…
               </>
             ) : (
               'Save Account'
@@ -904,10 +1052,10 @@ export default function AccountsPage() {
       <aside className={`acc-drawer${bulkDrawerOpen ? ' on' : ''}`}>
         <div className="acc-dhead">
           <h2>
-            <i className="fa-solid fa-bullseye" style={{ color: 'var(--gold)', fontSize: 16 }}></i> Bulk Update Target Visit
+            <Icon className="fa-solid fa-bullseye" style={{ color: 'var(--gold)', fontSize: 16 }} /> Bulk Update Target Visit
           </h2>
           <button className="acc-dclose" onClick={closeBulkDrawer}>
-            <i className="fa-solid fa-xmark"></i>
+            <Icon className="fa-solid fa-xmark" />
           </button>
         </div>
         <div className="acc-dbody">

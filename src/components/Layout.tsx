@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { useTheme } from '../lib/useTheme';
 import type { Region } from '../lib/useRegion';
 import { isPageEnabled } from '../lib/featureFlags';
+import Icon from './Icon';
 import './Layout.css';
 
 export type PageKey =
@@ -14,7 +15,8 @@ export type PageKey =
   | 'accounts'
   | 'agents'
   | 'visits'
-  | 'visit-plan';
+  | 'visit-plan'
+  | 'visit-audit';
 
 interface NavItem {
   key: PageKey;
@@ -45,6 +47,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { key: 'visit-plan', icon: 'fa-bullseye', label: 'Visits — Planned & Actual' },
       { key: 'visits', icon: 'fa-location-dot', label: 'Visits Log' },
+      { key: 'visit-audit', icon: 'fa-magnifying-glass-chart', label: 'Visit Audit' },
       { key: 'accounts', icon: 'fa-building-shield', label: 'Accounts' },
       { key: 'agents', icon: 'fa-user-tie', label: 'Agents' },
     ],
@@ -119,7 +122,7 @@ export default function Layout({ active, onNavigate, region, onRegionChange, chi
       <aside className={`acc-sidebar${collapsed ? ' collapsed' : ''}${mobileOpen ? ' mobile-open' : ''}`}>
         <div className="acc-sb-brand">
           <div className="acc-logo">
-            <i className="fa-solid fa-network-wired"></i>
+            <Icon className="fa-solid fa-network-wired" />
             <span>
               Collection
               <br />
@@ -127,7 +130,7 @@ export default function Layout({ active, onNavigate, region, onRegionChange, chi
             </span>
           </div>
           <button className="acc-sb-toggle" title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebarButton}>
-            <i className={`fa-solid ${collapsed ? 'fa-angles-right' : 'fa-bars'}`}></i>
+            <Icon className={`fa-solid ${collapsed ? 'fa-angles-right' : 'fa-bars'}`} />
           </button>
         </div>
         <nav className="acc-sb-nav">
@@ -139,7 +142,7 @@ export default function Layout({ active, onNavigate, region, onRegionChange, chi
               <div className="acc-sb-group" key={group.title}>
                 <button type="button" className="acc-sb-group-hdr" onClick={() => toggleGroup(group.title)}>
                   <span className="acc-sb-label">{group.title}</span>
-                  <i className={`fa-solid fa-chevron-down acc-sb-group-caret${isCollapsed ? '' : ' open'}`}></i>
+                  <Icon className={`fa-solid fa-chevron-down acc-sb-group-caret${isCollapsed ? '' : ' open'}`} />
                 </button>
                 {/* Icon-rail mode hides group headers entirely (no room, no toggle
                     affordance) — always show items there regardless of a group's
@@ -157,7 +160,7 @@ export default function Layout({ active, onNavigate, region, onRegionChange, chi
                             navigate(item.key);
                           }}
                         >
-                          <i className={`fa-solid ${item.icon}`}></i>
+                          <Icon className={`fa-solid ${item.icon}`} />
                           <span className="acc-sb-label">{item.label}</span>
                         </a>
                       </li>
@@ -170,16 +173,16 @@ export default function Layout({ active, onNavigate, region, onRegionChange, chi
         </nav>
         <div className="acc-sb-foot">
           <button className="acc-sb-region-btn" title="Change region" onClick={() => setRegionModalOpen(true)}>
-            <i className="fa-solid fa-earth-americas"></i>
+            <Icon className="fa-solid fa-earth-americas" />
             <span className="acc-sb-label">{region ? `Region: ${region}` : 'Select region'}</span>
           </button>
           <div className="theme-switch" role="group" aria-label="Theme">
             <button className={`theme-btn${theme === 'light' ? ' active' : ''}`} title="Light theme" onClick={() => setTheme('light')}>
-              <i className="fa-solid fa-sun"></i>
+              <Icon className="fa-solid fa-sun" />
               <span className="theme-btn-label">Light</span>
             </button>
             <button className={`theme-btn${theme === 'dark' ? ' active' : ''}`} title="Dark theme" onClick={() => setTheme('dark')}>
-              <i className="fa-solid fa-moon"></i>
+              <Icon className="fa-solid fa-moon" />
               <span className="theme-btn-label">Dark</span>
             </button>
           </div>
@@ -187,7 +190,7 @@ export default function Layout({ active, onNavigate, region, onRegionChange, chi
       </aside>
 
       <button className="acc-mobile-menu-btn" title="Open menu" onClick={() => setMobileOpen(true)}>
-        <i className="fa-solid fa-bars"></i>
+        <Icon className="fa-solid fa-bars" />
       </button>
 
       <div className="acc-content-col">
@@ -198,7 +201,7 @@ export default function Layout({ active, onNavigate, region, onRegionChange, chi
         <div className="region-scrim" onClick={() => setRegionModalOpen(false)}>
           <div className="region-modal" onClick={(e) => e.stopPropagation()}>
             <div className="region-modal-icon">
-              <i className="fa-solid fa-earth-americas"></i>
+              <Icon className="fa-solid fa-earth-americas" />
             </div>
             <h2>Select Your Region</h2>
             <p>This sets your default region across the app. You can change it anytime from the sidebar.</p>

@@ -1,3 +1,4 @@
+import Icon from '../components/Icon';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Cfm_aragingsService } from '../generated/services/Cfm_aragingsService';
 import { Strategy_kpisesService } from '../generated/services/Strategy_kpisesService';
@@ -23,7 +24,7 @@ const KPI_NAME = 'Collection Achievement';
 const BU_ENTITY_SET = 'businessunits';
 
 const ARAGING_SELECT = ['cfm_aragingid', '_cfm_type_value', 'cfm_targetplan'];
-const PARENT_SELECT = ['pm_kpiachievmentid', 'pm_target', 'pm_actual', '_pm_businessunit_value'];
+const PARENT_SELECT = ['pm_kpiachievmentid', 'pm_target', 'pm_actual', '_pm_businessunit_value', 'createdon'];
 const WEEK_SELECT = [
   'cfm_collectionplanweekid',
   'cfm_weeknumber',
@@ -89,6 +90,16 @@ function buildWeekRanges(fromStr: string, toStr: string, n: number): { from: str
   return ranges;
 }
 
+/** From/To auto-fill for the create drawer: starts at the 1st of the current
+ * month, spans exactly weekCount×7 days so buildWeekRanges lands on clean
+ * ~weekly chunks. */
+function computeAutoRange(n: number): { from: string; to: string } {
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
+  const end = addDays(start, n * 7 - 1);
+  return { from: toISODate(start), to: toISODate(end) };
+}
+
 async function fetchAll<T>(
   run: (skipToken?: string) => Promise<{ success: boolean; data?: T[] | null; error?: unknown; skipToken?: string }>,
   fallback: string
@@ -130,6 +141,8 @@ interface PlanGroup {
   buName: string;
   from: string;
   to: string;
+  targetPlanTotal: number;
+  createdOn: string;
   weeks: WeekRow[];
 }
 
@@ -142,18 +155,23 @@ interface GroupTotals {
 }
 
 function groupTotals(g: PlanGroup): GroupTotals {
-  const targetPlan = g.weeks.reduce((s, w) => s + w.targetPlanAuto, 0);
+  const targetPlan = g.targetPlanTotal;
   const weeklyTarget = g.weeks.reduce((s, w) => s + w.weeklyTarget, 0);
   const actualCollected = g.weeks.reduce((s, w) => s + w.actualCollected, 0);
-  const manualPct = g.weeks.length ? g.weeks.reduce((s, w) => s + w.percent, 0) / g.weeks.length : 0;
+  const manualPct = g.weeks.reduce((s, w) => s + w.percent, 0);
   const achievement = weeklyTarget > 0 ? (actualCollected / weeklyTarget) * 100 : 0;
   return { targetPlan, manualPct, weeklyTarget, actualCollected, achievement };
 }
 
-function recalcWeek(w: WeekRow): WeekRow {
-  const weeklyTarget = Math.round((w.targetPlanAuto * w.percent) / 100);
+/** Target Plan (Auto) for every week is the plan's Target Plan Total, unsplit —
+ * the same full number on every week row, never fractured across weeks.
+ * Weekly Target is that Total scaled by the week's own % Manual (each week
+ * independently, not a share that has to sum to 100% across the plan). */
+function recalcWeek(w: WeekRow, targetPlanTotal: number): WeekRow {
+  const targetPlanAuto = Math.round(targetPlanTotal);
+  const weeklyTarget = Math.round((targetPlanTotal * w.percent) / 100);
   const achievement = weeklyTarget > 0 ? (w.actualCollected / weeklyTarget) * 100 : 0;
-  return { ...w, weeklyTarget, achievement };
+  return { ...w, targetPlanAuto, weeklyTarget, achievement };
 }
 
 interface WeeklyTargetsPageProps {
@@ -274,17 +292,26 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
       weeksByParent.forEach((list) => list.sort((a, b) => a.weekNumber - b.weekNumber));
 
       const planGroups: PlanGroup[] = parentRows.map((p) => {
-        const weeks = weeksByParent.get(p.pm_kpiachievmentid) || [];
+        const targetPlanTotal = N(p.pm_target);
+        // Recompute every week's Target Plan (Auto) / Weekly Target from the
+        // parent's live total rather than trusting whatever was last persisted
+        // on cfm_targetplan/cfm_weeklytarget — this keeps plans created before
+        // the Total-per-week model (or edited outside this page) from showing
+        // stale, per-week-fractured amounts. Corrects itself in the DB the
+        // next time any week on the plan is saved.
+        const weeks = (weeksByParent.get(p.pm_kpiachievmentid) || []).map((w) => recalcWeek(w, targetPlanTotal));
         return {
           id: p.pm_kpiachievmentid,
           buId: p._pm_businessunit_value || '',
           buName: formattedValue(p, '_pm_businessunit_value') || '—',
           from: weeks[0]?.from || '',
           to: weeks[weeks.length - 1]?.to || '',
+          targetPlanTotal,
+          createdOn: p.createdon || '',
           weeks,
         };
       });
-      planGroups.sort((a, b) => a.buName.localeCompare(b.buName) || a.from.localeCompare(b.from));
+      planGroups.sort((a, b) => b.createdOn.localeCompare(a.createdOn));
 
       setAllBuAggregates(aggregates);
       setAllGroups(planGroups);
@@ -377,11 +404,20 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
     });
   }
 
-  function updateWeekField(groupId: string, weekId: string, field: 'percent' | 'actualCollected', value: number) {
+  function updateWeekField(groupId: string, weekId: string, field: 'percent' | 'actualCollected', value: number): void;
+  function updateWeekField(groupId: string, weekId: string, field: 'from' | 'to', value: string): void;
+  function updateWeekField(groupId: string, weekId: string, field: 'percent' | 'actualCollected' | 'from' | 'to', value: number | string) {
     setAllGroups((prev) =>
       prev.map((g) => {
         if (g.id !== groupId) return g;
-        return { ...g, weeks: g.weeks.map((w) => (w.id === weekId ? recalcWeek({ ...w, [field]: value }) : w)) };
+        return {
+          ...g,
+          weeks: g.weeks.map((w) => {
+            if (w.id !== weekId) return w;
+            if (field === 'from' || field === 'to') return { ...w, [field]: value as string };
+            return recalcWeek({ ...w, [field]: value as number }, g.targetPlanTotal);
+          }),
+        };
       })
     );
     setDirtyWeekIds((prev) => new Set(prev).add(weekId));
@@ -398,9 +434,12 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
         dirtyWeeks.map((w) =>
           Cfm_collectionplanweeksService.update(w.id, {
             cfm_targetpercentage: Math.round(w.percent),
+            cfm_targetplan: w.targetPlanAuto,
             cfm_weeklytarget: w.weeklyTarget,
             cfm_actualcollected: Math.round(w.actualCollected),
             cfm_achievement: w.achievement,
+            cfm_weekfrom: w.from,
+            cfm_weekto: w.to,
           })
         )
       );
@@ -430,8 +469,9 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
     setSelectedBu(presetBu || null);
     setBuSearch('');
     setBuResultsOpen(false);
-    setFrom('');
-    setTo('');
+    const auto = computeAutoRange(4);
+    setFrom(auto.from);
+    setTo(auto.to);
     setWeekCount('4');
     setCreateError('');
     setCreateOpen(true);
@@ -456,15 +496,18 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
     setSelectedBu(null);
   }
 
-  /** Split the BU's auto target evenly across N weeks (remainder on the last week
-   * keeps the sum exact), fill the picked From–To range with contiguous week
-   * dates, then create one cfm_collectionplanweeks child per week bound to the
-   * new pm_kpiachievments parent via cfm_KPIAchievement@odata.bind. */
+  /** Every week gets the full, un-split Target Plan Total (read from the BU's
+   * AR Aging sum) and starts at 100% Manual (so Weekly Target = Total at first
+   * — adjust % per week afterward), fills the picked From–To range with
+   * contiguous week dates, then creates one cfm_collectionplanweeks child per
+   * week bound to the new pm_kpiachievments parent via
+   * cfm_KPIAchievement@odata.bind. */
   async function handleCreate() {
     if (!selectedBu) {
       setCreateError('Select a Business Unit.');
       return;
     }
+    const total = Math.round(selectedBu.targetPlanAuto);
     if (!from || !to) {
       setCreateError('Enter From and To.');
       return;
@@ -482,8 +525,6 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
     setCreating(true);
     setCreateError('');
     try {
-      const total = Math.round(selectedBu.targetPlanAuto);
-      const base = Math.floor(total / n);
       const ranges = buildWeekRanges(from, to, n);
       const fromDate = new Date(`${from}T00:00:00Z`);
 
@@ -500,23 +541,17 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
       const parentId = (parentResult.data as unknown as { pm_kpiachievmentid?: string })?.pm_kpiachievmentid;
       if (!parentId) throw new Error('Plan was created but no id was returned.');
 
-      let allocated = 0;
-      const weekBodies = ranges.map((r, i) => {
-        const isLast = i === n - 1;
-        const weekTarget = isLast ? total - allocated : base;
-        allocated += weekTarget;
-        return {
-          cfm_weeknumber: i + 1,
-          cfm_weekfrom: `${r.from}T00:00:00Z`,
-          cfm_weekto: `${r.to}T00:00:00Z`,
-          cfm_targetpercentage: 100,
-          cfm_targetplan: weekTarget,
-          cfm_weeklytarget: weekTarget,
-          cfm_actualcollected: 0,
-          cfm_achievement: 0,
-          'cfm_KPIAchievement@odata.bind': `/pm_kpiachievments(${parentId})`,
-        };
-      });
+      const weekBodies = ranges.map((r, i) => ({
+        cfm_weeknumber: i + 1,
+        cfm_weekfrom: `${r.from}T00:00:00Z`,
+        cfm_weekto: `${r.to}T00:00:00Z`,
+        cfm_targetpercentage: 100,
+        cfm_targetplan: total,
+        cfm_weeklytarget: total,
+        cfm_actualcollected: 0,
+        cfm_achievement: 0,
+        'cfm_KPIAchievement@odata.bind': `/pm_kpiachievments(${parentId})`,
+      }));
       const weekResults = await Promise.all(
         weekBodies.map((b) => Cfm_collectionplanweeksService.create(b as unknown as Omit<Cfm_collectionplanweeksBase, 'cfm_collectionplanweekid'>))
       );
@@ -600,16 +635,16 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
           </div>
           <div className="acc-actions">
             <button className="acc-btn acc-btn-gold" onClick={() => openCreateDrawer()}>
-              <i className="fa-solid fa-plus"></i> New
+              <Icon className="fa-solid fa-plus" /> New
             </button>
             <button className="acc-btn" onClick={toggleExtendAll}>
-              <i className={`fa-solid ${allExpanded ? 'fa-angles-up' : 'fa-angles-down'}`}></i> {allExpanded ? 'Collapse all' : 'Extend all'}
+              <Icon className={`fa-solid ${allExpanded ? 'fa-angles-up' : 'fa-angles-down'}`} /> {allExpanded ? 'Collapse all' : 'Extend all'}
             </button>
             <button className="acc-btn" onClick={exportCsv}>
-              <i className="fa-solid fa-file-export"></i> Export
+              <Icon className="fa-solid fa-file-export" /> Export
             </button>
             <button className={`acc-btn${dirtyCount > 0 ? ' acc-btn-primary' : ''}`} disabled={saving || dirtyCount === 0} onClick={saveUpdates}>
-              <i className="fa-solid fa-floppy-disk"></i> {saving ? 'Saving…' : 'Save updates'}
+              <Icon className="fa-solid fa-floppy-disk" /> {saving ? 'Saving…' : 'Save updates'}
               {dirtyCount > 0 && !saving && <span className="wt-count-badge">{dirtyCount}</span>}
             </button>
           </div>
@@ -617,24 +652,24 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
 
         {kpiError ? (
           <div className="acc-state">
-            <i className="fa-solid fa-triangle-exclamation"></i>
+            <Icon className="fa-solid fa-triangle-exclamation" />
             {kpiError}
           </div>
         ) : !loading && buAggregates.length === 0 && groups.length === 0 ? (
           <div className="wt-empty-hero">
             <div className="wt-empty-icon">
-              <i className="fa-solid fa-bullseye"></i>
+              <Icon className="fa-solid fa-bullseye" />
             </div>
             <h3>Set your first weekly target</h3>
             <p>Track collection targets against actual achievement for this region, week by week.</p>
             <div className="wt-empty-note">
-              <i className="fa-solid fa-circle-info"></i>
+              <Icon className="fa-solid fa-circle-info" />
               {region
                 ? 'No AR Aging or collection plans found for this region yet.'
                 : "No AR Aging records found, so there's no Target Plan (Auto) to build a plan from yet."}
             </div>
             <button className="acc-btn acc-btn-gold" onClick={() => openCreateDrawer()}>
-              <i className="fa-solid fa-plus"></i> New weekly target
+              <Icon className="fa-solid fa-plus" /> New weekly target
             </button>
           </div>
         ) : (
@@ -656,7 +691,7 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
                           <div className="kpi-card" key={bu.id}>
                             <div className="kpi-top">
                               <span className="kpi-icon kpi-icon-gold">
-                                <i className="fa-solid fa-building-shield"></i>
+                                <Icon className="fa-solid fa-building-shield" />
                               </span>
                               <span className="kpi-label">{bu.name}</span>
                             </div>
@@ -677,7 +712,7 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
                         >
                           <div className="kpi-top">
                             <span className={`kpi-icon kpi-icon-${toneSuffix}`}>
-                              <i className={`fa-solid ${isOpen ? 'fa-chevron-up' : 'fa-chevron-down'}`}></i>
+                              <Icon className={`fa-solid ${isOpen ? 'fa-chevron-up' : 'fa-chevron-down'}`} />
                             </span>
                             <span className="kpi-label">
                               {bu.name}
@@ -723,7 +758,7 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
                       <tr>
                         <td colSpan={9}>
                           <div className="acc-state">
-                            <i className="fa-solid fa-triangle-exclamation"></i>
+                            <Icon className="fa-solid fa-triangle-exclamation" />
                             Couldn't load Weekly Targets.
                             <br />
                             <small>{loadError}</small>
@@ -734,7 +769,7 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
                       <tr>
                         <td colSpan={9}>
                           <div className="acc-state">
-                            <i className="fa-solid fa-inbox"></i>
+                            <Icon className="fa-solid fa-inbox" />
                             No weekly targets yet — use "New" to create one.
                           </div>
                         </td>
@@ -750,7 +785,7 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
                               <td>
                                 <span className="wt-weeks-select">
                                   {g.weeks.length} week{g.weeks.length === 1 ? '' : 's'}
-                                  <i className={`fa-solid ${isOpen ? 'fa-chevron-up' : 'fa-chevron-down'}`}></i>
+                                  <Icon className={`fa-solid ${isOpen ? 'fa-chevron-up' : 'fa-chevron-down'}`} />
                                 </span>
                               </td>
                               <td>{fmtDate(g.from)}</td>
@@ -771,12 +806,36 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
                                   </td>
                                 </tr>
                               ) : (
-                                g.weeks.map((w) => (
+                                g.weeks.map((w, wi) => (
                                   <tr className="wt-week-row" key={w.id}>
                                     <td>{g.buName}</td>
                                     <td>Week {w.weekNumber}</td>
-                                    <td>{fmtDate(w.from)}</td>
-                                    <td>{fmtDate(w.to)}</td>
+                                    <td>
+                                      {wi === 0 ? (
+                                        fmtDate(w.from)
+                                      ) : (
+                                        <input
+                                          type="date"
+                                          className="wt-date-input"
+                                          value={fmtDate(w.from)}
+                                          onClick={(e) => e.stopPropagation()}
+                                          onChange={(e) => updateWeekField(g.id, w.id, 'from', `${e.target.value}T00:00:00Z`)}
+                                        />
+                                      )}
+                                    </td>
+                                    <td>
+                                      {wi === g.weeks.length - 1 ? (
+                                        fmtDate(w.to)
+                                      ) : (
+                                        <input
+                                          type="date"
+                                          className="wt-date-input"
+                                          value={fmtDate(w.to)}
+                                          onClick={(e) => e.stopPropagation()}
+                                          onChange={(e) => updateWeekField(g.id, w.id, 'to', `${e.target.value}T00:00:00Z`)}
+                                        />
+                                      )}
+                                    </td>
                                     <td className="wt-numeric">{fmtSar(w.targetPlanAuto)}</td>
                                     <td className="wt-numeric">
                                       <span className="wt-pct-input">
@@ -885,7 +944,7 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
         <div className="acc-dhead">
           <h2>New Weekly Target</h2>
           <button className="acc-dclose" onClick={closeCreateDrawer}>
-            <i className="fa-solid fa-xmark"></i>
+            <Icon className="fa-solid fa-xmark" />
           </button>
         </div>
         <div className="acc-dbody">
@@ -930,7 +989,7 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
             )}
           </div>
           <div className="acc-fld">
-            <label>Target Plan (Auto)</label>
+            <label>Target Plan Total</label>
             <div className="acc-ro-wrap">
               <div className="acc-ro-label">Sum of cfm_targetplan on AR Aging for this BU</div>
               <div className="acc-ro-value">{selectedBu ? fmtSar(selectedBu.targetPlanAuto) : '—'}</div>
@@ -954,10 +1013,6 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
             </label>
             <input type="number" min={1} max={52} value={weekCount} onChange={(e) => setWeekCount(e.target.value)} />
           </div>
-          <div className="acc-hint">
-            Splits the auto target evenly across the weeks (100% manual by default — adjust per week from the table after creating), and fills From–To
-            with that many contiguous weeks.
-          </div>
         </div>
         <div className="acc-dfoot">
           <button className="acc-btn acc-btn-ghost" onClick={closeCreateDrawer}>
@@ -966,7 +1021,7 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
           <button className="acc-btn acc-btn-primary" disabled={creating} onClick={handleCreate}>
             {creating ? (
               <>
-                <i className="fa-solid fa-spinner fa-spin"></i> Creating…
+                <Icon className="fa-solid fa-spinner fa-spin" /> Creating…
               </>
             ) : (
               'Create Plan'

@@ -1,3 +1,4 @@
+import Icon from '../components/Icon';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { BusinessunitsService } from '../generated/services/BusinessunitsService';
 import { Pm_kpiachievmentsService } from '../generated/services/Pm_kpiachievmentsService';
@@ -5,6 +6,7 @@ import { Stf_kpiachievmentbreakdownsService } from '../generated/services/Stf_kp
 import { Cfm_collectionplanweeksService } from '../generated/services/Cfm_collectionplanweeksService';
 import { Strategy_kpisesService } from '../generated/services/Strategy_kpisesService';
 import { Hr_employeesService } from '../generated/services/Hr_employeesService';
+import { Cr301_agentsService } from '../generated/services/Cr301_agentsService';
 import type { Pm_kpiachievments, Pm_kpiachievmentsBase } from '../generated/models/Pm_kpiachievmentsModel';
 import type { Stf_kpiachievmentbreakdowns, Stf_kpiachievmentbreakdownsBase } from '../generated/models/Stf_kpiachievmentbreakdownsModel';
 import type { Cfm_collectionplanweeks, Cfm_collectionplanweeksBase } from '../generated/models/Cfm_collectionplanweeksModel';
@@ -14,29 +16,28 @@ import { operationErrorMessage } from '../lib/errors';
 import { fetchAll } from '../lib/dataverse';
 import { escapeForCsv, downloadCsv } from '../lib/csvExport';
 import { useConfirm } from '../lib/useConfirm';
+import type { Region } from '../lib/useRegion';
 import './VisitPlan.css';
 
 
-/**
- * "Visits — Planned & Actual" — mirrors Ref.html's standalone wizard/dashboard,
- * ported onto this app's generated services + acc-* shared UI. The stf_Employee
- * lookup on the breakdown is bound to hr_employees (Hr_employeesModel/Service are
- * hand-authored — see their module comments — since pac code add-data-source
- * couldn't resolve this table's metadata in this environment).
- */
+
 
 const BU_NAME = 'AHQ';
-// Last-known-good id for BU_NAME, kept only as a fallback in case the by-name lookup
-// below ever fails (e.g. the record gets renamed) — resolveBuId() prefers the live
-// lookup and only falls back to this so a lookup failure never blocks the whole page.
+
 const FALLBACK_BU_ID = '0e650dd0-5d4f-f011-877a-6045bd9979f4';
 const DEFAULT_KPI_NAME = 'No. of Visits';
 const BREAKDOWN_TYPE = 5;
+// Same cr18c_area choice on cr301_agents / same Egypt-vs-KSA mapping as
+// Agents.tsx (KSA = the real KSA choice value, Egypt = everything else,
+// including unset — see Agents.tsx's AREA_EGYPT comment for why).
+const AREA_KSA = 989230004;
 
-/** Resolves the AHQ business unit's id by name instead of relying solely on a
- * hardcoded GUID, which would silently point at the wrong (or no) record in any
- * environment other than the one it was copied from — dev/test/prod each have
- * their own businessunit ids for the same-named record. */
+// Same tolerant name match Agents.tsx / Visits.tsx use for Agent <-> Employee.
+function firstWords(name: string, n: number): string {
+  return name.trim().toLowerCase().split(/\s+/).slice(0, n).join(' ');
+}
+
+
 async function resolveBuId(): Promise<string> {
   try {
     const res = await BusinessunitsService.getAll({
@@ -53,7 +54,7 @@ async function resolveBuId(): Promise<string> {
 const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 const ACHIEVEMENT_SELECT = ['pm_kpiachievmentid', 'pm_month', 'pm_year', '_pm_kpi_value', 'pm_actual', 'pm_target'];
-const BREAKDOWN_SELECT = ['stf_kpiachievmentbreakdownid', 'stf_value', 'comp_breakdowntarget', '_stf_total_value', '_stf_employee_value'];
+const BREAKDOWN_SELECT = ['stf_kpiachievmentbreakdownid', 'stf_value', 'comp_breakdowntarget', '_stf_total_value', '_stf_employee_value', 'statecode'];
 const WEEK_SELECT = ['cfm_collectionplanweekid', 'cfm_weeknumber', 'cfm_plan', 'cfm_actual', '_cfm_kpiachievementbreakdown_value'];
 
 function formattedValue(record: unknown, attribute: string): string {
@@ -94,16 +95,38 @@ function resolveYear(m: number): number {
   else if (m > cm + 6) y -= 1;
   return y;
 }
-function isoWeekRange(weekIndex: number): { from: string; to: string } {
-  const base = new Date();
-  const from = new Date(base);
-  from.setDate(base.getDate() + (weekIndex - 1) * 7);
-  const to = new Date(from);
-  to.setDate(from.getDate() + 6);
+// Plans always cover exactly 4 weeks — matches the fixed 1-10/11-18/19-25/26-31
+// calendar-day buckets below, so there's nothing to vary per plan.
+const WEEK_COUNT = 4;
+
+// Fixed calendar-day buckets per month (not rolling 7-day windows): 1-10, 11-18,
+// 19-25, 26-end-of-month. The last bucket's end date adapts to short months.
+const MONTH_WEEK_BOUNDS: [number, number][] = [
+  [1, 10],
+  [11, 18],
+  [19, 25],
+  [26, 31],
+];
+function monthWeekRange(year: number, month: number, weekIndex: number): { from: string; to: string } {
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const [fromDay, toDayRaw] = MONTH_WEEK_BOUNDS[weekIndex - 1] || [1, daysInMonth];
+  const toDay = Math.min(toDayRaw, daysInMonth);
+  const from = new Date(Date.UTC(year, month - 1, fromDay));
+  const to = new Date(Date.UTC(year, month - 1, toDay));
   return { from: from.toISOString(), to: to.toISOString() };
 }
 function monthKeyOf(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+// A week's Plan stays editable through its own last calendar day — it only
+// locks once that day has fully passed, regardless of whether an Actual has
+// been recorded yet (that's the "was Actual > 0" rule this replaces).
+function weekHasEnded(year: number, month: number, weekIndex: number): boolean {
+  const { to } = monthWeekRange(year, month, weekIndex);
+  const lockAt = new Date(to);
+  lockAt.setUTCDate(lockAt.getUTCDate() + 1);
+  return Date.now() >= lockAt.getTime();
 }
 
 const AVATAR_TONES = ['gold', 'ok', 'warn', 'info', 'danger'] as const;
@@ -124,6 +147,8 @@ interface OwnerRow {
   name: string;
   target: number;
   value: number;
+  active: boolean;
+  region: 'EG' | 'KSA' | '';
   weeks: WeekRow[];
 }
 
@@ -161,7 +186,11 @@ interface OwnerCard {
 
 type CellState = 'saving' | 'saved' | 'error';
 
-export default function VisitPlanPage() {
+interface VisitPlanPageProps {
+  region: Region | null;
+}
+
+export default function VisitPlanPage({ region }: VisitPlanPageProps) {
   const [allOwners, setAllOwners] = useState<OwnerRow[]>([]);
   const [achievements, setAchievements] = useState<AchievementOption[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
@@ -170,6 +199,9 @@ export default function VisitPlanPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [buId, setBuId] = useState('');
 
+  // Defaults to only showing active owners, same as before inactive ones were
+  // even loaded — pick "Inactive" or "All" to see deactivated owners too.
+  const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
   // Empty set = "All months". monthKey is `${year}-${month}` so same-named months
   // in different years (e.g. two "August"s a year apart) never collide.
   const [selectedMonths, setSelectedMonths] = useState<Set<string>>(new Set());
@@ -193,9 +225,11 @@ export default function VisitPlanPage() {
   const [wizStep, setWizStep] = useState<1 | 2>(1);
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [selectedAchievementId, setSelectedAchievementId] = useState('');
+  const [wizContextMonth, setWizContextMonth] = useState<number | null>(null);
+  const [wizContextYear, setWizContextYear] = useState<number | null>(null);
   const [newMonth, setNewMonth] = useState(String(new Date().getMonth() + 1));
   const [selectedKpiId, setSelectedKpiId] = useState('');
-  const [weekCount, setWeekCount] = useState(4);
+  const weekCount = WEEK_COUNT;
   const [ownerCards, setOwnerCards] = useState<OwnerCard[]>([]);
   const [employeePickerOpen, setEmployeePickerOpen] = useState<string | null>(null);
   const [wizError, setWizError] = useState('');
@@ -217,7 +251,7 @@ export default function VisitPlanPage() {
       // this page — e.g. an org-wide headcount snapshot showed up here before this
       // fix). Resolve "No. of Visits"'s KPI id first and scope the achievement
       // query to it, so unrelated KPIs' achievements/breakdowns never load.
-      const [employeeRows, resolvedBuId, kpiRows] = await Promise.all([
+      const [employeeRows, agentRows, resolvedBuId, kpiRows] = await Promise.all([
         fetchAll<Hr_employees>(
           (skipToken) =>
             Hr_employeesService.getAll({
@@ -228,6 +262,16 @@ export default function VisitPlanPage() {
               skipToken,
             }),
           'Could not load task owners.'
+        ),
+        fetchAll<{ cr301_agentid: string; cr301_newcolumn?: string; cr18c_area?: number; _cfm_employee_value?: string }>(
+          (skipToken) =>
+            Cr301_agentsService.getAll({
+              select: ['cr301_agentid', 'cr301_newcolumn', 'cr18c_area', '_cfm_employee_value'],
+              filter: 'cfm_iscollection eq true',
+              maxPageSize: 5000,
+              skipToken,
+            }),
+          'Could not load agents.'
         ),
         resolveBuId(),
         fetchAll<Strategy_kpises>(
@@ -273,8 +317,11 @@ export default function VisitPlanPage() {
             (skipToken) =>
               Stf_kpiachievmentbreakdownsService.getAll({
                 select: BREAKDOWN_SELECT,
-                filter: `(${achIdFilter}) and statecode eq 0`,
-                orderBy: ['createdon asc'],
+                // Not scoped to statecode eq 0 — inactive owners are loaded too so
+                // the status filter can show/toggle them instead of them just
+                // disappearing.
+                filter: `(${achIdFilter})`,
+                orderBy: ['createdon desc'],
                 maxPageSize: 5000,
                 skipToken,
               }),
@@ -289,6 +336,23 @@ export default function VisitPlanPage() {
 
       const employeeOptions: EmployeeOption[] = employeeRows.map((e) => ({ id: e.hr_employeeid, name: e.hr_fullname || '(employee)' }));
       const employeeMap = new Map(employeeOptions.map((e) => [e.id, e.name]));
+
+      // Region comes from the matching cr301_agents record's cr18c_area — try the
+      // real employee lookup first (_cfm_employee_value, when set), falling back to
+      // the same tolerant name match used elsewhere since Agents.tsx doesn't
+      // currently populate that lookup on save.
+      const agentByEmployeeId = new Map<string, (typeof agentRows)[number]>();
+      const agentByNameKey = new Map<string, (typeof agentRows)[number]>();
+      agentRows.forEach((a) => {
+        if (a._cfm_employee_value) agentByEmployeeId.set(a._cfm_employee_value, a);
+        const key = firstWords(a.cr301_newcolumn || '', 3);
+        if (key) agentByNameKey.set(key, a);
+      });
+      function regionFor(employeeId: string, employeeName: string): 'EG' | 'KSA' | '' {
+        const agent = agentByEmployeeId.get(employeeId) || agentByNameKey.get(firstWords(employeeName, 3));
+        if (!agent || agent.cr18c_area == null) return '';
+        return Number(agent.cr18c_area) === AREA_KSA ? 'KSA' : 'EG';
+      }
 
       const weeksByBrk = new Map<string, WeekRow[]>();
       weekRows.forEach((w) => {
@@ -308,15 +372,18 @@ export default function VisitPlanPage() {
         const ach = achId ? achById.get(achId) : undefined;
         if (!ach) return;
         const employeeId = b._stf_employee_value || '';
+        const name = employeeMap.get(employeeId) || '(owner)';
         owners.push({
           breakdownId: b.stf_kpiachievmentbreakdownid,
           achievementId: ach.pm_kpiachievmentid,
           month: N(ach.pm_month),
           year: N(ach.pm_year),
           employeeId,
-          name: employeeMap.get(employeeId) || '(owner)',
+          name,
           target: N(b.comp_breakdowntarget),
           value: N(b.stf_value),
+          active: N(b.statecode) === 0,
+          region: regionFor(employeeId, name),
           weeks: weeksByBrk.get(b.stf_kpiachievmentbreakdownid) || [],
         });
       });
@@ -335,6 +402,11 @@ export default function VisitPlanPage() {
             breakdownUpdates.push(Stf_kpiachievmentbreakdownsService.update(o.breakdownId, { stf_value: actualSum }));
             o.value = actualSum;
           }
+          // Inactive owners are still loaded (for the status filter/toggle) but
+          // stay out of the achievement-level roll-up, same as before they were
+          // loaded at all — deactivating an owner should drop them out of the
+          // parent KPI achievement's target/actual, not just hide them.
+          if (!o.active) return;
           const agg = achAggregates.get(o.achievementId) || { actual: 0, target: 0 };
           agg.actual += actualSum;
           agg.target += o.target;
@@ -399,19 +471,31 @@ export default function VisitPlanPage() {
     return () => document.removeEventListener('mousedown', onDocMouseDown);
   }, [ownerMenuOpen]);
 
+  const statusOwners = useMemo(
+    () => (statusFilter === 'all' ? allOwners : allOwners.filter((o) => o.active === (statusFilter === 'active'))),
+    [allOwners, statusFilter]
+  );
+
+  // App-wide Region toggle (Layout header) — unset region on an owner counts as
+  // Egypt, same "everything else is Egypt" convention useRegion.ts uses for BUs.
+  const regionOwners = useMemo(
+    () => (!region ? statusOwners : statusOwners.filter((o) => (region === 'KSA' ? o.region === 'KSA' : o.region !== 'KSA'))),
+    [statusOwners, region]
+  );
+
   const monthOptions = useMemo(() => {
     const map = new Map<string, string>();
-    allOwners.forEach((o) => {
+    regionOwners.forEach((o) => {
       const key = monthKeyOf(o.year, o.month);
       if (!map.has(key)) map.set(key, `${MONTHS[o.month] || o.month} ${o.year}`);
     });
     return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [allOwners]);
+  }, [regionOwners]);
 
   const allMonthsSelected = selectedMonths.size === 0;
   const monthOwners = useMemo(
-    () => (allMonthsSelected ? allOwners : allOwners.filter((o) => selectedMonths.has(monthKeyOf(o.year, o.month)))),
-    [allOwners, selectedMonths, allMonthsSelected]
+    () => (allMonthsSelected ? regionOwners : regionOwners.filter((o) => selectedMonths.has(monthKeyOf(o.year, o.month)))),
+    [regionOwners, selectedMonths, allMonthsSelected]
   );
 
   const ownerOptions = useMemo(() => Array.from(new Set(monthOwners.map((o) => o.name))).sort(), [monthOwners]);
@@ -554,16 +638,27 @@ export default function VisitPlanPage() {
     }
   }
 
-  async function deleteOwner(owner: OwnerRow) {
-    const ok = await confirm({ title: `Remove ${owner.name}?`, message: 'This deletes their plan weeks and cannot be undone.', danger: true, confirmLabel: 'Remove' });
+  async function toggleOwnerStatus(owner: OwnerRow) {
+    const goingActive = !owner.active;
+    const ok = await confirm({
+      title: goingActive ? `Activate ${owner.name}?` : `Deactivate ${owner.name}?`,
+      message: goingActive
+        ? 'Their plan weeks stay as-is and count toward the KPI achievement totals again.'
+        : 'Their plan weeks are kept (nothing is deleted), but they drop out of the KPI achievement totals until reactivated.',
+      danger: !goingActive,
+      confirmLabel: goingActive ? 'Activate' : 'Deactivate',
+    });
     if (!ok) return;
     try {
-      await Promise.all(owner.weeks.map((w) => Cfm_collectionplanweeksService.delete(w.id)));
-      await Stf_kpiachievmentbreakdownsService.delete(owner.breakdownId);
-      setAllOwners((prev) => prev.filter((o) => o.breakdownId !== owner.breakdownId));
-      showToast(`Removed ${owner.name}.`);
+      const result = await Stf_kpiachievmentbreakdownsService.update(owner.breakdownId, {
+        statecode: goingActive ? 0 : 1,
+        statuscode: goingActive ? 1 : 2,
+      });
+      if (!result.success) throw new Error(operationErrorMessage(result.error, 'Could not update status.'));
+      setAllOwners((prev) => prev.map((o) => (o.breakdownId === owner.breakdownId ? { ...o, active: goingActive } : o)));
+      showToast(goingActive ? `${owner.name} activated.` : `${owner.name} deactivated.`);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : 'Delete failed.', 4500);
+      showToast(e instanceof Error ? e.message : 'Could not update status.', 4500);
     }
   }
 
@@ -581,6 +676,27 @@ export default function VisitPlanPage() {
     downloadCsv('visits_planned_actual.csv', lines);
   }
 
+  function exportCsvByWeek() {
+    if (!view.length) {
+      showToast('Nothing to export.');
+      return;
+    }
+    const header = ['Task owner', 'Week', 'Plan', 'Actual', 'Achievement %', 'Month'];
+    const lines = [header.join(',')];
+    view.forEach((o) => {
+      const month = `${MONTHS[o.month] || o.month} ${o.year}`;
+      if (o.weeks.length === 0) {
+        lines.push([o.name, '—', 0, 0, '0.0%', month].map(escapeForCsv).join(','));
+        return;
+      }
+      o.weeks.forEach((w) => {
+        const rate = w.plan > 0 ? (w.actual / w.plan) * 100 : 0;
+        lines.push([o.name, `Week ${w.number}`, w.plan, w.actual, rate.toFixed(1) + '%', month].map(escapeForCsv).join(','));
+      });
+    });
+    downloadCsv('visits_planned_actual_by_week.csv', lines);
+  }
+
   // ================= wizard =================
   function openWizard() {
     setWizError('');
@@ -592,7 +708,8 @@ export default function VisitPlanPage() {
     const defaultAch =
       achievements.find((a) => a.kpiName.trim().toLowerCase() === DEFAULT_KPI_NAME.toLowerCase()) || achievements[0];
     setSelectedAchievementId(defaultAch?.id || '');
-    setWeekCount(4);
+    setWizContextMonth(null);
+    setWizContextYear(null);
     setOwnerCards([]);
     setOwnerSeq(0);
     setWizardOpen(true);
@@ -625,19 +742,6 @@ export default function VisitPlanPage() {
   function setCardPlan(key: string, weekIdx: number, value: number) {
     setOwnerCards((prev) => prev.map((c) => (c.key === key ? { ...c, plans: c.plans.map((p, i) => (i === weekIdx ? value : p)) } : c)));
   }
-  function changeWeeks(delta: number) {
-    setWeekCount((prev) => {
-      const next = Math.max(1, Math.min(52, prev + delta));
-      setOwnerCards((cards) =>
-        cards.map((c) => {
-          const plans = c.plans.slice(0, next);
-          while (plans.length < next) plans.push(1);
-          return { ...c, plans };
-        })
-      );
-      return next;
-    });
-  }
   const totalPlanned = useMemo(() => ownerCards.reduce((s, c) => s + c.plans.reduce((a, b) => a + (Number(b) || 0), 0), 0), [ownerCards]);
 
   async function onContinue() {
@@ -648,6 +752,9 @@ export default function VisitPlanPage() {
       if (mode === 'existing') {
         if (!selectedAchievementId) throw new Error('Select a KPI achievement first.');
         achievementId = selectedAchievementId;
+        const a = achievements.find((x) => x.id === achievementId);
+        setWizContextMonth(a ? a.month : new Date().getMonth() + 1);
+        setWizContextYear(a ? a.year : new Date().getFullYear());
       } else {
         if (!selectedKpiId) throw new Error('No KPI selected.');
         if (!buId) throw new Error(`Business unit "${BU_NAME}" hasn't loaded yet — try again in a moment.`);
@@ -664,6 +771,8 @@ export default function VisitPlanPage() {
         const id = (result.data as unknown as { pm_kpiachievmentid?: string })?.pm_kpiachievmentid;
         if (!id) throw new Error('KPI achievement was created but no id was returned.');
         achievementId = id;
+        setWizContextMonth(month);
+        setWizContextYear(year);
       }
       setSelectedAchievementId(achievementId);
       setWizStep(2);
@@ -698,6 +807,8 @@ export default function VisitPlanPage() {
 
     setWizBusy(true);
     try {
+      const rangeYear = wizContextYear ?? new Date().getFullYear();
+      const rangeMonth = wizContextMonth ?? new Date().getMonth() + 1;
       for (const card of ownerCards) {
         const target = card.plans.reduce((a, b) => a + (Number(b) || 0), 0);
         const brkBody: Record<string, unknown> = {
@@ -715,7 +826,7 @@ export default function VisitPlanPage() {
         const weekResults = await Promise.all(
           card.plans.map((plan, i) => {
             const w = i + 1;
-            const range = isoWeekRange(w);
+            const range = monthWeekRange(rangeYear, rangeMonth, w);
             const weekBody: Record<string, unknown> = {
               cfm_weeknumber: w,
               cfm_plan: Number(plan) || 0,
@@ -760,10 +871,13 @@ export default function VisitPlanPage() {
           </div>
           <div className="acc-actions">
             <button className="acc-btn acc-btn-primary" onClick={openWizard}>
-              <i className="fa-solid fa-plus"></i> Create KPI achievement
+              <Icon className="fa-solid fa-plus" /> Create KPI achievement
             </button>
             <button className="acc-btn" onClick={exportCsv}>
-              <i className="fa-solid fa-download"></i> Export
+              <Icon className="fa-solid fa-download" /> Export
+            </button>
+            <button className="acc-btn" onClick={exportCsvByWeek}>
+              <Icon className="fa-solid fa-download" /> Export by Week
             </button>
           </div>
         </div>
@@ -772,7 +886,7 @@ export default function VisitPlanPage() {
           <div className="kpi-card">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-gold">
-                <i className="fa-solid fa-bullseye"></i>
+                <Icon className="fa-solid fa-bullseye" />
               </span>
               <span className="kpi-label">Monthly planned</span>
             </div>
@@ -782,7 +896,7 @@ export default function VisitPlanPage() {
           <div className="kpi-card kpi-info">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-info">
-                <i className="fa-solid fa-clipboard-check"></i>
+                <Icon className="fa-solid fa-clipboard-check" />
               </span>
               <span className="kpi-label">Monthly achieved</span>
             </div>
@@ -792,7 +906,7 @@ export default function VisitPlanPage() {
           <div className={`kpi-card kpi-${KPI_TONE_SUFFIX[pctTone(summary.rate)]}`}>
             <div className="kpi-top">
               <span className={`kpi-icon kpi-icon-${KPI_TONE_SUFFIX[pctTone(summary.rate)]}`}>
-                <i className="fa-solid fa-gauge-high"></i>
+                <Icon className="fa-solid fa-gauge-high" />
               </span>
               <span className="kpi-label">Achievement rate</span>
             </div>
@@ -808,9 +922,9 @@ export default function VisitPlanPage() {
             <div className="dm-filter-bar">
               <div className="vp-multiselect" onMouseDown={(e) => e.stopPropagation()}>
                 <button type="button" className="acc-f vp-multiselect-btn" onClick={() => setMonthMenuOpen((v) => !v)}>
-                  <i className="fa-solid fa-calendar-days vp-multiselect-ico"></i>
+                  <Icon className="fa-solid fa-calendar-days vp-multiselect-ico" />
                   <span>{monthButtonLabel}</span>
-                  <i className={`fa-solid fa-chevron-down vp-multiselect-caret${monthMenuOpen ? ' open' : ''}`}></i>
+                  <Icon className={`fa-solid fa-chevron-down vp-multiselect-caret${monthMenuOpen ? ' open' : ''}`} />
                 </button>
                 {monthMenuOpen && (
                   <div className="vp-multiselect-menu">
@@ -844,14 +958,14 @@ export default function VisitPlanPage() {
                     setOwnerSearch('');
                   }}
                 >
-                  <i className="fa-solid fa-user-tag vp-multiselect-ico"></i>
+                  <Icon className="fa-solid fa-user-tag vp-multiselect-ico" />
                   <span>{ownerButtonLabel}</span>
-                  <i className={`fa-solid fa-chevron-down vp-multiselect-caret${ownerMenuOpen ? ' open' : ''}`}></i>
+                  <Icon className={`fa-solid fa-chevron-down vp-multiselect-caret${ownerMenuOpen ? ' open' : ''}`} />
                 </button>
                 {ownerMenuOpen && (
                   <div className="vp-multiselect-menu vp-multiselect-menu-wide">
                     <div className="vp-multiselect-search">
-                      <i className="fa-solid fa-magnifying-glass"></i>
+                      <Icon className="fa-solid fa-magnifying-glass" />
                       <input
                         type="text"
                         placeholder="Search task owners…"
@@ -881,6 +995,12 @@ export default function VisitPlanPage() {
                 )}
               </div>
 
+              <select className="acc-f" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'active' | 'inactive' | 'all')}>
+                <option value="active">Active only</option>
+                <option value="inactive">Inactive only</option>
+                <option value="all">All statuses</option>
+              </select>
+
               {(!allMonthsSelected || !allOwnersSelected) && (
                 <button
                   type="button"
@@ -890,12 +1010,12 @@ export default function VisitPlanPage() {
                     setSelectedOwners(new Set());
                   }}
                 >
-                  <i className="fa-solid fa-xmark"></i> Clear filters
+                  <Icon className="fa-solid fa-xmark" /> Clear filters
                 </button>
               )}
             </div>
             <div className="dm-count">
-              <i className="fa-solid fa-users"></i> Task owners <strong>{view.length}</strong>
+              <Icon className="fa-solid fa-users" /> Task owners <strong>{view.length}</strong>
             </div>
           </div>
           <div className="acc-tablewrap">
@@ -925,7 +1045,7 @@ export default function VisitPlanPage() {
                   <tr>
                     <td colSpan={6}>
                       <div className="acc-state">
-                        <i className="fa-solid fa-triangle-exclamation"></i>
+                        <Icon className="fa-solid fa-triangle-exclamation" />
                         Couldn't load visit plans.
                         <br />
                         <small>{loadError}</small>
@@ -936,7 +1056,7 @@ export default function VisitPlanPage() {
                   <tr>
                     <td colSpan={6}>
                       <div className="acc-state">
-                        <i className="fa-solid fa-inbox"></i>
+                        <Icon className="fa-solid fa-inbox" />
                         No task owners for this selection.
                       </div>
                     </td>
@@ -951,7 +1071,7 @@ export default function VisitPlanPage() {
                         <tr className="acc-row" onClick={() => toggleExpand(o.breakdownId)}>
                           <td>
                             <div className="vp-who">
-                              <i className={`fa-solid ${isOpen ? 'fa-chevron-down' : 'fa-chevron-right'} vp-caret`}></i>
+                              <Icon className={`fa-solid ${isOpen ? 'fa-chevron-down' : 'fa-chevron-right'} vp-caret`} />
                               <div className={`vp-ava vp-ava-${tone}`}>{initials(o.name)}</div>
                               <div>
                                 <div className="acc-name">{o.name}</div>
@@ -959,6 +1079,8 @@ export default function VisitPlanPage() {
                                   <span className="vp-chip">
                                     {o.weeks.length} week{o.weeks.length === 1 ? '' : 's'}
                                   </span>
+                                  {o.region && <span className="vp-chip">{o.region === 'KSA' ? 'KSA' : 'Egypt'}</span>}
+                                  {!o.active && <span className="vp-chip vp-chip-inactive">Inactive</span>}
                                 </div>
                               </div>
                             </div>
@@ -970,8 +1092,12 @@ export default function VisitPlanPage() {
                             <span className="vp-chip">{MONTHS[o.month]} {o.year}</span>
                           </td>
                           <td className="acc-num" onClick={(e) => e.stopPropagation()}>
-                            <button className="vp-del" title="Remove" onClick={() => deleteOwner(o)}>
-                              <i className="fa-solid fa-trash"></i>
+                            <button
+                              className={`vp-status-toggle${o.active ? ' vp-status-toggle-active' : ''}`}
+                              title={o.active ? 'Deactivate' : 'Activate'}
+                              onClick={() => toggleOwnerStatus(o)}
+                            >
+                              <Icon className={`fa-solid ${o.active ? 'fa-toggle-on' : 'fa-toggle-off'}`} />
                             </button>
                           </td>
                         </tr>
@@ -986,6 +1112,7 @@ export default function VisitPlanPage() {
                                     const key = w.id;
                                     const draftPlan = Number(planValue(w)) || 0;
                                     const prog = draftPlan > 0 ? Math.min(100, (w.actual / draftPlan) * 100) : 0;
+                                    const locked = weekHasEnded(o.year, o.month, w.number);
                                     return (
                                       <div className="vp-wk" key={w.id}>
                                         <div className="vp-wtitle">Week {w.number}</div>
@@ -996,6 +1123,8 @@ export default function VisitPlanPage() {
                                               type="number"
                                               min={0}
                                               value={planValue(w)}
+                                              disabled={locked}
+                                              title={locked ? 'Locked — this week’s period has ended.' : undefined}
                                               onChange={(e) => setPlanDrafts((prev) => ({ ...prev, [w.id]: e.target.value }))}
                                               onBlur={() => commitPlan(o, w)}
                                             />
@@ -1008,9 +1137,9 @@ export default function VisitPlanPage() {
                                         <div className="vp-wbar">
                                           <span style={{ width: `${prog}%` }}></span>
                                         </div>
-                                        {cellState[key] === 'saving' && <i className="fa-solid fa-spinner fa-spin vp-cell-ico"></i>}
-                                        {cellState[key] === 'saved' && <i className="fa-solid fa-check vp-cell-ico vp-ok"></i>}
-                                        {cellState[key] === 'error' && <i className="fa-solid fa-triangle-exclamation vp-cell-ico vp-bad"></i>}
+                                        {cellState[key] === 'saving' && <Icon className="fa-solid fa-spinner fa-spin vp-cell-ico" />}
+                                        {cellState[key] === 'saved' && <Icon className="fa-solid fa-check vp-cell-ico vp-ok" />}
+                                        {cellState[key] === 'error' && <Icon className="fa-solid fa-triangle-exclamation vp-cell-ico vp-bad" />}
                                       </div>
                                     );
                                   })
@@ -1030,12 +1159,12 @@ export default function VisitPlanPage() {
 
         <div className="tbl-shell vp-chart-panel">
           <h2 className="vp-chh">
-            <i className="fa-solid fa-chart-simple"></i> Actual vs target by task owner
+            <Icon className="fa-solid fa-chart-simple" /> Actual vs target by task owner
           </h2>
           <div className="vp-chart-body">
             {view.length === 0 ? (
               <div className="acc-state">
-                <i className="fa-solid fa-chart-bar"></i>
+                <Icon className="fa-solid fa-chart-bar" />
                 Nothing to chart yet.
               </div>
             ) : (
@@ -1064,14 +1193,14 @@ export default function VisitPlanPage() {
       <div className={`vp-modal-overlay${wizardOpen ? ' on' : ''}`} onClick={closeWizard}>
         <div className="vp-modal" onClick={(e) => e.stopPropagation()}>
           <button className="vp-modal-close" onClick={closeWizard}>
-            <i className="fa-solid fa-xmark"></i>
+            <Icon className="fa-solid fa-xmark" />
           </button>
           <div className="vp-weyebrow">New objective</div>
           <h2 className="vp-wtitle">Create KPI achievement</h2>
 
           <div className="vp-steps">
             <div className={`vp-step${wizStep === 1 ? ' active' : ' done'}`}>
-              <div className="vp-scircle">{wizStep === 1 ? '1' : <i className="fa-solid fa-check"></i>}</div>
+              <div className="vp-scircle">{wizStep === 1 ? '1' : <Icon className="fa-solid fa-check" />}</div>
               <div className="vp-stext">
                 <b>Define KPI</b>
                 <span>Name &amp; month</span>
@@ -1124,18 +1253,16 @@ export default function VisitPlanPage() {
                       <label>
                         KPI <span className="vp-badge-ro">read only</span>
                       </label>
-                      <select disabled value={selectedKpiId} onChange={() => { }}>
-                        {kpis.length === 0 ? (
-                          <option value="">Loading KPIs…</option>
-                        ) : (
-                          kpis.map((k) => (
-                            <option key={k.id} value={k.id}>
-                              {k.name}
-                              {k.code ? ` — ${k.code}` : ''}
-                            </option>
-                          ))
-                        )}
-                      </select>
+                      <div className="acc-ro-wrap">
+                        <div className="acc-ro-value">
+                          {kpis.length === 0
+                            ? 'Loading KPIs…'
+                            : (() => {
+                                const k = kpis.find((x) => x.id === selectedKpiId);
+                                return k ? `${k.name}${k.code ? ` — ${k.code}` : ''}` : '—';
+                              })()}
+                        </div>
+                      </div>
                       <p className="vp-hint">Defaults to "{DEFAULT_KPI_NAME}". Loaded live from the KPI table.</p>
                     </div>
                     <div className="vp-row2">
@@ -1156,9 +1283,9 @@ export default function VisitPlanPage() {
                         <label>
                           Business unit <span className="vp-badge-ro">read only</span>
                         </label>
-                        <select disabled value={buId} onChange={() => { }}>
-                          <option value={buId}>{BU_NAME}</option>
-                        </select>
+                        <div className="acc-ro-wrap">
+                          <div className="acc-ro-value">{BU_NAME}</div>
+                        </div>
                       </div>
                     </div>
                   </>
@@ -1170,9 +1297,7 @@ export default function VisitPlanPage() {
                   <div>
                     <label>Number of weeks</label>
                     <div className="vp-weeks-ctl">
-                      <button onClick={() => changeWeeks(-1)}>−</button>
                       <div className="vp-weeks-val">{weekCount}</div>
-                      <button onClick={() => changeWeeks(1)}>+</button>
                     </div>
                   </div>
                   <div className="vp-total-planned">
@@ -1184,7 +1309,7 @@ export default function VisitPlanPage() {
                 {ownerCards.map((card) => (
                   <div className="vp-owner-card" key={card.key}>
                     <button className="vp-del" title="Remove" onClick={() => removeOwnerCard(card.key)}>
-                      <i className="fa-solid fa-trash"></i>
+                      <Icon className="fa-solid fa-trash" />
                     </button>
                     <label>Task owner</label>
                     <div className="acc-combo vp-owner-combo">
@@ -1250,7 +1375,7 @@ export default function VisitPlanPage() {
                 <button className="vp-wbtn-primary" disabled={wizBusy} onClick={onContinue}>
                   {wizBusy ? (
                     <>
-                      <i className="fa-solid fa-spinner fa-spin"></i> Saving…
+                      <Icon className="fa-solid fa-spinner fa-spin" /> Saving…
                     </>
                   ) : (
                     <>Continue ›</>
@@ -1260,7 +1385,7 @@ export default function VisitPlanPage() {
                 <button className="vp-wbtn-primary" disabled={wizBusy} onClick={onCreateAll}>
                   {wizBusy ? (
                     <>
-                      <i className="fa-solid fa-spinner fa-spin"></i> Creating…
+                      <Icon className="fa-solid fa-spinner fa-spin" /> Creating…
                     </>
                   ) : (
                     '✓ Create KPI'

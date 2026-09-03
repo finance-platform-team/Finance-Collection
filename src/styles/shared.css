@@ -1,4 +1,6 @@
 *,*::before,*::after{box-sizing:border-box}
+.fa-svg{width:1em;height:1em;display:inline-block;vertical-align:-.125em;fill:currentColor}
+.fa-solid::before,.fas::before,.far::before,.fab::before{content:none!important}
 :root{
   --brown:#2b160a; --gold:#a5845b; --cream:#f7f4ee;
   --ink:#2b160a; --muted:#8a7a6c; --line:#e7ded2;
@@ -386,7 +388,8 @@ input.acc-f:focus{outline:none;border-color:var(--gold);background:#fff}
 :root[data-theme="dark"] .acc-fld textarea,
 :root[data-theme="dark"] select.acc-f{background:#1c2118;color:var(--ink);border-color:var(--line)}
 :root[data-theme="dark"] input.acc-f{background:#1c2118;color:var(--ink);border-color:var(--line)}
-:root[data-theme="dark"] input.acc-f::-webkit-calendar-picker-indicator{filter:invert(1)}
+:root[data-theme="dark"] input.acc-f::-webkit-calendar-picker-indicator,
+:root[data-theme="dark"] .acc-fld input::-webkit-calendar-picker-indicator{filter:invert(1)}
 :root[data-theme="dark"] .acc-search input::placeholder{color:#78715f}
 :root[data-theme="dark"] .acc-search input:focus,
 :root[data-theme="dark"] .acc-fld input:focus,

@@ -1,14 +1,17 @@
+import Icon from '../components/Icon';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Ar_disputemanagementsService } from '../generated/services/Ar_disputemanagementsService';
 import { Cfm_disputemanagementupdatesesService } from '../generated/services/Cfm_disputemanagementupdatesesService';
-import { Cfm_aragingsService } from '../generated/services/Cfm_aragingsService';
+import { Cfm_insurancecompaniesService } from '../generated/services/Cfm_insurancecompaniesService';
 import type { Ar_disputemanagements, Ar_disputemanagementsBase } from '../generated/models/Ar_disputemanagementsModel';
 import type { Cfm_disputemanagementupdatesesBase } from '../generated/models/Cfm_disputemanagementupdatesesModel';
-import type { Cfm_aragings } from '../generated/models/Cfm_aragingsModel';
+import type { Cfm_insurancecompanies } from '../generated/models/Cfm_insurancecompaniesModel';
 import { operationErrorMessage } from '../lib/errors';
 import { fetchAll } from '../lib/dataverse';
 import type { DocFile } from '../lib/docs';
 import { docExt, docIconClass, docIcon, fmtBytes, fileToBase64, docsFlow, listDocs, uploadDoc } from '../lib/docs';
+import { useConfirm } from '../lib/useConfirm';
+import { KSA_BU_CODES, type Region } from '../lib/useRegion';
 import './DisputeManagement.css';
 
 /**
@@ -35,9 +38,19 @@ const DISPUTE_SELECT = [
   '_cfm_companycode_value',
   '_createdby_value',
   'createdon',
+  'statecode',
 ];
 
-const COMPANY_SELECT = ['cfm_aragingid', 'cfm_companycode', 'cfm_companyname', '_cfm_type_value'];
+// ar_disputemanagements.cfm_CompanyCode targets cfm_insurancecompanies, NOT
+// cfm_aragings (a different table with unrelated ids, despite the similar
+// "company code" naming) — binding an cfm_aragings id here fails with
+// "Entity 'cfm_InsuranceCompany' ... Does Not Exist".
+const COMPANY_SELECT = ['cfm_insurancecompanyid', 'cfm_code', 'cfm_companyname', 'cfm_name', 'cfm_companytype', 'cfm_butext'];
+
+const KSA_BU_SET = new Set(KSA_BU_CODES);
+function normBu(s: string): string {
+  return (s || '').trim().toUpperCase();
+}
 
 const CATEGORY = {
   REJECTED: 0,
@@ -117,6 +130,7 @@ interface CompanyOption {
   code: string;
   name: string;
   entityName: string;
+  buText: string;
 }
 
 interface HistoryEntry {
@@ -150,6 +164,8 @@ interface DisputeRow {
   arReview: number;
   arReviewLabel: string;
   createdOn: string;
+  active: boolean;
+  region: 'EG' | 'KSA' | '';
 }
 
 function normaliseDispute(row: Ar_disputemanagements, companies: CompanyOption[]): DisputeRow {
@@ -175,6 +191,8 @@ function normaliseDispute(row: Ar_disputemanagements, companies: CompanyOption[]
     arReview,
     arReviewLabel: formattedValue(row, 'cfm_arreview') || AR_REVIEW_LABEL[arReview],
     createdOn: row.createdon || '',
+    active: Number(row.statecode) === 0,
+    region: co ? (KSA_BU_SET.has(normBu(co.buText)) ? 'KSA' : 'EG') : '',
   };
 }
 
@@ -196,7 +214,11 @@ function docsFolderName(row: DisputeRow): string {
 
 type CellState = 'saving' | 'saved' | 'error';
 
-export default function DisputeManagementPage() {
+interface DisputeManagementPageProps {
+  region: Region | null;
+}
+
+export default function DisputeManagementPage({ region }: DisputeManagementPageProps) {
   const [rows, setRows] = useState<DisputeRow[]>([]);
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -205,8 +227,13 @@ export default function DisputeManagementPage() {
   const [query, setQuery] = useState('');
   const [reviewFilter, setReviewFilter] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
+  // Defaults to only showing active disputes, same as before inactive ones were
+  // even loaded — pick "Inactive" or "All" to see deactivated ones too.
+  const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
+
+  const { confirm, dialog } = useConfirm();
 
   const [cellState, setCellState] = useState<Record<string, CellState>>({});
   const cellTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -216,18 +243,15 @@ export default function DisputeManagementPage() {
   const [toastOn, setToastOn] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  // Create Dispute Case drawer
+  // Create Dispute Case drawer — Code doubles as the company-code search box;
+  // Company is a read-only field auto-filled from whichever match gets picked.
   const [createOpen, setCreateOpen] = useState(false);
-  const [coQuery, setCoQuery] = useState('');
   const [coListOpen, setCoListOpen] = useState(false);
   const [selectedCo, setSelectedCo] = useState<CompanyOption | null>(null);
   const [formCode, setFormCode] = useState('');
   const [formAmount, setFormAmount] = useState('');
-  const [formTotalClaim, setFormTotalClaim] = useState('');
-  const [formRejection, setFormRejection] = useState('');
   const [formCategory, setFormCategory] = useState(String(CATEGORY.REJECTED));
   const [formDue, setFormDue] = useState('');
-  const [formAgreement, setFormAgreement] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -279,15 +303,16 @@ export default function DisputeManagementPage() {
   }
 
   async function loadCompanies(): Promise<CompanyOption[]> {
-    const list = await fetchAll<Cfm_aragings>(
-      (skipToken) => Cfm_aragingsService.getAll({ select: COMPANY_SELECT, filter: 'statecode eq 0', maxPageSize: 5000, skipToken }),
+    const list = await fetchAll<Cfm_insurancecompanies>(
+      (skipToken) => Cfm_insurancecompaniesService.getAll({ select: COMPANY_SELECT, filter: 'statecode eq 0', maxPageSize: 5000, skipToken }),
       'Could not load companies.'
     );
     return list.map((r) => ({
-      id: r.cfm_aragingid,
-      code: r.cfm_companycode || '',
-      name: r.cfm_companyname || '',
-      entityName: formattedValue(r, '_cfm_type_value') || '—',
+      id: r.cfm_insurancecompanyid,
+      code: r.cfm_code || '',
+      name: r.cfm_companyname || r.cfm_name || '',
+      entityName: formattedValue(r, 'cfm_companytype') || '—',
+      buText: r.cfm_butext || '',
     }));
   }
 
@@ -298,7 +323,9 @@ export default function DisputeManagementPage() {
       const [companyOptions, disputeRows] = await Promise.all([
         loadCompanies(),
         fetchAll<Ar_disputemanagements>(
-          (skipToken) => Ar_disputemanagementsService.getAll({ select: DISPUTE_SELECT, filter: 'statecode eq 0', orderBy: ['createdon desc'], maxPageSize: 5000, skipToken }),
+          // Not scoped to statecode eq 0 — inactive disputes are loaded too so the
+          // status filter can show/toggle them instead of them just disappearing.
+          (skipToken) => Ar_disputemanagementsService.getAll({ select: DISPUTE_SELECT, orderBy: ['createdon desc'], maxPageSize: 5000, skipToken }),
           'Could not load dispute cases.'
         ),
       ]);
@@ -326,9 +353,17 @@ export default function DisputeManagementPage() {
     return () => document.removeEventListener('mousedown', onDocMouseDown);
   }, [reviewOpenId]);
 
+  // App-wide Region toggle (Layout header) — unset region on a dispute counts
+  // as Egypt, same convention used everywhere else this filter appears.
+  const regionRows = useMemo(
+    () => (!region ? rows : rows.filter((r) => (region === 'KSA' ? r.region === 'KSA' : r.region !== 'KSA'))),
+    [rows, region]
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const matches = rows.filter((r) => {
+    const matches = regionRows.filter((r) => {
+      if (statusFilter !== 'all' && r.active !== (statusFilter === 'active')) return false;
       if (categoryFilter != null && r.category !== categoryFilter) return false;
       if (reviewFilter !== '' && r.arReview !== Number(reviewFilter)) return false;
       if (q && !`${r.code} ${r.companyName} ${r.agreement}`.toLowerCase().includes(q)) return false;
@@ -341,11 +376,11 @@ export default function DisputeManagementPage() {
       const bLast = b.arReview === AR_REVIEW.RECONCILED ? 1 : 0;
       return aLast - bLast;
     });
-  }, [rows, query, reviewFilter, categoryFilter]);
+  }, [regionRows, query, reviewFilter, categoryFilter, statusFilter]);
 
   useEffect(() => {
     setPage(1);
-  }, [query, reviewFilter, categoryFilter]);
+  }, [query, reviewFilter, categoryFilter, statusFilter, region]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const clampedPage = Math.min(page, totalPages);
@@ -361,37 +396,36 @@ export default function DisputeManagementPage() {
   }
 
   const kpis = useMemo(() => {
-    const totalDisputes = rows.length;
-    const disputedAmount = rows.reduce((t, r) => t + r.amount, 0);
-    const pendingAr = rows.filter((r) => r.arReview === AR_REVIEW.PENDING);
-    const approved = rows.filter((r) => r.arReview === AR_REVIEW.APPROVED).length;
+    // Same rows the KPIs always reflected — inactive disputes are now loaded
+    // (for the status filter/toggle) but stay out of these totals, same as
+    // before they were loaded at all.
+    const activeRows = regionRows.filter((r) => r.active);
+    const totalDisputes = activeRows.length;
+    const disputedAmount = activeRows.reduce((t, r) => t + r.amount, 0);
+    const pendingAr = activeRows.filter((r) => r.arReview === AR_REVIEW.PENDING);
+    const approved = activeRows.filter((r) => r.arReview === AR_REVIEW.APPROVED).length;
     return { totalDisputes, disputedAmount, pendingAr, approved };
-  }, [rows]);
+  }, [regionRows]);
 
   const coMatches = useMemo(() => {
-    const q = coQuery.trim().toLowerCase();
+    const q = formCode.trim().toLowerCase();
     if (!q) return [];
-    return companies.filter((c) => `${c.code} ${c.name}`.toLowerCase().includes(q)).slice(0, 20);
-  }, [companies, coQuery]);
+    return companies.filter((c) => c.code.toLowerCase().includes(q)).slice(0, 20);
+  }, [companies, formCode]);
 
   function pickCompany(c: CompanyOption) {
     setSelectedCo(c);
-    setCoQuery(`${c.code} — ${c.name}`);
+    setFormCode(c.code);
     setCoListOpen(false);
-    if (!formCode.trim()) setFormCode(c.code);
   }
 
   function openCreateDrawer() {
     setSelectedCo(null);
-    setCoQuery('');
     setCoListOpen(false);
     setFormCode('');
     setFormAmount('');
-    setFormTotalClaim('');
-    setFormRejection('');
     setFormCategory(String(CATEGORY.REJECTED));
     setFormDue('');
-    setFormAgreement('');
     setFormError('');
     setCreateOpen(true);
   }
@@ -400,23 +434,34 @@ export default function DisputeManagementPage() {
     setCreateOpen(false);
   }
 
-  const canCreate = !saving && !!selectedCo && formCode.trim() !== '' && N(formAmount) > 0;
-
   async function saveCreate() {
-    if (saving || !selectedCo) return;
+    if (saving) return;
+    if (!formCode.trim()) {
+      setFormError('Enter a company code.');
+      return;
+    }
+    if (!selectedCo) {
+      setFormError('Pick a company from the matches under Code — typing a code alone is not enough.');
+      return;
+    }
+    if (!formAmount || N(formAmount) <= 0) {
+      setFormError('Enter a valid Amount.');
+      return;
+    }
+    if (!formDue) {
+      setFormError('Enter a Due date.');
+      return;
+    }
     setSaving(true);
     setFormError('');
     try {
       const body: Record<string, unknown> = {
-        'cfm_CompanyCode@odata.bind': `/cfm_aragings(${selectedCo.id})`,
+        'cfm_CompanyCode@odata.bind': `/cfm_insurancecompanies(${selectedCo.id})`,
         ar_code: formCode.trim(),
         cfm_companyname: selectedCo.name,
         ar_amount: N(formAmount),
-        ar_totalclaim: formTotalClaim ? N(formTotalClaim) : null,
-        ar_rejection: formRejection ? N(formRejection) : null,
         ar_category: parseInt(formCategory, 10),
         ar_due: formDue ? `${formDue}T00:00:00Z` : null,
-        ar_agreement: formAgreement.trim() || null,
         cfm_arreview: AR_REVIEW.PENDING,
       };
       const result = await Ar_disputemanagementsService.create(body as unknown as Omit<Ar_disputemanagementsBase, 'ar_disputemanagementid'>);
@@ -513,6 +558,30 @@ export default function DisputeManagementPage() {
       setRows((list) => list.map((r) => (r.id === row.id ? { ...r, arReview: prev, arReviewLabel: AR_REVIEW_LABEL[prev] } : r)));
       flashCell(key, 'error', 1400);
       showToast(e instanceof Error ? e.message : 'Save failed.', 4500);
+    }
+  }
+
+  async function toggleDisputeStatus(row: DisputeRow) {
+    const goingActive = !row.active;
+    const ok = await confirm({
+      title: goingActive ? `Activate ${row.code}?` : `Deactivate ${row.code}?`,
+      message: goingActive
+        ? 'This dispute case shows up in the list and totals again.'
+        : 'This dispute case is kept (nothing is deleted), but drops out of the default list and totals until reactivated.',
+      danger: !goingActive,
+      confirmLabel: goingActive ? 'Activate' : 'Deactivate',
+    });
+    if (!ok) return;
+    try {
+      const result = await Ar_disputemanagementsService.update(row.id, {
+        statecode: goingActive ? 0 : 1,
+        statuscode: goingActive ? 1 : 2,
+      } as Partial<Omit<Ar_disputemanagementsBase, 'ar_disputemanagementid'>>);
+      if (!result.success) throw new Error(operationErrorMessage(result.error, 'Could not update status.'));
+      setRows((list) => list.map((r) => (r.id === row.id ? { ...r, active: goingActive } : r)));
+      showToast(goingActive ? `${row.code} activated.` : `${row.code} deactivated.`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Could not update status.', 4500);
     }
   }
 
@@ -626,7 +695,7 @@ export default function DisputeManagementPage() {
           </div>
           <div className="acc-actions">
             <button className="acc-btn acc-btn-primary" onClick={openCreateDrawer}>
-              <i className="fa-solid fa-plus"></i> Create Dispute Case
+              <Icon className="fa-solid fa-plus" /> Create Dispute Case
             </button>
           </div>
         </div>
@@ -635,7 +704,7 @@ export default function DisputeManagementPage() {
           <div className="kpi-card">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-gold">
-                <i className="fa-solid fa-folder-open"></i>
+                <Icon className="fa-solid fa-folder-open" />
               </span>
               <span className="kpi-label">Total disputes</span>
             </div>
@@ -644,7 +713,7 @@ export default function DisputeManagementPage() {
           <div className="kpi-card kpi-gold">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-gold">
-                <i className="fa-solid fa-sack-dollar"></i>
+                <Icon className="fa-solid fa-sack-dollar" />
               </span>
               <span className="kpi-label">Disputed amount</span>
             </div>
@@ -653,7 +722,7 @@ export default function DisputeManagementPage() {
           <div className="kpi-card kpi-warn">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-warn">
-                <i className="fa-solid fa-clock"></i>
+                <Icon className="fa-solid fa-clock" />
               </span>
               <span className="kpi-label">Pending AR</span>
             </div>
@@ -662,7 +731,7 @@ export default function DisputeManagementPage() {
           <div className="kpi-card kpi-ok">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-ok">
-                <i className="fa-solid fa-circle-check"></i>
+                <Icon className="fa-solid fa-circle-check" />
               </span>
               <span className="kpi-label">Approved</span>
             </div>
@@ -674,7 +743,7 @@ export default function DisputeManagementPage() {
           <div className="tbl-hdr">
             <div className="dm-filter-bar">
               <div className="acc-search dm-search">
-                <i className="fa-solid fa-magnifying-glass"></i>
+                <Icon className="fa-solid fa-magnifying-glass" />
                 <input placeholder="Search code, company, agreement…" value={query} onChange={(e) => setQuery(e.target.value)} />
               </div>
               <select className="acc-f" value={reviewFilter} onChange={(e) => setReviewFilter(e.target.value)}>
@@ -685,9 +754,14 @@ export default function DisputeManagementPage() {
                   </option>
                 ))}
               </select>
+              <select className="acc-f" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'active' | 'inactive' | 'all')}>
+                <option value="active">Active only</option>
+                <option value="inactive">Inactive only</option>
+                <option value="all">All statuses</option>
+              </select>
             </div>
             <div className="dm-count">
-              <i className="fa-solid fa-table"></i> Showing <strong>{filtered.length}</strong> of <strong>{rows.length}</strong>
+              <Icon className="fa-solid fa-table" /> Showing <strong>{filtered.length}</strong> of <strong>{regionRows.length}</strong>
             </div>
           </div>
 
@@ -718,13 +792,14 @@ export default function DisputeManagementPage() {
                   <th>Proof</th>
                   <th>Agreement</th>
                   <th>AR Review</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: 10 }).map((__, j) => (
+                      {Array.from({ length: 11 }).map((__, j) => (
                         <td key={j}>
                           <div className="acc-skel"></div>
                         </td>
@@ -733,9 +808,9 @@ export default function DisputeManagementPage() {
                   ))
                 ) : loadError ? (
                   <tr>
-                    <td colSpan={10}>
+                    <td colSpan={11}>
                       <div className="acc-state">
-                        <i className="fa-solid fa-triangle-exclamation"></i>
+                        <Icon className="fa-solid fa-triangle-exclamation" />
                         Could not load dispute cases.
                         <br />
                         <small>{loadError}</small>
@@ -744,9 +819,9 @@ export default function DisputeManagementPage() {
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={10}>
+                    <td colSpan={11}>
                       <div className="acc-state">
-                        <i className="fa-solid fa-inbox"></i>
+                        <Icon className="fa-solid fa-inbox" />
                         No dispute cases match your filters.
                       </div>
                     </td>
@@ -756,8 +831,11 @@ export default function DisputeManagementPage() {
                     const reviewKey = `${r.id}:review`;
                     const agreementKey = `${r.id}:agreement`;
                     return (
-                      <tr key={r.id} className="dm-row" onClick={() => openDetail(r)}>
-                        <td className="dm-code">{r.code}</td>
+                      <tr key={r.id} className={`dm-row${r.active ? '' : ' dm-row-inactive'}`} onClick={() => openDetail(r)}>
+                        <td className="dm-code">
+                          {r.code}
+                          {!r.active && <span className="dm-pill dm-pill-inactive">Inactive</span>}
+                        </td>
                         <td className="dm-company">{r.companyName}</td>
                         <td className="dm-numeric dm-amt">{fmt(r.amount)}</td>
                         <td className="dm-numeric">{r.rejectionPct ? `${fmt(r.rejectionPct)}%` : '—'}</td>
@@ -768,7 +846,7 @@ export default function DisputeManagementPage() {
                         <td className="dm-owner">{r.ownerName}</td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <button className="dm-viewfiles" onClick={() => openDocsDrawer(r)}>
-                            <i className="fa-solid fa-folder-open"></i> View files
+                            <Icon className="fa-solid fa-folder-open" /> View files
                           </button>
                         </td>
                         <td onClick={(e) => e.stopPropagation()}>
@@ -779,8 +857,8 @@ export default function DisputeManagementPage() {
                             onChange={(e) => setAgreementDrafts((prev) => ({ ...prev, [r.id]: e.target.value }))}
                             onBlur={() => commitAgreement(r)}
                           />
-                          {cellState[agreementKey] === 'saving' && <i className="fa-solid fa-spinner fa-spin dm-cell-ico"></i>}
-                          {cellState[agreementKey] === 'saved' && <i className="fa-solid fa-check dm-cell-ico ok"></i>}
+                          {cellState[agreementKey] === 'saving' && <Icon className="fa-solid fa-spinner fa-spin dm-cell-ico" />}
+                          {cellState[agreementKey] === 'saved' && <Icon className="fa-solid fa-check dm-cell-ico ok" />}
                         </td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <div className="dm-review-wrap" ref={reviewOpenId === r.id ? reviewMenuRef : undefined}>
@@ -790,7 +868,7 @@ export default function DisputeManagementPage() {
                               onClick={() => setReviewOpenId(reviewOpenId === r.id ? null : r.id)}
                             >
                               {AR_REVIEW_LABEL[r.arReview]}
-                              <i className="fa-solid fa-chevron-down dm-review-caret"></i>
+                              <Icon className="fa-solid fa-chevron-down dm-review-caret" />
                             </button>
                             {reviewOpenId === r.id && (
                               <div className="dm-review-menu">
@@ -804,13 +882,22 @@ export default function DisputeManagementPage() {
                                     }}
                                   >
                                     {o.label}
-                                    {o.value === r.arReview && <i className="fa-solid fa-check dm-review-item-check"></i>}
+                                    {o.value === r.arReview && <Icon className="fa-solid fa-check dm-review-item-check" />}
                                   </div>
                                 ))}
                               </div>
                             )}
                           </div>
-                          {cellState[reviewKey] === 'saving' && <i className="fa-solid fa-spinner fa-spin dm-cell-ico"></i>}
+                          {cellState[reviewKey] === 'saving' && <Icon className="fa-solid fa-spinner fa-spin dm-cell-ico" />}
+                        </td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <button
+                            className={`dm-status-toggle${r.active ? ' dm-status-toggle-active' : ''}`}
+                            title={r.active ? 'Deactivate' : 'Activate'}
+                            onClick={() => toggleDisputeStatus(r)}
+                          >
+                            <Icon className={`fa-solid ${r.active ? 'fa-toggle-on' : 'fa-toggle-off'}`} />
+                          </button>
                         </td>
                       </tr>
                     );
@@ -871,7 +958,7 @@ export default function DisputeManagementPage() {
         <div className="acc-dhead">
           <h2>New · Dispute Case</h2>
           <button className="acc-dclose" onClick={closeCreateDrawer}>
-            <i className="fa-solid fa-xmark"></i>
+            <Icon className="fa-solid fa-xmark" />
           </button>
         </div>
         <div className="acc-dbody">
@@ -880,20 +967,20 @@ export default function DisputeManagementPage() {
           <div className="acc-combo dm-co-wrap">
             <div className="acc-fld" style={{ marginBottom: 0 }}>
               <label>
-                Company <span className="dm-req">*</span>
+                Code <span className="dm-req">*</span>
               </label>
               <input
-                placeholder="Search by name or code…"
-                value={coQuery}
+                placeholder="Type a company code…"
+                value={formCode}
                 onChange={(e) => {
-                  setCoQuery(e.target.value);
+                  setFormCode(e.target.value);
                   setCoListOpen(true);
                   setSelectedCo(null);
                 }}
                 onFocus={() => setCoListOpen(true)}
               />
             </div>
-            {coListOpen && coQuery.trim() && (
+            {coListOpen && formCode.trim() && (
               <div className="acc-combo-list">
                 {coMatches.length === 0 ? (
                   <div className="acc-combo-empty">No matches.</div>
@@ -911,52 +998,37 @@ export default function DisputeManagementPage() {
             )}
           </div>
 
-          <div className="dm-fld-row">
-            <div className="acc-fld">
-              <label>
-                Code <span className="dm-req">*</span>
-              </label>
-              <input value={formCode} onChange={(e) => setFormCode(e.target.value)} />
-            </div>
-            <div className="acc-fld">
-              <label>Category</label>
-              <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)}>
-                {Object.entries(CATEGORY_LABEL).map(([v, label]) => (
-                  <option key={v} value={v}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="dm-fld-row">
-            <div className="acc-fld">
-              <label>
-                Amount <span className="dm-req">*</span>
-              </label>
-              <input type="number" step="any" min={0} placeholder="0.00" value={formAmount} onChange={(e) => setFormAmount(e.target.value)} />
-            </div>
-            <div className="acc-fld">
-              <label>Total claim</label>
-              <input type="number" step="any" min={0} placeholder="0.00" value={formTotalClaim} onChange={(e) => setFormTotalClaim(e.target.value)} />
-            </div>
-          </div>
-
-          <div className="dm-fld-row">
-            <div className="acc-fld">
-              <label>Rejection %</label>
-              <input type="number" step="any" min={0} placeholder="0" value={formRejection} onChange={(e) => setFormRejection(e.target.value)} />
-            </div>
-            <div className="acc-fld">
-              <label>Due</label>
-              <input type="date" value={formDue} onChange={(e) => setFormDue(e.target.value)} />
+          <div className="acc-fld">
+            <label>Company</label>
+            <div className="acc-ro-wrap">
+              <div className="acc-ro-label">Auto-filled from selection</div>
+              <div className="acc-ro-value">{selectedCo ? selectedCo.name : '—'}</div>
             </div>
           </div>
 
           <div className="acc-fld">
-            <label>Agreement</label>
-            <textarea rows={3} placeholder="Agreement notes…" value={formAgreement} onChange={(e) => setFormAgreement(e.target.value)} />
+            <label>Category</label>
+            <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)}>
+              {Object.entries(CATEGORY_LABEL).map(([v, label]) => (
+                <option key={v} value={v}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="acc-fld">
+            <label>
+              Amount <span className="dm-req">*</span>
+            </label>
+            <input type="number" step="any" min={0} placeholder="0.00" value={formAmount} onChange={(e) => setFormAmount(e.target.value)} />
+          </div>
+
+          <div className="acc-fld">
+            <label>
+              Due (Month / Year) <span className="dm-req">*</span>
+            </label>
+            <input type="date" value={formDue} onChange={(e) => setFormDue(e.target.value)} />
           </div>
         </div>
         <div className="acc-dfoot">
@@ -964,10 +1036,10 @@ export default function DisputeManagementPage() {
             <button className="acc-btn acc-btn-ghost" onClick={closeCreateDrawer}>
               Cancel
             </button>
-            <button className="acc-btn acc-btn-primary" disabled={!canCreate} onClick={saveCreate}>
+            <button className="acc-btn acc-btn-primary" disabled={saving} onClick={saveCreate}>
               {saving ? (
                 <>
-                  <i className="fa-solid fa-spinner fa-spin"></i> Saving…
+                  <Icon className="fa-solid fa-spinner fa-spin" /> Saving…
                 </>
               ) : (
                 'Create dispute case'
@@ -982,13 +1054,13 @@ export default function DisputeManagementPage() {
       <aside className={`acc-drawer${detailOpen ? ' on' : ''}`}>
         <div className="acc-dhead">
           <h2 className="dm-detail-head">
-            <i className="fa-solid fa-scale-balanced"></i>
+            <Icon className="fa-solid fa-scale-balanced" />
             <span>
               {detailDispute?.arReviewLabel} · {detailDispute?.code} · {detailDispute?.companyName}
             </span>
           </h2>
           <button className="acc-dclose" onClick={closeDetail}>
-            <i className="fa-solid fa-xmark"></i>
+            <Icon className="fa-solid fa-xmark" />
           </button>
         </div>
         <div className="acc-dbody">
@@ -1012,7 +1084,7 @@ export default function DisputeManagementPage() {
               <div className="dm-section-title">History</div>
               {historyLoading ? (
                 <div className="dm-history-empty">
-                  <i className="fa-solid fa-spinner fa-spin"></i> Loading…
+                  <Icon className="fa-solid fa-spinner fa-spin" /> Loading…
                 </div>
               ) : historyError ? (
                 <div className="dm-history-empty" style={{ color: 'var(--bad)' }}>
@@ -1064,7 +1136,7 @@ export default function DisputeManagementPage() {
               Cancel
             </button>
             <button className="acc-btn acc-btn-primary" disabled={!canAddUpdate} onClick={addHistoryEntry}>
-              <i className="fa-solid fa-paper-plane"></i> {updateSaving ? 'Saving…' : 'Add Update'}
+              <Icon className="fa-solid fa-paper-plane" /> {updateSaving ? 'Saving…' : 'Add Update'}
             </button>
           </div>
         </div>
@@ -1075,10 +1147,10 @@ export default function DisputeManagementPage() {
       <aside className={`acc-drawer${docsOpen ? ' on' : ''}`}>
         <div className="acc-dhead">
           <h2>
-            <i className="fa-solid fa-folder-open"></i> {docsRow?.code}
+            <Icon className="fa-solid fa-folder-open" /> {docsRow?.code}
           </h2>
           <button className="acc-dclose" onClick={closeDocsDrawer}>
-            <i className="fa-solid fa-xmark"></i>
+            <Icon className="fa-solid fa-xmark" />
           </button>
         </div>
         <div className="acc-dbody">
@@ -1089,7 +1161,7 @@ export default function DisputeManagementPage() {
                 {docs.length > 0 && <span className="dc-docs-count">({docs.length})</span>}
               </div>
               <label className="dc-docs-upload-btn">
-                <i className="fa-solid fa-upload"></i> Upload
+                <Icon className="fa-solid fa-upload" /> Upload
                 <input
                   type="file"
                   multiple
@@ -1104,17 +1176,17 @@ export default function DisputeManagementPage() {
             <div className="dc-docs-list">
               {docsLoading ? (
                 <div className="dc-doc-uploading">
-                  <i className="fa-solid fa-spinner fa-spin"></i> Loading documents…
+                  <Icon className="fa-solid fa-spinner fa-spin" /> Loading documents…
                 </div>
               ) : docsError ? (
                 <div className="dc-docs-empty">
-                  <i className="fa-solid fa-circle-info"></i> Couldn&apos;t load documents right now. You can still upload — click Upload.
+                  <Icon className="fa-solid fa-circle-info" /> Couldn&apos;t load documents right now. You can still upload — click Upload.
                 </div>
               ) : docsUploadingNames.length > 0 || docs.length > 0 ? (
                 <>
                   {docsUploadingNames.map((n, i) => (
                     <div key={`up-${i}-${n}`} className="dc-doc-uploading">
-                      <i className="fa-solid fa-spinner fa-spin"></i> Uploading {n}…
+                      <Icon className="fa-solid fa-spinner fa-spin" /> Uploading {n}…
                     </div>
                   ))}
                   {docs.map((f) => {
@@ -1122,7 +1194,7 @@ export default function DisputeManagementPage() {
                     return (
                       <div key={f.path || f.name} className="dc-doc-row">
                         <div className={`dc-doc-ico dc-doc-ico-${docIconClass(ext)}`}>
-                          <i className={`fa-solid ${docIcon(ext)}`}></i>
+                          <Icon className={`fa-solid ${docIcon(ext)}`} />
                         </div>
                         <div className="dc-doc-meta">
                           <div className="dc-doc-name" title={f.name}>
@@ -1135,10 +1207,10 @@ export default function DisputeManagementPage() {
                         </div>
                         <div className="dc-doc-act">
                           <a href={f.url} target="_blank" rel="noopener noreferrer" title="Open">
-                            <i className="fa-solid fa-arrow-up-right-from-square"></i>
+                            <Icon className="fa-solid fa-arrow-up-right-from-square" />
                           </a>
                           <button title="Delete" onClick={() => deleteDocFile(f.path, f.name)}>
-                            <i className="fa-solid fa-trash"></i>
+                            <Icon className="fa-solid fa-trash" />
                           </button>
                         </div>
                       </div>
@@ -1147,7 +1219,7 @@ export default function DisputeManagementPage() {
                 </>
               ) : (
                 <div className="dc-docs-empty">
-                  <i className="fa-solid fa-folder-open"></i> No documents yet — click Upload to attach files.
+                  <Icon className="fa-solid fa-folder-open" /> No documents yet — click Upload to attach files.
                 </div>
               )}
             </div>
@@ -1157,6 +1229,7 @@ export default function DisputeManagementPage() {
       </aside>
 
       <div className={`acc-toast${toastOn ? ' on' : ''}`}>{toastMsg}</div>
+      {dialog}
     </>
   );
 }

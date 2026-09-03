@@ -7,7 +7,8 @@ export const Cr301_agentscr18c_area = {
   989230001: 'South',
   989230002: 'Remote',
   989230003: 'Jeddah',
-  989230004: 'KSA'
+  989230004: 'KSA',
+  766340001: 'Egypt'
 } as const;
 export type Cr301_agentscr18c_area = keyof typeof Cr301_agentscr18c_area;
 export const Cr301_agentscr18c_specialization = {

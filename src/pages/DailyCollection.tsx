@@ -1,9 +1,11 @@
+import Icon from '../components/Icon';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getContext } from '@microsoft/power-apps/app';
 import { Cfm_dailycollectionsService } from '../generated/services/Cfm_dailycollectionsService';
 import { Cfm_collectionmonthallocationsService } from '../generated/services/Cfm_collectionmonthallocationsService';
 import { Cfm_aragingsService } from '../generated/services/Cfm_aragingsService';
 import { Cr301_accountsService } from '../generated/services/Cr301_accountsService';
+import { Cr301_agentsService } from '../generated/services/Cr301_agentsService';
 import { SystemusersService } from '../generated/services/SystemusersService';
 import { Cfm_dailycollectionscfm_paymentmethod } from '../generated/models/Cfm_dailycollectionsModel';
 import type { Cfm_dailycollections, Cfm_dailycollectionsBase } from '../generated/models/Cfm_dailycollectionsModel';
@@ -16,7 +18,8 @@ import type { DocFile } from '../lib/docs';
 import { docExt, docIconClass, docIcon, fmtBytes, fileToBase64, docsFlow, listDocs, uploadDoc } from '../lib/docs';
 import { useConfirm } from '../lib/useConfirm';
 import { sanitizeAmountInput, MAX_ENTRY_VALUE } from '../lib/numberEntry';
-import { downloadCsv } from '../lib/csvExport';
+import { downloadCsv, escapeForCsv } from '../lib/csvExport';
+import type { Region } from '../lib/useRegion';
 import './DailyCollection.css';
 
 /**
@@ -51,7 +54,13 @@ const ENTRY_SELECT = [
   '_createdby_value',
 ];
 
-const COMPANY_SELECT = ['cfm_aragingid', 'cfm_companycode', 'cfm_companyname', '_cfm_type_value'];
+const COMPANY_SELECT = ['cfm_aragingid', 'cfm_companycode', 'cfm_companyname', '_cfm_type_value', '_cfm_taskowner_value'];
+
+// cfm_type (BU) isn't reliably populated on these AR Aging rows — region is
+// derived from the company's Task Owner (cfm_taskowner, a systemuser lookup)
+// instead: matched to that same user's cr301_agents record's cr18c_area, the
+// same source of truth Agents.tsx / Visits.tsx use elsewhere.
+const AREA_KSA = 989230004;
 
 const BANK_ACCOUNT_SELECT = ['cr301_accountid', 'cr301_acccountname', 'cr301_accountcode'];
 
@@ -160,6 +169,7 @@ interface CompanyOption {
   name: string;
   entityId: string;
   entityName: string;
+  taskOwnerId: string;
 }
 
 interface BankAccountOption {
@@ -193,6 +203,7 @@ interface EntryRow {
   createdById: string;
   createdOn: string;
   allocCount: number;
+  region: 'EG' | 'KSA' | '';
 }
 
 interface AllocRow {
@@ -208,7 +219,7 @@ interface AllocRow {
 
 type Mode = 'create' | 'edit' | 'reedit';
 
-function normaliseEntry(row: Cfm_dailycollections, companies: CompanyOption[]): EntryRow {
+function normaliseEntry(row: Cfm_dailycollections, companies: CompanyOption[], regionByUserId: Map<string, 'EG' | 'KSA'>): EntryRow {
   const coId = row._cfm_companycode_value || '';
   const co = coId ? companies.find((c) => c.id === coId) : undefined;
   const status = row.cfm_statusaction == null ? null : Number(row.cfm_statusaction);
@@ -220,6 +231,7 @@ function normaliseEntry(row: Cfm_dailycollections, companies: CompanyOption[]): 
     companyCode: co ? co.code || '' : '',
     companyName: co ? co.name || '—' : row.cfm_companynamefx || '—',
     companyId: coId,
+    region: (co && regionByUserId.get(co.taskOwnerId)) || '',
     bankAccountId: row._cfm_bankaccount_value || '',
     date: row.cfm_collectiondate || '',
     method,
@@ -357,10 +369,6 @@ const IMPORT_COLUMNS = [
   'Rejection',
 ] as const;
 
-function escapeForCsv(value: string | number): string {
-  return `"${String(value).replace(/"/g, '""')}"`;
-}
-
 /** Strips a trailing "(hint text)" and normalizes for header matching, so the
  * format hints baked into IMPORT_COLUMNS don't need to survive round-trip. */
 function normaliseHeader(h: string): string {
@@ -494,17 +502,19 @@ async function createDailyCollectionEntry(input: ImportRowInput): Promise<{ succ
   return arAgingError ? { success: true, error: `AR Aging update failed: ${arAgingError}` } : { success: true };
 }
 
-export default function DailyCollectionPage() {
+interface DailyCollectionPageProps {
+  region: Region | null;
+}
+
+export default function DailyCollectionPage({ region }: DailyCollectionPageProps) {
   const [entries, setEntries] = useState<EntryRow[]>([]);
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
+  const [regionByTaskOwner, setRegionByTaskOwner] = useState<Map<string, 'EG' | 'KSA'>>(new Map());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [importBusy, setImportBusy] = useState(false);
 
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string }>({ id: '', name: '' });
-
-  const importInputRef = useRef<HTMLInputElement>(null);
-  const [importing, setImporting] = useState(false);
 
   const [query, setQuery] = useState('');
   const [entityFilter, setEntityFilter] = useState('');
@@ -563,161 +573,6 @@ export default function DailyCollectionPage() {
     toastTimer.current = setTimeout(() => setToastOn(false), durationMs);
   }
 
-  function downloadCsv(filename: string, rows: (string | number)[][]) {
-    const csv = rows.map((r) => r.map(escapeForCsv).join(',')).join('\r\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function exportImportTemplate() {
-    const sample = [
-      'EXAMPLE-DELETE-THIS-ROW',
-      'Example Bank Account',
-      new Date().toISOString().slice(0, 10),
-      'Cheque',
-      10000,
-      'REF-001',
-      'Sample note — delete this row before importing',
-      new Date().toISOString().slice(0, 7),
-      10000,
-      0,
-      0,
-      0,
-      0,
-      0,
-    ];
-    downloadCsv('daily_collection_import_template.csv', [Array.from(IMPORT_COLUMNS), sample]);
-  }
-
-  function openImportPicker() {
-    importInputRef.current?.click();
-  }
-
-  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // reset so re-selecting the same file re-fires onChange
-    if (!file) return;
-
-    setImporting(true);
-    try {
-      const text = await file.text();
-      const rows = parseCsv(text);
-      if (rows.length < 2) {
-        showToast('No data rows found in that file.');
-        return;
-      }
-      const header = rows[0].map(normaliseHeader);
-      const colIndex = new Map(IMPORT_COLUMNS.map((c) => [normaliseHeader(c), header.indexOf(normaliseHeader(c))]));
-      const missing = IMPORT_COLUMNS.filter((c) => (colIndex.get(normaliseHeader(c)) ?? -1) < 0);
-      if (missing.length) {
-        showToast(`File is missing column(s): ${missing.join(', ')}. Use Export template to get the right headers.`, 7000);
-        return;
-      }
-      const cell = (row: string[], colName: (typeof IMPORT_COLUMNS)[number]): string => (row[colIndex.get(normaliseHeader(colName))!] || '').trim();
-
-      const dataRows = rows.slice(1);
-      let ok = 0;
-      let fail = 0;
-      const errors: string[] = [];
-
-      for (let i = 0; i < dataRows.length; i++) {
-        const row = dataRows[i];
-        const rowLabel = `Row ${i + 2}`;
-        const companyCode = cell(row, 'Company Code');
-        const bankText = cell(row, 'Bank Account');
-        const dateText = cell(row, 'Collection Date (YYYY-MM-DD)');
-        const methodText = cell(row, 'Payment Method (Cheque or Bank transfer)');
-        const netText = cell(row, 'Net Amount');
-        const monthText = cell(row, 'Allocate To Month (YYYY-MM)');
-        const allocAmountText = cell(row, 'Allocation Amount');
-
-        const company = companies.find((c) => c.code.trim().toLowerCase() === companyCode.toLowerCase());
-        if (!company) {
-          fail++;
-          errors.push(`${rowLabel}: no company matches code "${companyCode}"`);
-          continue;
-        }
-        const bank = bankAccounts.find(
-          (b) => b.name.trim().toLowerCase() === bankText.toLowerCase() || b.code.trim().toLowerCase() === bankText.toLowerCase()
-        );
-        if (!bank) {
-          fail++;
-          errors.push(`${rowLabel}: no bank account matches "${bankText}"`);
-          continue;
-        }
-        const date = normaliseDateValue(dateText);
-        if (!date) {
-          fail++;
-          errors.push(`${rowLabel}: invalid Collection Date "${dateText}" (try YYYY-MM-DD, e.g. 2026-08-26)`);
-          continue;
-        }
-        const method = PAYMENT_METHOD_OPTIONS.find((o) => o.label.trim().toLowerCase() === methodText.toLowerCase());
-        if (!method) {
-          fail++;
-          errors.push(`${rowLabel}: Payment Method must be Cheque or Bank transfer, got "${methodText}"`);
-          continue;
-        }
-        const net = Number(netText);
-        if (!netText || Number.isNaN(net)) {
-          fail++;
-          errors.push(`${rowLabel}: invalid Net Amount "${netText}"`);
-          continue;
-        }
-        const allocMonth = normaliseMonthValue(monthText);
-        if (!allocMonth) {
-          fail++;
-          errors.push(`${rowLabel}: invalid Allocate To Month "${monthText}" (expected YYYY-MM)`);
-          continue;
-        }
-        // Allocation Amount defaults to Net Amount — the common case is one
-        // allocation covering the whole collected amount.
-        const allocAmount = allocAmountText ? Number(allocAmountText) : net;
-        if (Number.isNaN(allocAmount)) {
-          fail++;
-          errors.push(`${rowLabel}: invalid Allocation Amount "${allocAmountText}"`);
-          continue;
-        }
-
-        const result = await createDailyCollectionEntry({
-          companyId: company.id,
-          bankAccountId: bank.id,
-          date,
-          method: method.value,
-          net,
-          paymentRef: cell(row, 'Payment Reference'),
-          note: cell(row, 'Note'),
-          allocMonth,
-          allocAmount,
-          tax: Number(cell(row, 'Tax')) || 0,
-          vol: Number(cell(row, 'Volume Discount')) || 0,
-          early: Number(cell(row, 'Early Payment Discount')) || 0,
-          admin: Number(cell(row, 'Admin Fees')) || 0,
-          reject: Number(cell(row, 'Rejection')) || 0,
-        });
-        if (result.success) {
-          ok++;
-          if (result.error) errors.push(`${rowLabel}: ${result.error}`);
-        } else {
-          fail++;
-          errors.push(`${rowLabel}: ${result.error}`);
-        }
-      }
-
-      const summary = `Imported ${ok} of ${dataRows.length} row(s).`;
-      showToast(fail || errors.length ? `${summary} ${errors.slice(0, 3).join('; ')}${errors.length > 3 ? ` (+${errors.length - 3} more)` : ''}` : summary, errors.length ? 9000 : 4000);
-      if (ok > 0) await load();
-    } catch (err) {
-      showToast(`Import failed: ${err instanceof Error ? err.message : String(err)}`, 6000);
-    } finally {
-      setImporting(false);
-    }
-  }
-
   async function loadCompanies(): Promise<CompanyOption[]> {
     const rows = await fetchAll<Cfm_aragings>(
       (skipToken) => Cfm_aragingsService.getAll({ select: COMPANY_SELECT, filter: 'statecode eq 0', maxPageSize: 5000, skipToken }),
@@ -729,7 +584,31 @@ export default function DailyCollectionPage() {
       name: r.cfm_companyname || '',
       entityId: r._cfm_type_value || '',
       entityName: formattedValue(r, '_cfm_type_value') || '—',
+      taskOwnerId: r._cfm_taskowner_value || '',
     }));
+  }
+
+  /** Task Owner (a systemuser) -> region, via that user's cr301_agents record's
+   * cr18c_area — cfm_type (BU) isn't reliably populated on AR Aging rows, so
+   * it can't be used to scope Daily Collection by region the way other pages do. */
+  async function loadRegionByTaskOwner(): Promise<Map<string, 'EG' | 'KSA'>> {
+    const rows = await fetchAll<{ cr301_agentid: string; cr18c_area?: number; _cr301_agent_value?: string }>(
+      (skipToken) =>
+        Cr301_agentsService.getAll({
+          select: ['cr301_agentid', 'cr18c_area', '_cr301_agent_value'],
+          filter: 'cfm_iscollection eq true',
+          maxPageSize: 5000,
+          skipToken,
+        }),
+      'Could not load agents.'
+    );
+    const map = new Map<string, 'EG' | 'KSA'>();
+    rows.forEach((a) => {
+      if (a._cr301_agent_value && a.cr18c_area != null) {
+        map.set(a._cr301_agent_value, Number(a.cr18c_area) === AREA_KSA ? 'KSA' : 'EG');
+      }
+    });
+    return map;
   }
 
   async function loadBankAccounts(): Promise<BankAccountOption[]> {
@@ -765,9 +644,10 @@ export default function DailyCollectionPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [companyOptions, bankAccountOptions, entryRows] = await Promise.all([
+      const [companyOptions, bankAccountOptions, regionMap, entryRows] = await Promise.all([
         loadCompanies(),
         loadBankAccounts(),
+        loadRegionByTaskOwner(),
         fetchAll<Cfm_dailycollections>(
           (skipToken) => Cfm_dailycollectionsService.getAll({ select: ENTRY_SELECT, filter: 'statecode eq 0', orderBy: ['createdon desc'], maxPageSize: 5000, skipToken }),
           'Could not load daily collection entries.'
@@ -775,7 +655,8 @@ export default function DailyCollectionPage() {
       ]);
       setCompanies(companyOptions);
       setBankAccounts(bankAccountOptions);
-      const rows = entryRows.map((r) => normaliseEntry(r, companyOptions));
+      setRegionByTaskOwner(regionMap);
+      const rows = entryRows.map((r) => normaliseEntry(r, companyOptions, regionMap));
       const counts = await loadAllocCounts(rows.map((r) => r.id));
       rows.forEach((r) => {
         r.allocCount = counts[r.id] || 0;
@@ -810,7 +691,7 @@ export default function DailyCollectionPage() {
     try {
       const fresh = await Cfm_dailycollectionsService.get(id, { select: ENTRY_SELECT });
       if (!fresh.success || !fresh.data) return;
-      const row = normaliseEntry(fresh.data, companies);
+      const row = normaliseEntry(fresh.data, companies, regionByTaskOwner);
       row.allocCount = allocCount;
       setEntries((prev) => (isNew ? [row, ...prev] : prev.map((e) => (e.id === id ? row : e))));
     } catch {
@@ -842,20 +723,27 @@ export default function DailyCollectionPage() {
     return Array.from(set).sort();
   }
 
-  const entityOptions = useMemo(() => uniqueSorted(entries, (r) => r.entity), [entries]);
-  const methodOptions = useMemo(() => uniqueSorted(entries, (r) => r.methodLabel), [entries]);
+  // App-wide Region toggle (Layout header) — unset region on an entry counts
+  // as Egypt, same convention used everywhere else this filter appears.
+  const regionEntries = useMemo(
+    () => (!region ? entries : entries.filter((r) => (region === 'KSA' ? r.region === 'KSA' : r.region !== 'KSA'))),
+    [entries, region]
+  );
+
+  const entityOptions = useMemo(() => uniqueSorted(regionEntries, (r) => r.entity), [regionEntries]);
+  const methodOptions = useMemo(() => uniqueSorted(regionEntries, (r) => r.methodLabel), [regionEntries]);
   const statusOptions = useMemo(() => {
     const set = new Set<string>();
-    entries.forEach((r) => {
+    regionEntries.forEach((r) => {
       const l = displayStatusLabel(r);
       if (l && l !== '—') set.add(l);
     });
     return Array.from(set).sort();
-  }, [entries]);
+  }, [regionEntries]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return entries.filter((r) => {
+    return regionEntries.filter((r) => {
       if (rejectedOnly && r.status !== AR_STATUS.REJECTED) return false;
       if (byMe) {
         if (currentUser.id) {
@@ -870,11 +758,11 @@ export default function DailyCollectionPage() {
       if (q && !`${r.ref} ${r.companyCode} ${r.companyName}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [entries, query, entityFilter, methodFilter, statusFilter, byMe, rejectedOnly, currentUser]);
+  }, [regionEntries, query, entityFilter, methodFilter, statusFilter, byMe, rejectedOnly, currentUser]);
 
   useEffect(() => {
     setPage(1);
-  }, [query, entityFilter, methodFilter, statusFilter, byMe, rejectedOnly]);
+  }, [query, entityFilter, methodFilter, statusFilter, byMe, rejectedOnly, region]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const clampedPage = Math.min(page, totalPages);
@@ -887,7 +775,7 @@ export default function DailyCollectionPage() {
     let collectedToday = 0;
     let mtd = 0;
     let rejected = 0;
-    entries.forEach((r) => {
+    regionEntries.forEach((r) => {
       const d = (r.date || '').slice(0, 10);
       if (d === today) {
         entriesToday++;
@@ -897,7 +785,7 @@ export default function DailyCollectionPage() {
       if (r.status === AR_STATUS.REJECTED) rejected++;
     });
     return { entriesToday, collectedToday, mtd, rejected };
-  }, [entries]);
+  }, [regionEntries]);
 
   function pagerButtons(): (number | 'ellipsis')[] {
     const pages: (number | 'ellipsis')[] = [];
@@ -1020,7 +908,12 @@ export default function DailyCollectionPage() {
     setEditId(entry.id);
     setEditEntry(entry);
     setLocked(entryLocked);
-    setSelectedCo(entry.companyId ? { id: entry.companyId, code: entry.companyCode, name: entry.companyName, entityId: '', entityName: entry.entity } : null);
+    setSelectedCo(
+      entry.companyId
+        ? companies.find((c) => c.id === entry.companyId) ||
+            { id: entry.companyId, code: entry.companyCode, name: entry.companyName, entityId: '', entityName: entry.entity, taskOwnerId: '' }
+        : null
+    );
     setCoQuery(entryLocked ? '' : `${entry.companyCode} — ${entry.companyName}`);
     setCoListOpen(false);
     setFormDate(entry.date ? entry.date.slice(0, 10) : '');
@@ -1358,9 +1251,14 @@ export default function DailyCollectionPage() {
           continue;
         }
 
-        const date = (r[idx.date] || '').trim();
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-          errors.push(`Row ${rowNum}: collection date must be YYYY-MM-DD, got "${date}".`);
+        // Accepts strict YYYY-MM-DD as well as whatever the browser's Date parser
+        // recognizes (e.g. "8/26/2026") — Excel routinely reformats a typed date
+        // to the locale's short date style even from a plain-text cell, so a
+        // strict ISO-only check rejects normal usage far too often.
+        const dateRaw = (r[idx.date] || '').trim();
+        const date = normaliseDateValue(dateRaw);
+        if (!date) {
+          errors.push(`Row ${rowNum}: invalid collection date "${dateRaw}" (try YYYY-MM-DD, e.g. 2026-08-26).`);
           continue;
         }
 
@@ -1426,14 +1324,13 @@ export default function DailyCollectionPage() {
           </div>
           <div className="acc-actions">
             <button className="acc-btn" onClick={load}>
-              <i className="fa-solid fa-rotate"></i> Reload
+              <Icon className="fa-solid fa-rotate" /> Reload
             </button>
-<<<<<<< ours
-            <button className="acc-btn" onClick={downloadImportTemplate}>
-              <i className="fa-solid fa-file-csv"></i> Template
+            <button className="acc-btn" onClick={downloadImportTemplate} title="Download a blank .csv with the columns Import expects">
+              <Icon className="fa-solid fa-file-csv" /> Template
             </button>
-            <label className={`acc-btn dc-import-btn${importBusy ? ' dc-import-busy' : ''}`}>
-              <i className={`fa-solid ${importBusy ? 'fa-spinner fa-spin' : 'fa-file-import'}`}></i> {importBusy ? 'Importing…' : 'Import CSV'}
+            <label className={`acc-btn dc-import-btn${importBusy ? ' dc-import-busy' : ''}`} title="Bulk-create entries from a filled-in template">
+              <Icon className={`fa-solid ${importBusy ? 'fa-spinner fa-spin' : 'fa-file-import'}`} /> {importBusy ? 'Importing…' : 'Import CSV'}
               <input
                 type="file"
                 accept=".csv,text/csv"
@@ -1445,17 +1342,8 @@ export default function DailyCollectionPage() {
                 }}
               />
             </label>
-=======
-            <button className="acc-btn" onClick={exportImportTemplate} title="Download a blank .csv with the columns Import expects">
-              <i className="fa-solid fa-file-export"></i> Export template
-            </button>
-            <button className="acc-btn" disabled={importing} onClick={openImportPicker} title="Bulk-create entries from a filled-in template">
-              <i className={`fa-solid ${importing ? 'fa-spinner fa-spin' : 'fa-file-import'}`}></i> {importing ? 'Importing…' : 'Import'}
-            </button>
-            <input ref={importInputRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={handleImportFile} />
->>>>>>> theirs
             <button className="acc-btn acc-btn-primary" onClick={openDrawerCreate}>
-              <i className="fa-solid fa-plus"></i> New entry
+              <Icon className="fa-solid fa-plus" /> New entry
             </button>
           </div>
         </div>
@@ -1464,7 +1352,7 @@ export default function DailyCollectionPage() {
           <div className="kpi-card">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-gold">
-                <i className="fa-solid fa-list-check"></i>
+                <Icon className="fa-solid fa-list-check" />
               </span>
               <span className="kpi-label">Entries today</span>
             </div>
@@ -1474,7 +1362,7 @@ export default function DailyCollectionPage() {
           <div className="kpi-card kpi-ok">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-ok">
-                <i className="fa-solid fa-hand-holding-dollar"></i>
+                <Icon className="fa-solid fa-hand-holding-dollar" />
               </span>
               <span className="kpi-label">Collected today</span>
             </div>
@@ -1484,7 +1372,7 @@ export default function DailyCollectionPage() {
           <div className="kpi-card kpi-info">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-info">
-                <i className="fa-solid fa-calendar-days"></i>
+                <Icon className="fa-solid fa-calendar-days" />
               </span>
               <span className="kpi-label">Month to date</span>
             </div>
@@ -1498,7 +1386,7 @@ export default function DailyCollectionPage() {
           >
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-danger">
-                <i className="fa-solid fa-circle-xmark"></i>
+                <Icon className="fa-solid fa-circle-xmark" />
               </span>
               <span className="kpi-label">Rejected · action needed</span>
             </div>
@@ -1511,10 +1399,10 @@ export default function DailyCollectionPage() {
           <div className="tbl-hdr">
             <div className="dc-filter-bar">
               <button className={`dc-toggle${byMe ? ' active' : ''}`} onClick={() => setByMe((v) => !v)} title="Show only entries I created">
-                <i className="fa-solid fa-user"></i> By me
+                <Icon className="fa-solid fa-user" /> By me
               </button>
               <div className="acc-search dc-search">
-                <i className="fa-solid fa-magnifying-glass"></i>
+                <Icon className="fa-solid fa-magnifying-glass" />
                 <input placeholder="Search company, code, ref…" value={query} onChange={(e) => setQuery(e.target.value)} />
               </div>
               <select className="acc-f" value={entityFilter} onChange={(e) => setEntityFilter(e.target.value)}>
@@ -1543,7 +1431,7 @@ export default function DailyCollectionPage() {
               </select>
             </div>
             <div className="dc-count">
-              <i className="fa-solid fa-table"></i> Showing <strong>{filtered.length}</strong> of <strong>{entries.length}</strong>
+              <Icon className="fa-solid fa-table" /> Showing <strong>{filtered.length}</strong> of <strong>{entries.length}</strong>
             </div>
           </div>
 
@@ -1579,7 +1467,7 @@ export default function DailyCollectionPage() {
                   <tr>
                     <td colSpan={11}>
                       <div className="acc-state">
-                        <i className="fa-solid fa-triangle-exclamation"></i>
+                        <Icon className="fa-solid fa-triangle-exclamation" />
                         Could not load entries.
                         <br />
                         <small>{loadError}</small>
@@ -1590,7 +1478,7 @@ export default function DailyCollectionPage() {
                   <tr>
                     <td colSpan={11}>
                       <div className="acc-state">
-                        <i className="fa-solid fa-inbox"></i>
+                        <Icon className="fa-solid fa-inbox" />
                         No entries match your filters.
                       </div>
                     </td>
@@ -1606,9 +1494,9 @@ export default function DailyCollectionPage() {
                       <tr key={r.id} className={`dc-row${rowCls}`} onClick={() => openDrawerEdit(r)}>
                         <td className="dc-ref">
                           {rejected ? (
-                            <i className="fa-solid fa-triangle-exclamation dc-reject-ico" title="Rejected by AR"></i>
+                            <Icon className="fa-solid fa-triangle-exclamation dc-reject-ico" title="Rejected by AR" />
                           ) : rowLocked ? (
-                            <i className="fa-solid fa-lock dc-lock-ico" title="Locked by AR"></i>
+                            <Icon className="fa-solid fa-lock dc-lock-ico" title="Locked by AR" />
                           ) : null}
                           {r.ref}
                         </td>
@@ -1628,21 +1516,21 @@ export default function DailyCollectionPage() {
                         <td>
                           {rejected ? (
                             <span className="dc-pill dc-pill-rejected-strong">
-                              <i className="fa-solid fa-rotate-left"></i> {r.statusLabel} — re-work
+                              <Icon className="fa-solid fa-rotate-left" /> {r.statusLabel} — re-work
                             </span>
                           ) : isAwaiting ? (
                             <span className="dc-pill dc-pill-awaiting">
-                              <i className="fa-solid fa-file-circle-plus"></i> Awaiting documents
+                              <Icon className="fa-solid fa-file-circle-plus" /> Awaiting documents
                             </span>
                           ) : (
                             <span className={`dc-pill ${statusPillClass(r.status)}`}>
-                              <i className={`fa-solid ${statusIcon(r.status)}`}></i> {dispLabel}
+                              <Icon className={`fa-solid ${statusIcon(r.status)}`} /> {dispLabel}
                             </span>
                           )}
                         </td>
                         <td>
                           <span className="dc-createdby">
-                            <i className="fa-solid fa-user"></i>
+                            <Icon className="fa-solid fa-user" />
                             {r.createdBy}
                           </span>
                         </td>
@@ -1704,11 +1592,11 @@ export default function DailyCollectionPage() {
       <aside className={`acc-drawer dc-drawer${drawerOpen ? ' on' : ''}`}>
         <div className="acc-dhead">
           <h2>
-            {locked && <i className="fa-solid fa-lock" style={{ color: 'var(--gold)', fontSize: 15, marginRight: 6 }}></i>}
+            {locked && <Icon className="fa-solid fa-lock" style={{ color: 'var(--gold)', fontSize: 15, marginRight: 6 }} />}
             {mode === 'create' ? 'New · Daily Collection entry' : locked ? `View · ${editEntry?.ref}` : mode === 'reedit' ? `Re-submit · ${editEntry?.ref}` : `Edit · ${editEntry?.ref}`}
           </h2>
           <button className="acc-dclose" onClick={closeDrawer}>
-            <i className="fa-solid fa-xmark"></i>
+            <Icon className="fa-solid fa-xmark" />
           </button>
         </div>
         <div className="acc-dbody">
@@ -1765,7 +1653,7 @@ export default function DailyCollectionPage() {
               </>
             ) : (
               <div>
-                <i className="fa-solid fa-circle-info" style={{ color: 'var(--gold)', marginRight: 6 }}></i>
+                <Icon className="fa-solid fa-circle-info" style={{ color: 'var(--gold)', marginRight: 6 }} />
                 Pick a company — name &amp; entity fill in automatically.
               </div>
             )}
@@ -1859,18 +1747,18 @@ export default function DailyCollectionPage() {
 
           <div className="dc-alloc-hdr">
             <div className="dc-alloc-title">
-              <i className="fa-solid fa-layer-group"></i> Month allocations
+              <Icon className="fa-solid fa-layer-group" /> Month allocations
             </div>
             {allocsEditable && (
               <button className="dc-alloc-add" disabled={locked} onClick={() => addAllocRow()}>
-                <i className="fa-solid fa-plus"></i> Add month
+                <Icon className="fa-solid fa-plus" /> Add month
               </button>
             )}
           </div>
 
           {allocsLoading ? (
             <div className="dc-alloc-readonly-note">
-              <i className="fa-solid fa-spinner fa-spin"></i> Loading allocations…
+              <Icon className="fa-solid fa-spinner fa-spin" /> Loading allocations…
             </div>
           ) : allocsError ? (
             <div className="dc-alloc-readonly-note" style={{ color: 'var(--bad)' }}>
@@ -1895,7 +1783,7 @@ export default function DailyCollectionPage() {
                       </select>
                       {!readOnlyCard && !locked && (
                         <button className="dc-alloc-del" onClick={() => removeAllocRow(idx)} aria-label="Remove">
-                          <i className="fa-solid fa-trash"></i>
+                          <Icon className="fa-solid fa-trash" />
                         </button>
                       )}
                     </div>
@@ -1946,7 +1834,7 @@ export default function DailyCollectionPage() {
           {!locked && allocsEditable && (
             <div className={`dc-sum-pill ${sumOk ? 'ok' : 'bad'}`}>
               <span>
-                <i className={`fa-solid ${sumOk ? 'fa-circle-check' : 'fa-circle-exclamation'}`}></i>{' '}
+                <Icon className={`fa-solid ${sumOk ? 'fa-circle-check' : 'fa-circle-exclamation'}`} />{' '}
                 {sumOk ? 'Σ allocations match collected net' : 'Σ allocations must equal collected net'}
               </span>
               <span className="amounts">
@@ -1957,7 +1845,7 @@ export default function DailyCollectionPage() {
           {!allocsEditable && (
             <div className="dc-sum-pill ok">
               <span>
-                <i className="fa-solid fa-circle-info"></i> Allocations are read-only in this status
+                <Icon className="fa-solid fa-circle-info" /> Allocations are read-only in this status
               </span>
               <span className="amounts">
                 {fmt(sumAllocs)} / {fmt(netVal)}
@@ -1967,33 +1855,33 @@ export default function DailyCollectionPage() {
 
           {mode === 'create' ? (
             <div className="dc-note warn">
-              <i className="fa-solid fa-file-circle-plus"></i>
+              <Icon className="fa-solid fa-file-circle-plus" />
               <span>
                 This entry will be saved as <strong>Awaiting documents</strong>. Upload the first document to move it to <strong>Pending AR Verification</strong>.
               </span>
             </div>
           ) : locked ? (
             <div className="dc-note bad">
-              <i className="fa-solid fa-lock"></i>
+              <Icon className="fa-solid fa-lock" />
               <span>{(editEntry?.status != null && LOCK_REASON[editEntry.status]) || 'This entry is locked.'}</span>
             </div>
           ) : mode === 'reedit' ? (
             <div className="dc-note bad">
-              <i className="fa-solid fa-circle-xmark"></i>
+              <Icon className="fa-solid fa-circle-xmark" />
               <span>
                 <strong>Rejected by AR.</strong> Fix the details and re-submit — the entry will go back to AR as <strong>Pending AR Verification</strong>.
               </span>
             </div>
           ) : editEntry?.status === AR_STATUS.AWAITING_DOCS || editEntry?.status == null ? (
             <div className="dc-note warn">
-              <i className="fa-solid fa-file-circle-plus"></i>
+              <Icon className="fa-solid fa-file-circle-plus" />
               <span>
                 <strong>Awaiting documents.</strong> Upload the first document below to move this entry to <strong>Pending AR Verification</strong>.
               </span>
             </div>
           ) : editEntry?.proof ? (
             <div className="dc-note">
-              <i className="fa-solid fa-link" style={{ color: 'var(--ok)' }}></i>
+              <Icon className="fa-solid fa-link" style={{ color: 'var(--ok)' }} />
               <span>
                 Proof:{' '}
                 <a href={editEntry.proof} target="_blank" rel="noopener noreferrer">
@@ -2003,7 +1891,7 @@ export default function DailyCollectionPage() {
             </div>
           ) : (
             <div className="dc-note">
-              <i className="fa-solid fa-file-signature"></i>
+              <Icon className="fa-solid fa-file-signature" />
               <span>The proof link is created on OneDrive automatically after the entry is saved.</span>
             </div>
           )}
@@ -2012,12 +1900,12 @@ export default function DailyCollectionPage() {
             <div className="dc-docs-sec">
               <div className="dc-docs-hdr">
                 <div className="dc-docs-title">
-                  <i className="fa-solid fa-paperclip"></i> Documents
+                  <Icon className="fa-solid fa-paperclip" /> Documents
                   {docs.length > 0 && <span className="dc-docs-count">({docs.length})</span>}
                 </div>
                 {!locked && (
                   <label className="dc-docs-upload-btn">
-                    <i className="fa-solid fa-upload"></i> Upload
+                    <Icon className="fa-solid fa-upload" /> Upload
                     <input
                       type="file"
                       multiple
@@ -2036,17 +1924,17 @@ export default function DailyCollectionPage() {
               <div className="dc-docs-list">
                 {docsLoading ? (
                   <div className="dc-doc-uploading">
-                    <i className="fa-solid fa-spinner fa-spin"></i> Loading documents…
+                    <Icon className="fa-solid fa-spinner fa-spin" /> Loading documents…
                   </div>
                 ) : docsError ? (
                   <div className="dc-docs-empty">
-                    <i className="fa-solid fa-circle-info"></i> Couldn&apos;t load documents right now.{!locked && ' You can still upload — click Upload.'}
+                    <Icon className="fa-solid fa-circle-info" /> Couldn&apos;t load documents right now.{!locked && ' You can still upload — click Upload.'}
                   </div>
                 ) : docsUploadingNames.length > 0 || docs.length > 0 ? (
                   <>
                     {docsUploadingNames.map((n, i) => (
                       <div key={`up-${i}-${n}`} className="dc-doc-uploading">
-                        <i className="fa-solid fa-spinner fa-spin"></i> Uploading {n}…
+                        <Icon className="fa-solid fa-spinner fa-spin" /> Uploading {n}…
                       </div>
                     ))}
                     {docs.map((f) => {
@@ -2054,7 +1942,7 @@ export default function DailyCollectionPage() {
                       return (
                         <div key={f.path || f.name} className="dc-doc-row">
                           <div className={`dc-doc-ico dc-doc-ico-${docIconClass(ext)}`}>
-                            <i className={`fa-solid ${docIcon(ext)}`}></i>
+                            <Icon className={`fa-solid ${docIcon(ext)}`} />
                           </div>
                           <div className="dc-doc-meta">
                             <div className="dc-doc-name" title={f.name}>
@@ -2067,11 +1955,11 @@ export default function DailyCollectionPage() {
                           </div>
                           <div className="dc-doc-act">
                             <a href={f.url} target="_blank" rel="noopener noreferrer" title="Open">
-                              <i className="fa-solid fa-arrow-up-right-from-square"></i>
+                              <Icon className="fa-solid fa-arrow-up-right-from-square" />
                             </a>
                             {!locked && (
                               <button title="Delete" onClick={() => deleteDoc(f.path, f.name)}>
-                                <i className="fa-solid fa-trash"></i>
+                                <Icon className="fa-solid fa-trash" />
                               </button>
                             )}
                           </div>
@@ -2081,7 +1969,7 @@ export default function DailyCollectionPage() {
                   </>
                 ) : (
                   <div className="dc-docs-empty">
-                    <i className="fa-solid fa-folder-open"></i> {locked ? 'No documents attached.' : 'No documents yet — click Upload to attach files.'}
+                    <Icon className="fa-solid fa-folder-open" /> {locked ? 'No documents attached.' : 'No documents yet — click Upload to attach files.'}
                   </div>
                 )}
               </div>
@@ -2091,7 +1979,7 @@ export default function DailyCollectionPage() {
         </div>
         <div className="acc-dfoot">
           <div className="acc-hint">
-            <i className="fa-solid fa-triangle-exclamation" style={{ color: 'var(--warn)', marginRight: 4 }}></i>
+            <Icon className="fa-solid fa-triangle-exclamation" style={{ color: 'var(--warn)', marginRight: 4 }} />
             Company must exist in AR Aging
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -2102,7 +1990,7 @@ export default function DailyCollectionPage() {
               <button className="acc-btn acc-btn-primary" disabled={!canSave} onClick={saveEntry}>
                 {saving ? (
                   <>
-                    <i className="fa-solid fa-spinner fa-spin"></i> Saving…
+                    <Icon className="fa-solid fa-spinner fa-spin" /> Saving…
                   </>
                 ) : mode === 'create' ? (
                   'Save entry'

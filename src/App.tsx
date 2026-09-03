@@ -13,6 +13,7 @@ import AccountsPage from './pages/Accounts';
 import AgentsPage from './pages/Agents';
 import VisitsPage from './pages/Visits';
 import VisitPlanPage from './pages/VisitPlan';
+import VisitAuditPage from './pages/VisitAudit';
 
 function App() {
   const [page, setPage] = useState<PageKey>(DEFAULT_PAGE);
@@ -33,21 +34,23 @@ function App() {
       ) : page === 'weekly-targets' ? (
         <WeeklyTargetsPage region={region} />
       ) : page === 'daily-collection' ? (
-        <DailyCollectionPage />
+        <DailyCollectionPage region={region} />
       ) : page === 'dispute-management' ? (
-        <DisputeManagementPage />
+        <DisputeManagementPage region={region} />
       ) : page === 'high-risk-companies' ? (
         <HighRiskCompaniesPage region={region} />
       ) : page === 'sla' ? (
-        <SlaPage />
+        <SlaPage region={region} />
       ) : page === 'accounts' ? (
-        <AccountsPage />
+        <AccountsPage region={region} />
       ) : page === 'agents' ? (
-        <AgentsPage />
+        <AgentsPage region={region} />
       ) : page === 'visit-plan' ? (
-        <VisitPlanPage />
+        <VisitPlanPage region={region} />
+      ) : page === 'visit-audit' ? (
+        <VisitAuditPage region={region} />
       ) : (
-        <VisitsPage />
+        <VisitsPage region={region} />
       )}
     </Layout>
   );

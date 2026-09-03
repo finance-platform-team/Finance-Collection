@@ -99,16 +99,19 @@
             "South",
             "Remote",
             "Jeddah",
-            "KSA"
+            "KSA",
+            "Egypt"
           ],
           "x-ms-enum-values": [
             989230000,
             989230001,
             989230002,
             989230003,
-            989230004
+            989230004,
+            766340001
           ],
           "Color": [
+            null,
             null,
             null,
             null,

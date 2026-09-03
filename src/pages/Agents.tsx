@@ -1,10 +1,14 @@
+import Icon from '../components/Icon';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { getClient } from '@microsoft/power-apps/data';
+import { dataSourcesInfo } from '../../.power/schemas/appschemas/dataSourcesInfo';
 import { Cr301_agentsService } from '../generated/services/Cr301_agentsService';
 import { SystemusersService } from '../generated/services/SystemusersService';
 import { Hr_employeesService } from '../generated/services/Hr_employeesService';
 import type { Cr301_agentsBase } from '../generated/models/Cr301_agentsModel';
 import { operationErrorMessage } from '../lib/errors';
 import { escapeForCsv, downloadCsv } from '../lib/csvExport';
+import type { Region } from '../lib/useRegion';
 import './Agents.css';
 
 /**
@@ -15,6 +19,23 @@ import './Agents.css';
  * below are passed through untyped rather than via the generated fields.
  */
 const COLLECTION_FILTER = 'cfm_iscollection eq true';
+
+/**
+ * cr18c_area is a real Dataverse choice field with 5 values (North, South,
+ * Remote, Jeddah, KSA) — not a plain Egypt/KSA pair. Per explicit user
+ * direction, the Region field in this UI only offers "Egypt" / "KSA": KSA
+ * maps straight to the KSA choice, and Egypt maps to North (the closest
+ * single-value stand-in for "not KSA" — adjust here if a different choice
+ * should represent Egypt). Any agent whose stored value is South/Remote/
+ * Jeddah (set outside this form) still displays as "Egypt" in the table,
+ * so nothing looks unset just because it doesn't literally say "North".
+ */
+const AREA_KSA = 989230004;
+const AREA_EGYPT = 989230000; // North — see comment above
+
+const AGENTS_TABLE = 'cr301_agents';
+const AGENT_NAV = 'cr301_Agent';
+const AGENT_VALUE_FIELD = '_cr301_agent_value';
 
 interface UserOption {
   id: string;
@@ -35,18 +56,25 @@ interface AgentRow {
   user: string;
   userFull: string;
   title: string;
+  region: 'EG' | 'KSA' | '';
 }
 
 function loginOf(domainName: string): string {
   return (domainName || '').split('@')[0] || '';
 }
 
-export default function AgentsPage() {
+interface AgentsPageProps {
+  region: Region | null;
+}
+
+export default function AgentsPage({ region }: AgentsPageProps) {
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [userLoadError, setUserLoadError] = useState<string | null>(null);
+  const [employeeLoadError, setEmployeeLoadError] = useState<string | null>(null);
 
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -56,6 +84,7 @@ export default function AgentsPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [formName, setFormName] = useState('');
   const [formUserId, setFormUserId] = useState('');
+  const [formRegion, setFormRegion] = useState<'EG' | 'KSA' | ''>('');
   const [employeeQuery, setEmployeeQuery] = useState('');
   const [employeePickerOpen, setEmployeePickerOpen] = useState(false);
   const [formError, setFormError] = useState('');
@@ -65,13 +94,20 @@ export default function AgentsPage() {
   const [toastOn, setToastOn] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  function showToast(msg: string) {
+  function showToast(msg: string, durationMs = 2200) {
     setToastMsg(msg);
     setToastOn(true);
     clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToastOn(false), 2200);
+    toastTimer.current = setTimeout(() => setToastOn(false), durationMs);
   }
 
+  /**
+   * Both fetches used to swallow a failed result down to `[]`, which is
+   * indistinguishable from "this org genuinely has zero active records" — the
+   * Add Agent drawer would just show an empty, unexplained picker either way.
+   * Throwing here instead lets load() capture and surface the real reason
+   * (permissions, a renamed field, network) so it's actually diagnosable.
+   */
   async function fetchUsers(): Promise<UserOption[]> {
     const result = await SystemusersService.getAll({
       select: ['systemuserid', 'fullname', 'domainname', 'title'],
@@ -79,7 +115,9 @@ export default function AgentsPage() {
       orderBy: ['fullname'],
       top: 500,
     });
-    if (!result.success) return [];
+    if (!result.success) {
+      throw new Error(operationErrorMessage(result.error, 'Could not load system users.'));
+    }
     return (result.data || []).map((u) => ({
       id: u.systemuserid,
       displayName: u.fullname || u.domainname || '(user)',
@@ -95,19 +133,36 @@ export default function AgentsPage() {
       orderBy: ['hr_fullname'],
       maxPageSize: 5000,
     });
-    if (!result.success) return [];
-    return (result.data || []).map((e) => ({ id: e.hr_employeeid, name: e.hr_fullname || '(employee)' }));
+    if (!result.success) {
+      throw new Error(operationErrorMessage(result.error, 'Could not load employees.'));
+    }
+    // Records with a blank/whitespace-only hr_fullname sort first (orderBy hr_fullname
+    // ascending puts '' and ' ' before any real name) and render as invisible rows in
+    // the picker — with the list capped to 30, they crowded out every real name from
+    // the unfiltered view entirely. Drop them; they're not a usable pick anyway.
+    return (result.data || [])
+      .map((e) => ({ id: e.hr_employeeid, name: (e.hr_fullname || '').trim() }))
+      .filter((e) => e.name);
   }
 
   async function load() {
     setLoading(true);
     setLoadError(null);
+    setUserLoadError(null);
+    setEmployeeLoadError(null);
     try {
-      const [userOptions, employeeOptions, result] = await Promise.all([
-        fetchUsers(),
-        fetchEmployees(),
+      // Users/employees are independent, drawer-only concerns — a failure in either
+      // (permissions, a renamed field) shouldn't take down the agents grid itself,
+      // so each is caught on its own instead of failing the whole Promise.all.
+      const [userSettled, employeeSettled, result] = await Promise.all([
+        fetchUsers()
+          .then((data) => ({ data, error: null }))
+          .catch((e) => ({ data: [] as UserOption[], error: e instanceof Error ? e.message : String(e) })),
+        fetchEmployees()
+          .then((data) => ({ data, error: null }))
+          .catch((e) => ({ data: [] as EmployeeOption[], error: e instanceof Error ? e.message : String(e) })),
         Cr301_agentsService.getAll({
-          select: ['cr301_agentid', 'cr301_newcolumn', '_cr301_agent_value'],
+          select: ['cr301_agentid', 'cr301_newcolumn', '_cr301_agent_value', 'cr18c_area'],
           filter: COLLECTION_FILTER,
           orderBy: ['createdon desc'],
         }),
@@ -115,13 +170,19 @@ export default function AgentsPage() {
       if (!result.success) {
         throw new Error(operationErrorMessage(result.error, 'Could not load agents.'));
       }
+      if (userSettled.error) setUserLoadError(userSettled.error);
+      if (employeeSettled.error) setEmployeeLoadError(employeeSettled.error);
 
+      const userOptions = userSettled.data;
+      const employeeOptions = employeeSettled.data;
       const userMap = new Map(userOptions.map((u) => [u.id, u]));
       const rows: AgentRow[] = (result.data || []).map((a) => {
         const userId = a._cr301_agent_value || '';
         const u = userId ? userMap.get(userId) : undefined;
         const userFull = u?.displayName || '';
         const login = u ? loginOf(u.domainName) : '';
+        const areaValue = a.cr18c_area == null ? null : Number(a.cr18c_area);
+        const region: AgentRow['region'] = areaValue == null ? '' : areaValue === AREA_KSA ? 'KSA' : 'EG';
         return {
           id: a.cr301_agentid,
           name: a.cr301_newcolumn || '—',
@@ -129,6 +190,7 @@ export default function AgentsPage() {
           user: login || userFull || '—',
           userFull,
           title: u?.title || '',
+          region,
         };
       });
       setUsers(userOptions);
@@ -145,15 +207,22 @@ export default function AgentsPage() {
     load();
   }, []);
 
+  // App-wide Region toggle (Layout header) — unset region on an agent counts
+  // as Egypt, same convention used everywhere else this filter appears.
+  const regionAgents = useMemo(
+    () => (!region ? agents : agents.filter((a) => (region === 'KSA' ? a.region === 'KSA' : a.region !== 'KSA'))),
+    [agents, region]
+  );
+
   const view = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return agents;
-    return agents.filter((a) => `${a.name} ${a.user} ${a.userFull} ${a.title}`.toLowerCase().includes(q));
-  }, [agents, query]);
+    if (!q) return regionAgents;
+    return regionAgents.filter((a) => `${a.name} ${a.user} ${a.userFull} ${a.title}`.toLowerCase().includes(q));
+  }, [regionAgents, query]);
 
   useEffect(() => {
     setPage(1);
-  }, [query]);
+  }, [query, region]);
 
   const totalPages = Math.max(1, Math.ceil(view.length / pageSize));
   const clampedPage = Math.min(page, totalPages);
@@ -161,10 +230,10 @@ export default function AgentsPage() {
 
   const kpis = useMemo(
     () => ({
-      total: agents.length,
-      linked: agents.filter((a) => a.userId).length,
+      total: regionAgents.length,
+      linked: regionAgents.filter((a) => a.userId).length,
     }),
-    [agents]
+    [regionAgents]
   );
 
   function openDrawer(id?: string) {
@@ -177,11 +246,13 @@ export default function AgentsPage() {
       setFormName(name);
       setEmployeeQuery(name);
       setFormUserId(a?.userId || '');
+      setFormRegion(a?.region || '');
     } else {
       setEditId(null);
       setFormName('');
       setEmployeeQuery('');
       setFormUserId('');
+      setFormRegion('');
     }
     setDrawerOpen(true);
   }
@@ -190,10 +261,12 @@ export default function AgentsPage() {
     setDrawerOpen(false);
   }
 
+  // Empty query -> no suggestions at all (don't dump the full roster on a bare
+  // click) — the list only appears once the user starts typing.
   const employeeMatches = useMemo(() => {
     const q = employeeQuery.trim().toLowerCase();
-    const list = q ? employees.filter((e) => e.name.toLowerCase().includes(q)) : employees;
-    return list.slice(0, 30);
+    if (!q) return [];
+    return employees.filter((e) => e.name.toLowerCase().includes(q)).slice(0, 30);
   }, [employees, employeeQuery]);
 
   // First 3 words of a name, normalized — Arabic names commonly carry 3-4+ parts
@@ -222,6 +295,41 @@ export default function AgentsPage() {
     }
   }
 
+  /**
+   * Bind the Agent User lookup via the generic Dataverse client's @odata.bind
+   * form. Mixing an "@odata.bind" key into the same body as plain fields and
+   * sending it through the generated typed service's create/update has been
+   * observed (see Accounts.tsx's setClassificationViaClient) to make the
+   * generated service silently drop the *whole* write instead of just
+   * rejecting the bind key — so the lookup is set here, separately, through
+   * the raw client, after the plain fields already landed. Returns true on
+   * success (a successful call, not proof the value stuck — verify separately).
+   */
+  async function setAgentUserViaClient(id: string, userId: string): Promise<boolean> {
+    try {
+      const client = getClient(dataSourcesInfo);
+      const res = await client.updateRecordAsync(AGENTS_TABLE, id, {
+        [`${AGENT_NAV}@odata.bind`]: `/systemusers(${userId})`,
+      });
+      return !!res.success;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Re-read one agent's Agent User lookup to confirm a write actually persisted. */
+  async function readAgentUser(id: string): Promise<string> {
+    try {
+      const res = await Cr301_agentsService.get(id, { select: [AGENT_VALUE_FIELD] });
+      if (res.success && res.data) {
+        return ((res.data as unknown as Record<string, unknown>)[AGENT_VALUE_FIELD] as string) || '';
+      }
+    } catch {
+      /* ignore */
+    }
+    return '';
+  }
+
   async function handleSave() {
     const name = formName.trim();
     if (!name) {
@@ -235,11 +343,14 @@ export default function AgentsPage() {
     setSaving(true);
     setFormError('');
     try {
-      const body: Record<string, unknown> = {
+      // 1) Write the plain (non-lookup) fields through the generated service —
+      //    see setAgentUserViaClient's comment for why the lookup is kept out
+      //    of this call.
+      const body: Partial<Omit<Cr301_agentsBase, 'cr301_agentid'>> = {
         cr301_newcolumn: name,
         cfm_iscollection: true,
-        'cr301_Agent@odata.bind': `/systemusers(${formUserId})`,
-      };
+        cr18c_area: formRegion === 'KSA' ? AREA_KSA : formRegion === 'EG' ? AREA_EGYPT : null,
+      } as Partial<Omit<Cr301_agentsBase, 'cr301_agentid'>>;
 
       // cr301_agents has a uniqueness constraint on the Agent User lookup — a
       // hidden/non-collection agent for this system user (cfm_iscollection false
@@ -257,12 +368,35 @@ export default function AgentsPage() {
         }
       }
 
+      let recordId = targetId;
       const result = targetId
-        ? await Cr301_agentsService.update(targetId, body as Partial<Omit<Cr301_agentsBase, 'cr301_agentid'>>)
+        ? await Cr301_agentsService.update(targetId, body)
         : await Cr301_agentsService.create(body as unknown as Omit<Cr301_agentsBase, 'cr301_agentid'>);
       if (!result.success) {
         throw new Error(operationErrorMessage(result.error, 'Save failed.'));
       }
+      if (!recordId) {
+        recordId = ((result.data as unknown as Record<string, unknown>)?.cr301_agentid as string) || null;
+      }
+
+      // 2) Set the Agent User lookup separately, then verify it actually persisted
+      //    before reporting success — a 200/204 isn't proof the value stuck.
+      if (recordId) {
+        const ok = await setAgentUserViaClient(recordId, formUserId);
+        const stored = ok ? await readAgentUser(recordId) : '';
+        if (stored !== formUserId) {
+          setDrawerOpen(false);
+          showToast(
+            editId
+              ? 'Agent saved, but Agent User could not be set — check field permissions / a plugin'
+              : 'Agent created, but Agent User could not be set — check field permissions / a plugin',
+            5000
+          );
+          await load();
+          return;
+        }
+      }
+
       setDrawerOpen(false);
       showToast(editId ? 'Agent updated' : targetId ? 'Agent reactivated' : 'Agent created');
       await load();
@@ -274,8 +408,8 @@ export default function AgentsPage() {
   }
 
   function exportCsv() {
-    const header = ['Agent Name', 'Agent User', 'Title'];
-    const rows = view.map((a) => [a.name, a.user, a.title]);
+    const header = ['Agent Name', 'Agent User', 'Title', 'Region'];
+    const rows = view.map((a) => [a.name, a.user, a.title, a.region || '—']);
     downloadCsv('agents.csv', [header, ...rows].map((r) => r.map(escapeForCsv).join(',')));
   }
 
@@ -301,10 +435,10 @@ export default function AgentsPage() {
           </div>
           <div className="acc-actions">
             <button className="acc-btn" onClick={exportCsv}>
-              <i className="fa-solid fa-download"></i> Export
+              <Icon className="fa-solid fa-download" /> Export
             </button>
             <button className="acc-btn acc-btn-primary" onClick={() => openDrawer()}>
-              <i className="fa-solid fa-plus"></i> Add Agent
+              <Icon className="fa-solid fa-plus" /> Add Agent
             </button>
           </div>
         </div>
@@ -313,7 +447,7 @@ export default function AgentsPage() {
           <div className="kpi-card">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-gold">
-                <i className="fa-solid fa-user-tie"></i>
+                <Icon className="fa-solid fa-user-tie" />
               </span>
               <span className="kpi-label">Total agents</span>
             </div>
@@ -323,7 +457,7 @@ export default function AgentsPage() {
           <div className="kpi-card kpi-ok">
             <div className="kpi-top">
               <span className="kpi-icon kpi-icon-ok">
-                <i className="fa-solid fa-link"></i>
+                <Icon className="fa-solid fa-link" />
               </span>
               <span className="kpi-label">Linked users</span>
             </div>
@@ -337,7 +471,7 @@ export default function AgentsPage() {
         <div className="tbl-shell">
           <div className="tbl-hdr">
             <div className="acc-search">
-              <i className="fa-solid fa-magnifying-glass"></i>
+              <Icon className="fa-solid fa-magnifying-glass" />
               <input placeholder="Search agent, user or title…" value={query} onChange={(e) => setQuery(e.target.value)} />
             </div>
           </div>
@@ -349,13 +483,14 @@ export default function AgentsPage() {
                 <th>Agent Name</th>
                 <th>Agent User</th>
                 <th>Title</th>
+                <th>Region</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: 3 }).map((__, j) => (
+                    {Array.from({ length: 4 }).map((__, j) => (
                       <td key={j}>
                         <div className="acc-skel"></div>
                       </td>
@@ -364,9 +499,9 @@ export default function AgentsPage() {
                 ))
               ) : loadError ? (
                 <tr>
-                  <td colSpan={3}>
+                  <td colSpan={4}>
                     <div className="acc-state">
-                      <i className="fa-solid fa-triangle-exclamation"></i>
+                      <Icon className="fa-solid fa-triangle-exclamation" />
                       Could not load agents.
                       <br />
                       <small>{loadError}</small>
@@ -375,9 +510,9 @@ export default function AgentsPage() {
                 </tr>
               ) : pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={3}>
+                  <td colSpan={4}>
                     <div className="acc-state">
-                      <i className="fa-solid fa-inbox"></i>
+                      <Icon className="fa-solid fa-inbox" />
                       No agents match your filters.
                     </div>
                   </td>
@@ -388,6 +523,7 @@ export default function AgentsPage() {
                     <td className="acc-name">{a.name}</td>
                     <td className="agt-user-cell">{a.user}</td>
                     <td className="agt-title-cell">{a.title ? a.title : <span className="agt-muted">—</span>}</td>
+                    <td className="agt-title-cell">{a.region ? (a.region === 'KSA' ? 'KSA' : 'Egypt') : <span className="agt-muted">—</span>}</td>
                   </tr>
                 ))
               )}
@@ -439,7 +575,7 @@ export default function AgentsPage() {
         <div className="acc-dhead">
           <h2>{editId ? 'Edit Agent' : 'Add Agent'}</h2>
           <button className="acc-dclose" onClick={closeDrawer}>
-            <i className="fa-solid fa-xmark"></i>
+            <Icon className="fa-solid fa-xmark" />
           </button>
         </div>
         <div className="acc-dbody">
@@ -451,8 +587,12 @@ export default function AgentsPage() {
               </label>
               <input
                 placeholder="Search employee or type a name…"
-                autoComplete="off"
-                autoFocus
+                name="cn-employee-search-nofill"
+                id="cn-employee-search-nofill"
+                autoComplete="new-password"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
                 value={employeeQuery}
                 onChange={(e) => {
                   setEmployeeQuery(e.target.value);
@@ -463,9 +603,11 @@ export default function AgentsPage() {
                 onBlur={() => setTimeout(() => setEmployeePickerOpen(false), 150)}
               />
             </div>
-            {employeePickerOpen && (
+            {employeePickerOpen && (employeeQuery.trim() || employeeLoadError) && (
               <div className="acc-combo-list">
-                {employeeMatches.length === 0 ? (
+                {employeeLoadError ? (
+                  <div className="acc-combo-empty">Could not load employees — {employeeLoadError}</div>
+                ) : employeeMatches.length === 0 ? (
                   <div className="acc-combo-empty">No matches.</div>
                 ) : (
                   employeeMatches.map((e) => (
@@ -476,7 +618,11 @@ export default function AgentsPage() {
                 )}
               </div>
             )}
-            <div className="acc-hint">Sets the Agent Name and auto-selects the matching Agent User below when found.</div>
+            <div className="acc-hint">
+              {employeeLoadError
+                ? 'Employee search is unavailable — type the name and pick the Agent User below manually.'
+                : 'Sets the Agent Name and auto-selects the matching Agent User below when found.'}
+            </div>
           </div>
           <div className="acc-fld">
             <label>
@@ -491,7 +637,17 @@ export default function AgentsPage() {
                 </option>
               ))}
             </select>
-            <div className="acc-hint">Title and team are read from the linked system user.</div>
+            <div className="acc-hint">
+              {userLoadError ? `Could not load system users — ${userLoadError}` : 'Title and team are read from the linked system user.'}
+            </div>
+          </div>
+          <div className="acc-fld">
+            <label>Region</label>
+            <select value={formRegion} onChange={(e) => setFormRegion(e.target.value as 'EG' | 'KSA' | '')}>
+              <option value="">— Select region —</option>
+              <option value="EG">Egypt</option>
+              <option value="KSA">KSA</option>
+            </select>
           </div>
         </div>
         <div className="acc-dfoot">
@@ -501,7 +657,7 @@ export default function AgentsPage() {
           <button className="acc-btn acc-btn-primary" disabled={saving} onClick={handleSave}>
             {saving ? (
               <>
-                <i className="fa-solid fa-spinner fa-spin"></i> Saving…
+                <Icon className="fa-solid fa-spinner fa-spin" /> Saving…
               </>
             ) : (
               'Save Agent'

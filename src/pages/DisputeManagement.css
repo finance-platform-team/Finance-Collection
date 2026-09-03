@@ -12,6 +12,12 @@
 .dm-pill{display:inline-flex;align-items:center;gap:5px;font-family:'Outfit',sans-serif;font-weight:600;
   font-size:11px;padding:3px 10px;border-radius:999px;white-space:nowrap}
 .dm-pill-category{background:var(--goldbg);color:var(--brown)}
+.dm-pill-inactive{background:var(--badbg);color:var(--bad);margin-left:8px}
+
+.dm-row-inactive{opacity:0.6}
+.dm-status-toggle{background:none;border:none;cursor:pointer;font-size:20px;padding:6px;color:var(--muted);line-height:1}
+.dm-status-toggle-active{color:var(--ok)}
+.dm-status-toggle:hover{opacity:0.75}
 
 .dm-viewfiles{display:inline-flex;align-items:center;gap:6px;background:var(--goldbg);color:var(--brown);
   border:1px solid var(--gold);border-radius:8px;padding:6px 11px;font-family:'Outfit',sans-serif;
