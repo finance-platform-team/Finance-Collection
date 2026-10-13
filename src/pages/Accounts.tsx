@@ -8,6 +8,7 @@ import { Cr301_accounttypesService } from '../generated/services/Cr301_accountty
 import { Cr301_visitsService } from '../generated/services/Cr301_visitsService';
 import { Cr301_agentsService } from '../generated/services/Cr301_agentsService';
 import { Cr301_visitscr301_visitstatus, Cr301_visitscr301_visittype } from '../generated/models/Cr301_visitsModel';
+import type { Cr301_visitscfm_tagename } from '../generated/models/Cr301_visitsModel';
 import { operationErrorMessage } from '../lib/errors';
 import { visitStatusClass } from '../lib/visitStatus';
 import { escapeForCsv, downloadCsv } from '../lib/csvExport';
@@ -31,6 +32,11 @@ const REGION_OPTIONS: { value: Cr301_accountscr301_country; label: string }[] = 
   { value: REGION_EGYPT, label: 'Egypt' },
   { value: REGION_KSA, label: 'KSA' },
 ];
+
+/** cr301_visits' cfm_tagename ("Tag Name") picklist also carries AR/AP/Mediation Request/Cash
+ * Flow/Not Discharge values shared with other modules — the per-account expanded visit list on
+ * this Collection app only ever shows the "Collection" tagged ones. */
+const VISIT_TAG_COLLECTION: Cr301_visitscfm_tagename = 766340000;
 
 /**
  * Classification is the _cr301_accountclassification_value LOOKUP → cr301_accounttype
@@ -110,8 +116,6 @@ function classBadgeClass(cls: string): string {
   return 'acc-cls-none';
 }
 
-const VISIT_STATUS_COMPLETED: Cr301_visitscr301_visitstatus = 983080001;
-
 /** Actual >= Target is "ok", within reach (50%+) is "warn", otherwise "bad". */
 function achievementTier(pct: number, target: number): 'ok' | 'warn' | 'bad' | 'none' {
   if (target <= 0) return 'none';
@@ -189,9 +193,15 @@ export default function AccountsPage({ region }: AccountsPageProps) {
       if (!result.success) {
         throw new Error(operationErrorMessage(result.error, 'Could not load classifications.'));
       }
+      // cr301_accounttypes is meant to hold exactly the A/B/C classifications, but
+      // in practice carries extra stray/blank/duplicate rows — keep only a single
+      // record per each of A, B and C so the picker never shows more than those 3.
+      const seen = new Set<string>();
       const rows: ClassOption[] = ((result.data || []) as unknown as RawAccountType[])
         .map((c) => ({ id: c.cr301_accounttypeid, label: (c.cr301_newcolumn || '').trim() }))
-        .filter((c) => c.id)
+        .filter((c) => c.id && /^[ABC]$/i.test(c.label))
+        .map((c) => ({ ...c, label: c.label.toUpperCase() }))
+        .filter((c) => (seen.has(c.label) ? false : (seen.add(c.label), true)))
         .sort((a, b) => a.label.localeCompare(b.label));
       setClasses(rows);
       setClassesLoadFailed(false);
@@ -224,7 +234,7 @@ export default function AccountsPage({ region }: AccountsPageProps) {
           'cr301_notes',
           '_cr301_agent_value',
         ],
-        filter: `_cr301_account_value eq ${accountId}`,
+        filter: `_cr301_account_value eq ${accountId} and cfm_tagename eq ${VISIT_TAG_COLLECTION}`,
         orderBy: ['cr301_visitdate desc'],
       });
       if (!result.success) throw new Error(operationErrorMessage(result.error, 'Could not load visits.'));
@@ -273,16 +283,15 @@ export default function AccountsPage({ region }: AccountsPageProps) {
         }),
         Cr301_visitsService.getAll({
           select: ['cr301_visitid', '_cr301_account_value'],
-          filter: `cr301_visitstatus eq ${VISIT_STATUS_COMPLETED}`,
         }),
       ]);
       if (!result.success) {
         throw new Error(operationErrorMessage(result.error, 'Could not load accounts.'));
       }
-      // Actual visits = count of this account's Completed visit records — the
-      // account's own cr301_monthactualvisits rollup only covers the current
-      // month and refreshes on Dataverse's own schedule, so it isn't a live
-      // "actual vs target" number.
+      // Actual visits = count of ALL of this account's visit records, regardless
+      // of status (Open/Completed/Cancelled) — the account's own
+      // cr301_monthactualvisits rollup only covers the current month and
+      // refreshes on Dataverse's own schedule, so it isn't a live number.
       const actualByAccount = new Map<string, number>();
       if (visitResult.success) {
         (visitResult.data || []).forEach((v) => {
@@ -341,9 +350,12 @@ export default function AccountsPage({ region }: AccountsPageProps) {
     };
   }, [region]);
 
+  // Explicit match only — an account with no cr301_country set (or some other
+  // legacy value) shows under neither Egypt nor KSA, only under "All". Unlike
+  // most of the rest of the app, "not KSA" no longer counts as Egypt here.
   const regionRows = useMemo(() => {
     if (!region) return accounts;
-    return accounts.filter((a) => (region === 'KSA' ? a.region === REGION_KSA : a.region !== REGION_KSA));
+    return accounts.filter((a) => (region === 'KSA' ? a.region === REGION_KSA : a.region === REGION_EGYPT));
   }, [accounts, region]);
 
   const view = useMemo(() => {
@@ -414,8 +426,8 @@ export default function AccountsPage({ region }: AccountsPageProps) {
 
   async function handleBulkSave() {
     const value = parseInt(bulkTarget, 10);
-    if (bulkTarget.trim() === '' || Number.isNaN(value) || value <= 0) {
-      setBulkError('Enter a positive Target Visit number.');
+    if (bulkTarget.trim() === '' || Number.isNaN(value) || value < 0) {
+      setBulkError('Enter a Target Visit number of 0 or more.');
       return;
     }
     setBulkSaving(true);
@@ -564,8 +576,8 @@ export default function AccountsPage({ region }: AccountsPageProps) {
       return;
     }
     const target = parseInt(formTarget, 10);
-    if (!Number.isFinite(target) || target <= 0) {
-      setFormError('Account Target Visit must be a positive number.');
+    if (!Number.isFinite(target) || target < 0) {
+      setFormError('Account Target Visit must be 0 or more.');
       return;
     }
     setSaving(true);
@@ -663,6 +675,8 @@ export default function AccountsPage({ region }: AccountsPageProps) {
           </div>
         </div>
 
+        <TargetFlagCard loading={flagLoading} accountTarget={flagAccountTarget} visitPlanTarget={flagVisitPlanTarget} />
+
         <div className="kpi-grid">
           <div className="kpi-card">
             <div className="kpi-top">
@@ -696,7 +710,6 @@ export default function AccountsPage({ region }: AccountsPageProps) {
               {loading ? <>&nbsp;</> : `${kpis.targetSum > 0 ? Math.round((kpis.actualSum / kpis.targetSum) * 100) : 0}% of target`}
             </div>
           </div>
-          <TargetFlagCard loading={flagLoading} accountTarget={flagAccountTarget} visitPlanTarget={flagVisitPlanTarget} />
         </div>
 
         {selectedIds.size > 0 && (
@@ -881,7 +894,9 @@ export default function AccountsPage({ region }: AccountsPageProps) {
                             ) : !visitRows || visitRows.length === 0 ? (
                               <div className="acc-state">
                                 <Icon className="fa-solid fa-inbox" />
-                                {visitDateFrom || visitDateTo ? 'No visits in that date range for this account.' : 'No visits recorded for this account.'}
+                                {visitDateFrom || visitDateTo
+                                  ? 'No Collection-tagged visits in that date range for this account.'
+                                  : 'No Collection-tagged visits recorded for this account.'}
                               </div>
                             ) : (
                               <table className="acc-visits-table">
@@ -1030,7 +1045,7 @@ export default function AccountsPage({ region }: AccountsPageProps) {
           </div>
           <div className="acc-fld">
             <label>Account Target Visit</label>
-            <input type="number" min={1} max={99999} maxLength={5} value={formTarget} onChange={(e) => setFormTarget(clampTargetInput(e.target.value))} />
+            <input type="number" min={0} max={99999} maxLength={5} value={formTarget} onChange={(e) => setFormTarget(clampTargetInput(e.target.value))} />
           </div>
         </div>
         <div className="acc-dfoot">
@@ -1066,7 +1081,7 @@ export default function AccountsPage({ region }: AccountsPageProps) {
           </div>
           <div className="acc-fld">
             <label>Target Visit</label>
-            <input type="number" min={1} max={99999} maxLength={5} placeholder="e.g. 4" value={bulkTarget} onChange={(e) => setBulkTarget(clampTargetInput(e.target.value))} />
+            <input type="number" min={0} max={99999} maxLength={5} placeholder="e.g. 4" value={bulkTarget} onChange={(e) => setBulkTarget(clampTargetInput(e.target.value))} />
           </div>
         </div>
         <div className="acc-dfoot">

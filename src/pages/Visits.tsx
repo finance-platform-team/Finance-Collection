@@ -1,16 +1,18 @@
 import Icon from '../components/Icon';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { getClient } from '@microsoft/power-apps/data';
+import { dataSourcesInfo } from '../../.power/schemas/appschemas/dataSourcesInfo';
 import { Cr301_visitsService } from '../generated/services/Cr301_visitsService';
 import { Cr301_accountsService } from '../generated/services/Cr301_accountsService';
 import { Cr301_agentsService } from '../generated/services/Cr301_agentsService';
-import { Hr_employeesService } from '../generated/services/Hr_employeesService';
 import { Stf_kpiachievmentbreakdownsService } from '../generated/services/Stf_kpiachievmentbreakdownsService';
 import { Cfm_collectionplanweeksService } from '../generated/services/Cfm_collectionplanweeksService';
 import { Pm_kpiachievmentsService } from '../generated/services/Pm_kpiachievmentsService';
+import { Strategy_kpisesService } from '../generated/services/Strategy_kpisesService';
 import { Cr301_visitscr301_visitstatus } from '../generated/models/Cr301_visitsModel';
 import type { Cr301_visitsBase, Cr301_visitscr301_visittype } from '../generated/models/Cr301_visitsModel';
 import type { Cfm_collectionplanweeks } from '../generated/models/Cfm_collectionplanweeksModel';
-import type { Hr_employees } from '../generated/models/Hr_employeesModel';
+import type { Strategy_kpises } from '../generated/models/Strategy_kpisesModel';
 import { operationErrorMessage } from '../lib/errors';
 import { fetchAll } from '../lib/dataverse';
 import { visitStatusClass } from '../lib/visitStatus';
@@ -23,18 +25,34 @@ const VISIT_KPI_NAME = 'No. of Visits';
 // Agents.tsx and VisitPlan.tsx (KSA = the real KSA choice value, Egypt =
 // everything else, including unset).
 const AREA_KSA = 989230004;
+// Same cr301_country KSA value used on Accounts.tsx.
+const ACCOUNT_REGION_KSA = 983080001;
 
-// First 3 words of a name, normalized — same tolerant match used on the Agents
-// page for Employee <-> System User, reused here for Agent <-> Employee since
-// Arabic names commonly carry 3-4+ parts and HR vs. agent records don't always
-// agree on how many are kept.
-function firstWords(name: string, n: number): string {
-  return name.trim().toLowerCase().split(/\s+/).slice(0, n).join(' ');
+// Same Function/Department pinning VisitPlan.tsx uses to disambiguate which
+// "No. of Visits" strategy_kpises row is the real one (more than one can
+// exist across different Function/Department combos).
+const DEFAULT_KPI_FUNCTION = 'Collection/Finance';
+const DEFAULT_KPI_DEPARTMENT = 'Finance';
+// Function/Department are lookups with no separate name column to filter on
+// server-side — the display text comes from the @OData FormattedValue
+// annotation, same as VisitPlan.tsx's formattedValue().
+function fmtVal(record: unknown, attribute: string): string {
+  const raw = (record as Record<string, unknown>)[`${attribute}@OData.Community.Display.V1.FormattedValue`];
+  return typeof raw === 'string' ? raw : '';
+}
+function isVisitsKpi(k: { strategy_newcolumn?: string }): boolean {
+  if ((k.strategy_newcolumn || '').trim().toLowerCase() !== VISIT_KPI_NAME.toLowerCase()) return false;
+  const fn = fmtVal(k, '_strategy_function_value').trim().toLowerCase();
+  const dept = fmtVal(k, '_strategy_department_value').trim().toLowerCase();
+  return fn === DEFAULT_KPI_FUNCTION.toLowerCase() && dept === DEFAULT_KPI_DEPARTMENT.toLowerCase();
 }
 
 type AdjustOutcome =
   | { status: 'ok'; weekNumber?: number }
-  | { status: 'no-employee' | 'no-breakdown' | 'no-week' | 'bad-date'; agentName: string }
+  | { status: 'no-employee' | 'bad-date' | 'no-week'; agentName: string }
+  | { status: 'no-kpi'; agentName: string }
+  | { status: 'no-achievement'; agentName: string; month: number; year: number }
+  | { status: 'no-breakdown'; agentName: string; month: number; year: number }
   | { status: 'error'; agentName: string; message: string };
 
 // Same fixed calendar-day buckets VisitPlan.tsx uses when creating weeks
@@ -49,24 +67,26 @@ function monthDayBucket(day: number): number {
 }
 
 /**
- * For an agent + a reference date (the Visit's createdon), find that agent's
- * matching hr_employees record (by name), their active "No. of Visits" KPI
- * achievement breakdown for that DATE'S OWN MONTH+YEAR (not just year — a
- * September visit must land on the September achievement, never fall back to
- * August's), and the Collection Plan Week under that breakdown whose
- * cfm_weeknumber matches the reference date's day-of-month bucket (day 1-10
- * -> week 1, 11-18 -> week 2, 19-25 -> week 3, 26-end-of-month -> week 4) —
- * then adjust that week's cfm_actual by `delta` (+1 for a created/moved-in
- * visit, -1 for a removed/moved-out one, clamped at 0).
+ * For an agent's linked employee (cr301_agents.cfm_employee, a real Dataverse
+ * lookup — no more matching hr_employees by name) + a reference date (the
+ * Visit's createdon system timestamp — NOT the user-entered Visit Date), find
+ * that employee's active "No. of Visits" KPI achievement breakdown for that
+ * DATE'S OWN MONTH+YEAR (not just year — a September visit must land on the
+ * September achievement, never fall back to August's), and the Collection
+ * Plan Week under that breakdown whose cfm_weeknumber matches the reference
+ * date's day-of-month bucket (day 1-10 -> week 1, 11-18 -> week 2, 19-25 ->
+ * week 3, 26-end-of-month -> week 4) — then adjust that week's cfm_actual by
+ * `delta` (+1 for a created/moved-in visit, -1 for a removed/moved-out one,
+ * clamped at 0).
  *
- * Resolves the breakdown by first finding this employee's own "No. of
- * Visits" breakdown(s), then narrowing to whichever one's parent
- * pm_kpiachievments has this exact pm_month/pm_year — anchoring on the
- * employee's breakdowns first (a small, specific set) rather than searching
- * achievements globally by month/year first, which can match the wrong
- * record when more than one "No. of Visits" achievement exists for the same
- * month (different BUs, or a duplicate from re-running the create wizard)
- * and isn't the one this employee's breakdown actually belongs to.
+ * Resolves the breakdown the same way VisitPlan.tsx does: find the "No. of
+ * Visits" strategy_kpises row (pinned by Function/Department, since more than
+ * one KPI can share that name), find its achievement(s) for this exact
+ * pm_month/pm_year, then find this employee's breakdown whose
+ * _stf_total_value points at one of those achievements. Deliberately does NOT
+ * filter breakdowns on pms_kpinamefx — that's a formula/rollup column that
+ * stays null on a freshly created breakdown until Dataverse's async
+ * calculation job runs, so it made brand-new plans invisible to this lookup.
  *
  * Deliberately does NOT compare against cfm_weekfrom/cfm_weekto: matching by
  * cfm_weeknumber is the one plan-week-count-agnostic anchor both this code
@@ -78,15 +98,12 @@ function monthDayBucket(day: number): number {
  * caller can tell the user exactly why nothing was adjusted instead of
  * failing silently.
  */
-async function adjustVisitPlanActual(agentName: string, referenceDateIso: string, delta: 1 | -1): Promise<AdjustOutcome> {
+async function adjustVisitPlanActual(agentName: string, employeeId: string, referenceDateIso: string, delta: 1 | -1): Promise<AdjustOutcome> {
   try {
-    const employeeRows = await fetchAll<Hr_employees>(
-      (skipToken) => Hr_employeesService.getAll({ select: ['hr_employeeid', 'hr_fullname'], filter: 'statecode eq 0', maxPageSize: 5000, skipToken }),
-      'Could not load employees.'
-    );
-    const agentKey = firstWords(agentName, 3);
-    const employee = agentKey ? employeeRows.find((e) => firstWords(e.hr_fullname || '', 3) === agentKey) : undefined;
-    if (!employee) return { status: 'no-employee', agentName };
+    // No cfm_employee link on this agent (never saved with one, or saved
+    // before Agents.tsx started binding it) — nothing to join the KPI side
+    // to, so this has to stop here rather than guess by name.
+    if (!employeeId) return { status: 'no-employee', agentName };
 
     const referenceDate = new Date(referenceDateIso);
     if (Number.isNaN(referenceDate.getTime())) return { status: 'bad-date', agentName };
@@ -100,33 +117,40 @@ async function adjustVisitPlanActual(agentName: string, referenceDateIso: string
     const month = referenceDate.getMonth() + 1;
     const weekNumber = monthDayBucket(referenceDate.getDate());
 
-    // Anchor on the employee's OWN breakdowns first (a small, specific set),
-    // then narrow to whichever one's parent achievement is this exact
-    // month/year — rather than searching achievements globally by month/year
-    // first, which can match the wrong record when more than one "No. of
-    // Visits" achievement exists for the same month (different BUs, or a
-    // duplicate from re-running the create wizard) and isn't the one this
-    // employee's breakdown actually belongs to.
+    // pms_kpinamefx is a formula/rollup column that stays null on a freshly
+    // created breakdown until Dataverse's async calculation job runs, so
+    // filtering on it misses brand-new plans entirely. Resolve the breakdown
+    // the same way VisitPlan.tsx does instead: KPI -> its month/year
+    // achievements -> this employee's breakdown under one of them.
+    const kpiRows = await fetchAll<Strategy_kpises>(
+      (skipToken) =>
+        Strategy_kpisesService.getAll({
+          select: ['strategy_kpisid', 'strategy_newcolumn', '_strategy_function_value', '_strategy_department_value'],
+          filter: 'statecode eq 0',
+          maxPageSize: 5000,
+          skipToken,
+        }),
+      'Could not load KPIs.'
+    );
+    const visitsKpi = kpiRows.find(isVisitsKpi);
+    if (!visitsKpi) return { status: 'no-kpi', agentName };
+
+    const achievements = await Pm_kpiachievmentsService.getAll({
+      select: ['pm_kpiachievmentid'],
+      filter: `_pm_kpi_value eq ${visitsKpi.strategy_kpisid} and pm_month eq ${month} and pm_year eq ${year} and statecode eq 0`,
+      maxPageSize: 5000,
+    });
+    const achIds = new Set((achievements.success ? achievements.data : undefined)?.map((a) => a.pm_kpiachievmentid) || []);
+    if (!achIds.size) return { status: 'no-achievement', agentName, month, year };
+
     const employeeBreakdowns = await Stf_kpiachievmentbreakdownsService.getAll({
       select: ['stf_kpiachievmentbreakdownid', '_stf_total_value'],
-      filter: `_stf_employee_value eq ${employee.hr_employeeid} and pms_kpinamefx eq '${VISIT_KPI_NAME}' and statecode eq 0`,
+      filter: `_stf_employee_value eq ${employeeId} and statecode eq 0`,
       maxPageSize: 5000,
     });
     const candidates = (employeeBreakdowns.success ? employeeBreakdowns.data : undefined) || [];
-    const achIds = Array.from(new Set(candidates.map((b) => b._stf_total_value).filter((id): id is string => !!id)));
-    if (!achIds.length) return { status: 'no-breakdown', agentName };
-
-    const achFilter = achIds.map((id) => `pm_kpiachievmentid eq ${id}`).join(' or ');
-    const achievements = await Pm_kpiachievmentsService.getAll({
-      select: ['pm_kpiachievmentid'],
-      filter: `(${achFilter}) and pm_month eq ${month} and pm_year eq ${year} and statecode eq 0`,
-      top: 1,
-    });
-    const achievementId = achievements.success ? achievements.data?.[0]?.pm_kpiachievmentid : undefined;
-    if (!achievementId) return { status: 'no-breakdown', agentName };
-
-    const breakdownId = candidates.find((b) => b._stf_total_value === achievementId)?.stf_kpiachievmentbreakdownid;
-    if (!breakdownId) return { status: 'no-breakdown', agentName };
+    const breakdownId = candidates.find((b) => b._stf_total_value && achIds.has(b._stf_total_value))?.stf_kpiachievmentbreakdownid;
+    if (!breakdownId) return { status: 'no-breakdown', agentName, month, year };
 
     const weeks = await fetchAll<Cfm_collectionplanweeks>(
       (skipToken) =>
@@ -171,9 +195,13 @@ function describeAdjustOutcome(o: AdjustOutcome): string | null {
     case 'ok':
       return null;
     case 'no-employee':
-      return `no employee match for "${o.agentName}"`;
+      return `"${o.agentName}" has no linked Employee — open it in Agents and re-select the Employee`;
+    case 'no-kpi':
+      return `the "No. of Visits" KPI (Collection/Finance) itself wasn't found in Strategy KPIs`;
+    case 'no-achievement':
+      return `no "No. of Visits" achievement exists for ${o.month}/${o.year} — the KPI plan hasn't been created for that month yet`;
     case 'no-breakdown':
-      return `no active "No. of Visits" KPI plan found for "${o.agentName}" this month`;
+      return `"${o.agentName}" has a "No. of Visits" plan for ${o.month}/${o.year}, but no breakdown row under it linked to this exact employee — check which Employee the plan's owner card was created against`;
     case 'no-week':
       return `no Collection Plan Week found for "${o.agentName}"`;
     case 'bad-date':
@@ -190,12 +218,17 @@ const VISIT_TYPE_SINGLE: Cr301_visitscr301_visittype = 983080000; // 'Single Vis
 const VISIT_TYPE_DOUBLE: Cr301_visitscr301_visittype = 983080001; // 'Double Visit'
 
 const VISIT_STATUS_OPEN = 983080000;
+const VISIT_STATUS_CANCELLED = 983080002;
 const VISIT_STATUS_OPTIONS = [
   { value: VISIT_STATUS_OPEN, label: 'Open' },
   { value: 983080001, label: 'Completed' },
-  { value: 983080002, label: 'Cancelled' },
+  { value: VISIT_STATUS_CANCELLED, label: 'Cancelled' },
   { value: 766340001, label: 'Partially Closed' },
 ];
+/** Every status except Cancelled counts toward the KPI Actual. */
+function countsTowardActual(status: number): boolean {
+  return status !== VISIT_STATUS_CANCELLED;
+}
 
 /**
  * cfm_tagename, cfm_revisitdate and cfm_agent2 (Task Owner 2) do not exist
@@ -218,7 +251,26 @@ const VISIT_STATUS_OPTIONS = [
  * check.
  */
 const TAG_COLLECTION = 766340000; // cfm_tagename — "Collection"
-const AGENT2_BIND_NAV = 'cfm_Agent2'; // unconfirmed casing — see comment above
+const AGENT2_BIND_NAV = 'cfm_Agent2'; // confirmed by the regenerated model ("cfm_Agent2@odata.bind")
+const VISITS_TABLE = 'cr301_visits';
+
+/**
+ * Bind Task Owner 2 on its own PATCH through the raw client, then re-read
+ * _cfm_agent2_value to confirm it stuck. Mixing an extra @odata.bind key into
+ * the typed service's create/update body can silently drop it (same issue
+ * VisitPlan.tsx's bindLookups works around) — that's how Double visits were
+ * ending up saved with no second owner. A 200/204 isn't proof; only the re-read is.
+ */
+async function bindAgent2(visitId: string, agent2Id: string): Promise<boolean> {
+  try {
+    const client = getClient(dataSourcesInfo);
+    await client.updateRecordAsync(VISITS_TABLE, visitId, { [`${AGENT2_BIND_NAV}@odata.bind`]: `/cr301_agents(${agent2Id})` });
+    const check = await Cr301_visitsService.get(visitId, { select: ['_cfm_agent2_value'] });
+    return !!check.success && (check.data?._cfm_agent2_value || '').toLowerCase() === agent2Id.toLowerCase();
+  } catch {
+    return false;
+  }
+}
 
 interface UnmappedVisitFields {
   cfm_tagename?: number;
@@ -230,12 +282,18 @@ interface AccountOption {
   id: string;
   name: string;
   code: string;
+  region: 'EG' | 'KSA' | '';
 }
 
 interface AgentOption {
   id: string;
   name: string;
   region: 'EG' | 'KSA' | '';
+  /** cr301_agents.cfm_employee (_cfm_employee_value) — the real hr_employees
+   *  link Agents.tsx now binds on save. Empty for an agent that hasn't been
+   *  re-saved since (or was saved before that binding existed), in which case
+   *  the KPI-actual adjustment below can't be made — see adjustVisitPlanActual. */
+  employeeId: string;
 }
 
 interface VisitRow {
@@ -266,6 +324,21 @@ function fmtDate(iso: string): string {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+// True once local calendar "today" has moved past the local calendar day the
+// visit was created on — a visit is only editable-by-date on its own creation
+// day, then Visit Date locks for good. Local day, not UTC, for the same
+// midnight-boundary reason as adjustVisitPlanActual's month/year read.
+function isPastCreationDay(createdonIso: string): boolean {
+  const created = new Date(createdonIso);
+  if (Number.isNaN(created.getTime())) return false;
+  const now = new Date();
+  return (
+    created.getFullYear() !== now.getFullYear() ||
+    created.getMonth() !== now.getMonth() ||
+    created.getDate() !== now.getDate()
+  );
+}
+
 interface VisitsPageProps {
   region: Region | null;
 }
@@ -280,7 +353,11 @@ export default function VisitsPage({ region }: VisitsPageProps) {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('');
-  const [monthFilter, setMonthFilter] = useState('');
+  // Defaults to the current month; '' means "All Months".
+  const [monthFilter, setMonthFilter] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
@@ -292,11 +369,17 @@ export default function VisitsPage({ region }: VisitsPageProps) {
   // the KPI week it's moving out of, not just increment the one it's moving into.
   const [editOriginal, setEditOriginal] = useState<VisitRow | null>(null);
   const [formAccountId, setFormAccountId] = useState('');
+  const [companyQuery, setCompanyQuery] = useState('');
+  const [companyPickerOpen, setCompanyPickerOpen] = useState(false);
   const [formAgentId, setFormAgentId] = useState('');
+  const [agentQuery, setAgentQuery] = useState('');
+  const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const [formDate, setFormDate] = useState('');
   const [formStatus, setFormStatus] = useState(String(VISIT_STATUS_OPEN));
   const [formVisitType, setFormVisitType] = useState<'single' | 'double'>('single');
   const [formAgent2Id, setFormAgent2Id] = useState('');
+  const [agent2Query, setAgent2Query] = useState('');
+  const [agent2PickerOpen, setAgent2PickerOpen] = useState(false);
   const [formRevisit, setFormRevisit] = useState('');
   const [formNotes, setFormNotes] = useState('');
   const [formError, setFormError] = useState('');
@@ -319,12 +402,12 @@ export default function VisitsPage({ region }: VisitsPageProps) {
     try {
       const [accResult, agentResult, visitResult] = await Promise.all([
         Cr301_accountsService.getAll({
-          select: ['cr301_accountid', 'cr301_acccountname', 'cr301_accountcode'],
+          select: ['cr301_accountid', 'cr301_acccountname', 'cr301_accountcode', 'cr301_country'],
           filter: `cr301_accounttype eq ${TYPE_INSURANCE} or cr301_accounttype eq ${TYPE_DIRECT}`,
           orderBy: ['cr301_acccountname'],
         }),
         Cr301_agentsService.getAll({
-          select: ['cr301_agentid', 'cr301_newcolumn', 'cr18c_area'],
+          select: ['cr301_agentid', 'cr301_newcolumn', 'cr18c_area', '_cfm_employee_value'],
           filter: 'cfm_iscollection eq true',
           orderBy: ['cr301_newcolumn'],
         }),
@@ -362,6 +445,7 @@ export default function VisitsPage({ region }: VisitsPageProps) {
         id: a.cr301_accountid,
         name: a.cr301_acccountname || '(no name)',
         code: a.cr301_accountcode || '',
+        region: a.cr301_country == null ? '' : Number(a.cr301_country) === ACCOUNT_REGION_KSA ? 'KSA' : 'EG',
       }));
       const agentOptions: AgentOption[] = (agentResult.data || []).map((a) => {
         const areaValue = a.cr18c_area == null ? null : Number(a.cr18c_area);
@@ -369,6 +453,7 @@ export default function VisitsPage({ region }: VisitsPageProps) {
           id: a.cr301_agentid,
           name: a.cr301_newcolumn || '(agent)',
           region: areaValue == null ? '' : areaValue === AREA_KSA ? 'KSA' : 'EG',
+          employeeId: a._cfm_employee_value || '',
         };
       });
       const accMap = new Map(accountOptions.map((a) => [a.id, a]));
@@ -390,7 +475,9 @@ export default function VisitsPage({ region }: VisitsPageProps) {
           agentId,
           owner: agent?.name || '—',
           agent2Id,
-          owner2: agent2?.name || '',
+          // Formatted-value fallback: Task Owner 2 may be an agent outside the
+          // collection roster loaded above, which used to show as "—" even though it's saved.
+          owner2: agent2?.name || (agent2Id ? fmtVal(r, '_cfm_agent2_value') || '(agent)' : ''),
           date: r.cr301_visitdate || '',
           createdon: r.createdon || '',
           isDouble: r.cr301_visittype === VISIT_TYPE_DOUBLE,
@@ -427,6 +514,10 @@ export default function VisitsPage({ region }: VisitsPageProps) {
         seen.set(key, d.toLocaleDateString(undefined, { year: 'numeric', month: 'long' }));
       }
     });
+    // Always offer the current month so the default selection shows in the dropdown.
+    const now = new Date();
+    const curKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    if (!seen.has(curKey)) seen.set(curKey, now.toLocaleDateString(undefined, { year: 'numeric', month: 'long' }));
     return Array.from(seen.entries())
       .sort((a, b) => b[0].localeCompare(a[0]))
       .map(([value, label]) => ({ value, label }));
@@ -451,6 +542,47 @@ export default function VisitsPage({ region }: VisitsPageProps) {
     return [...matches].sort((a, b) => b.createdon.localeCompare(a.createdon));
   }, [visits, query, statusFilter, typeFilter, monthFilter, dateFrom, dateTo, region]);
 
+  // Add/Edit Visit drawer's Company Name / Task Owner pickers — same App-wide
+  // Region toggle convention as the table above (unset region counts as Egypt).
+  const regionAccountOptions = useMemo(
+    () => (!region ? accounts : accounts.filter((a) => (region === 'KSA' ? a.region === 'KSA' : a.region !== 'KSA'))),
+    [accounts, region]
+  );
+  const regionAgentOptions = useMemo(
+    () => (!region ? agents : agents.filter((a) => (region === 'KSA' ? a.region === 'KSA' : a.region !== 'KSA'))),
+    [agents, region]
+  );
+
+  /** Searchable Company Name picker — same style/behavior as Task Owner below. */
+  function companyMatches(q: string): AccountOption[] {
+    const query = q.trim().toLowerCase();
+    if (!query) return regionAccountOptions;
+    return regionAccountOptions.filter((a) => `${a.name} ${a.code}`.toLowerCase().includes(query));
+  }
+  function pickCompany(a: AccountOption) {
+    setFormAccountId(a.id);
+    setCompanyQuery(a.name);
+    setCompanyPickerOpen(false);
+  }
+
+  /** Searchable Task Owner / Task Owner 2 pickers — shows the full (region-
+   * scoped) roster right away, filtering as the user types. */
+  function agentMatches(q: string): AgentOption[] {
+    const query = q.trim().toLowerCase();
+    if (!query) return regionAgentOptions;
+    return regionAgentOptions.filter((a) => a.name.toLowerCase().includes(query));
+  }
+  function pickAgent(a: AgentOption) {
+    setFormAgentId(a.id);
+    setAgentQuery(a.name);
+    setAgentPickerOpen(false);
+  }
+  function pickAgent2(a: AgentOption) {
+    setFormAgent2Id(a.id);
+    setAgent2Query(a.name);
+    setAgent2PickerOpen(false);
+  }
+
   useEffect(() => {
     setPage(1);
   }, [query, statusFilter, typeFilter, monthFilter, dateFrom, dateTo, region]);
@@ -467,6 +599,12 @@ export default function VisitsPage({ region }: VisitsPageProps) {
   }, [view]);
 
   const selectedAccount = useMemo(() => accounts.find((a) => a.id === formAccountId) || null, [accounts, formAccountId]);
+  // Visit Date stays editable on the day the visit was created, then locks —
+  // never locked for a brand-new (not-yet-saved) visit.
+  const visitDateLocked = !!editId && !!editOriginal?.createdon && isPastCreationDay(editOriginal.createdon);
+  // Task Owner 2 locks once saved, but stays pickable on a Double visit that
+  // was saved without one, so those records can be repaired.
+  const agent2Locked = !!editId && !!editOriginal?.agent2Id;
 
   function openDrawer(row?: VisitRow) {
     setFormError('');
@@ -474,24 +612,33 @@ export default function VisitsPage({ region }: VisitsPageProps) {
     if (row) {
       setEditId(row.id);
       setFormAccountId(row.accountId);
+      setCompanyQuery(row.company);
       setFormAgentId(row.agentId);
+      setAgentQuery(row.owner);
       setFormDate(row.date ? row.date.substring(0, 10) : '');
       setFormStatus(String(row.status));
       setFormVisitType(row.isDouble ? 'double' : 'single');
       setFormAgent2Id(row.agent2Id);
+      setAgent2Query(row.owner2);
       setFormRevisit(row.revisit ? row.revisit.substring(0, 10) : '');
       setFormNotes(row.notes);
     } else {
       setEditId(null);
       setFormAccountId('');
+      setCompanyQuery('');
       setFormAgentId('');
+      setAgentQuery('');
       setFormDate(new Date().toISOString().substring(0, 10));
       setFormStatus(String(VISIT_STATUS_OPEN));
       setFormVisitType('single');
       setFormAgent2Id('');
+      setAgent2Query('');
       setFormRevisit('');
       setFormNotes('');
     }
+    setCompanyPickerOpen(false);
+    setAgentPickerOpen(false);
+    setAgent2PickerOpen(false);
     setDrawerOpen(true);
   }
 
@@ -539,12 +686,8 @@ export default function VisitsPage({ region }: VisitsPageProps) {
         cfm_tagename: TAG_COLLECTION,
         cfm_revisitdate: formRevisit ? new Date(formRevisit).toISOString() : null,
       };
-      if (isDouble && formAgent2Id) {
-        body[`${AGENT2_BIND_NAV}@odata.bind`] = `/cr301_agents(${formAgent2Id})`;
-      } else if (editId) {
-        // Switched back to Single (or cleared) on an existing visit — unlink the second owner.
-        body[`${AGENT2_BIND_NAV}@odata.bind`] = null;
-      }
+      // Task Owner 2 is NOT put in this body — it's bound separately below
+      // (see bindAgent2). Visit Type can't change on edit, so there's no unlink case.
 
       let result;
       if (editId) {
@@ -556,36 +699,79 @@ export default function VisitsPage({ region }: VisitsPageProps) {
         throw new Error(operationErrorMessage(result.error, 'Save failed.'));
       }
 
-      // Both directions: creating a visit increments its week's Actual; editing
-      // its task owner(s) decrements the old owner's assignment and increments
-      // the new one's. The reference date is the visit's own createdon (system
-      // timestamp), not the user-entered Visit Date — see adjustVisitPlanActual's
-      // doc comment for why, and it's immutable, so editing an existing visit
-      // can only ever change WHICH owner(s) it counts toward, never WHICH week.
-      // A failure/no-match here never undoes the fact that the visit itself
-      // already saved fine — the outcome is surfaced in the toast, not swallowed.
+      const visitId = editId || result.data?.cr301_visitid || '';
+      let agent2Saved = true;
+      if (isDouble && formAgent2Id && formAgent2Id !== editOriginal?.agent2Id) {
+        agent2Saved = !!visitId && (await bindAgent2(visitId, formAgent2Id));
+      }
+
+      // Four directions now, not two: creating an (active) visit increments its
+      // week's Actual; editing its task owner(s) while it stays active moves
+      // the count across owners; and — the piece that was missing — flipping
+      // Visit Status to/from Cancelled gives the count back / re-adds it,
+      // since a cancelled visit never really happened. The reference date is
+      // the visit's own createdon (system timestamp), not the user-entered
+      // Visit Date — see adjustVisitPlanActual's doc comment for why, and it's
+      // immutable, so editing an existing visit can only ever change WHICH
+      // owner(s)/whether it counts, never WHICH week. A failure/no-match here
+      // never undoes the fact that the visit itself already saved fine — the
+      // outcome is surfaced in the toast, not swallowed.
+      //
+      // Adjustments run ONE AT A TIME (not Promise.all) — a Double Visit's two
+      // owners can end up resolving to the same employee (e.g. two agents
+      // mistakenly linked to the same hr_employees record), and running their
+      // adjustVisitPlanActual calls concurrently is a lost-update race: both
+      // read the week's current cfm_actual before either writes back, so two
+      // +1's land as only +1 overall. Sequential awaits close that window —
+      // each call's read only ever sees the previous call's write.
       const adjustNotes: string[] = [];
       const referenceDateIso = editId ? editOriginal?.createdon || '' : result.data?.createdon || '';
       if (referenceDateIso) {
-        const newAgentNames = [formAgentId, isDouble ? formAgent2Id : '']
-          .filter(Boolean)
-          .map((id) => agents.find((a) => a.id === id)?.name || '')
-          .filter(Boolean);
+        const toAdjustTargets = (ids: string[]) =>
+          ids
+            .filter(Boolean)
+            .map((id) => agents.find((a) => a.id === id))
+            .filter((a): a is AgentOption => !!a);
+        const applyAdjustments = async (targets: AgentOption[], delta: 1 | -1): Promise<AdjustOutcome[]> => {
+          const results: AdjustOutcome[] = [];
+          for (const a of targets) {
+            results.push(await adjustVisitPlanActual(a.name, a.employeeId, referenceDateIso, delta));
+          }
+          return results;
+        };
+        // Only count Task Owner 2 if the link actually landed — otherwise the
+        // KPI would say they did a visit the record doesn't show.
+        const newAgents = toAdjustTargets([formAgentId, isDouble && agent2Saved ? formAgent2Id : '']);
+        const newCounts = countsTowardActual(parseInt(formStatus, 10));
         const outcomes: AdjustOutcome[] = [];
         if (!editId) {
-          outcomes.push(...(await Promise.all(newAgentNames.map((name) => adjustVisitPlanActual(name, referenceDateIso, 1)))));
-        } else if (editOriginal) {
-          const oldAgentNames = [editOriginal.agentId, editOriginal.isDouble ? editOriginal.agent2Id : '']
-            .filter(Boolean)
-            .map((id) => agents.find((a) => a.id === id)?.name || '')
-            .filter(Boolean);
-          const sameAgents = JSON.stringify([...oldAgentNames].sort()) === JSON.stringify([...newAgentNames].sort());
-          if (!sameAgents) {
-            outcomes.push(...(await Promise.all(oldAgentNames.map((name) => adjustVisitPlanActual(name, referenceDateIso, -1)))));
-            outcomes.push(...(await Promise.all(newAgentNames.map((name) => adjustVisitPlanActual(name, referenceDateIso, 1)))));
+          // A visit created directly as Cancelled never counted in the first place.
+          if (newCounts) {
+            outcomes.push(...(await applyAdjustments(newAgents, 1)));
           }
+        } else if (editOriginal) {
+          const oldAgents = toAdjustTargets([editOriginal.agentId, editOriginal.isDouble ? editOriginal.agent2Id : '']);
+          const oldCounts = countsTowardActual(editOriginal.status);
+          const sameAgents =
+            JSON.stringify([...oldAgents.map((a) => a.id)].sort()) === JSON.stringify([...newAgents.map((a) => a.id)].sort());
+          if (oldCounts && !newCounts) {
+            // Just cancelled — give back whatever it was counted toward.
+            outcomes.push(...(await applyAdjustments(oldAgents, -1)));
+          } else if (!oldCounts && newCounts) {
+            // Un-cancelled — count it now, toward its current owner(s).
+            outcomes.push(...(await applyAdjustments(newAgents, 1)));
+          } else if (oldCounts && newCounts && !sameAgents) {
+            // Stayed active/counted, owners changed — move the count across owners.
+            outcomes.push(...(await applyAdjustments(oldAgents, -1)));
+            outcomes.push(...(await applyAdjustments(newAgents, 1)));
+          }
+          // else: stayed Cancelled, or stayed active/counted with the same owners — no change.
         }
         adjustNotes.push(...outcomes.map(describeAdjustOutcome).filter((n): n is string => n !== null));
+      }
+
+      if (!agent2Saved) {
+        adjustNotes.unshift('Task Owner 2 could not be linked — open the visit and pick Task Owner 2 again');
       }
 
       setDrawerOpen(false);
@@ -872,14 +1058,37 @@ export default function VisitsPage({ region }: VisitsPageProps) {
 
           <div className="acc-fld">
             <label>Company Name</label>
-            <select value={formAccountId} disabled={!!editId} onChange={(e) => setFormAccountId(e.target.value)}>
-              <option value="">— Select company —</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
+            <div className="acc-combo">
+              <div className="acc-search">
+                <Icon className="fa-solid fa-magnifying-glass" />
+                <input
+                  placeholder="Search company or code…"
+                  autoComplete="off"
+                  disabled={!!editId}
+                  value={companyQuery}
+                  onChange={(e) => {
+                    setCompanyQuery(e.target.value);
+                    setFormAccountId('');
+                    setCompanyPickerOpen(true);
+                  }}
+                  onFocus={() => setCompanyPickerOpen(true)}
+                  onBlur={() => setTimeout(() => setCompanyPickerOpen(false), 150)}
+                />
+              </div>
+              {companyPickerOpen && !editId && (
+                <div className="acc-combo-list">
+                  {companyMatches(companyQuery).length === 0 ? (
+                    <div className="acc-combo-empty">No matches.</div>
+                  ) : (
+                    companyMatches(companyQuery).map((a) => (
+                      <div key={a.id} className="acc-combo-item" onMouseDown={(ev) => ev.preventDefault()} onClick={() => pickCompany(a)}>
+                        {a.name}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="acc-fld">
@@ -891,19 +1100,42 @@ export default function VisitsPage({ region }: VisitsPageProps) {
 
           <div className="acc-fld">
             <label>Task Owner</label>
-            <select value={formAgentId} disabled={!!editId} onChange={(e) => setFormAgentId(e.target.value)}>
-              <option value="">— Select agent —</option>
-              {agents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
+            <div className="acc-combo">
+              <div className="acc-search">
+                <Icon className="fa-solid fa-magnifying-glass" />
+                <input
+                  placeholder="Search users…"
+                  autoComplete="off"
+                  disabled={!!editId}
+                  value={agentQuery}
+                  onChange={(e) => {
+                    setAgentQuery(e.target.value);
+                    setFormAgentId('');
+                    setAgentPickerOpen(true);
+                  }}
+                  onFocus={() => setAgentPickerOpen(true)}
+                  onBlur={() => setTimeout(() => setAgentPickerOpen(false), 150)}
+                />
+              </div>
+              {agentPickerOpen && !editId && (
+                <div className="acc-combo-list">
+                  {agentMatches(agentQuery).length === 0 ? (
+                    <div className="acc-combo-empty">No matches.</div>
+                  ) : (
+                    agentMatches(agentQuery).map((a) => (
+                      <div key={a.id} className="acc-combo-item" onMouseDown={(ev) => ev.preventDefault()} onClick={() => pickAgent(a)}>
+                        {a.name}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="acc-fld">
             <label>Visit Date</label>
-            <input type="date" value={formDate} disabled={!!editId} onChange={(e) => setFormDate(e.target.value)} />
+            <input type="date" value={formDate} disabled={visitDateLocked} onChange={(e) => setFormDate(e.target.value)} />
           </div>
 
           <div className="acc-fld">
@@ -928,14 +1160,37 @@ export default function VisitsPage({ region }: VisitsPageProps) {
           {formVisitType === 'double' && (
             <div className="acc-fld">
               <label>Task Owner 2</label>
-              <select value={formAgent2Id} disabled={!!editId} onChange={(e) => setFormAgent2Id(e.target.value)}>
-                <option value="">— Second agent —</option>
-                {agents.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
+              <div className="acc-combo">
+                <div className="acc-search">
+                  <Icon className="fa-solid fa-magnifying-glass" />
+                  <input
+                    placeholder="Search users…"
+                    autoComplete="off"
+                    disabled={agent2Locked}
+                    value={agent2Query}
+                    onChange={(e) => {
+                      setAgent2Query(e.target.value);
+                      setFormAgent2Id('');
+                      setAgent2PickerOpen(true);
+                    }}
+                    onFocus={() => setAgent2PickerOpen(true)}
+                    onBlur={() => setTimeout(() => setAgent2PickerOpen(false), 150)}
+                  />
+                </div>
+                {agent2PickerOpen && !agent2Locked && (
+                  <div className="acc-combo-list">
+                    {agentMatches(agent2Query).length === 0 ? (
+                      <div className="acc-combo-empty">No matches.</div>
+                    ) : (
+                      agentMatches(agent2Query).map((a) => (
+                        <div key={a.id} className="acc-combo-item" onMouseDown={(ev) => ev.preventDefault()} onClick={() => pickAgent2(a)}>
+                          {a.name}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
               <div className="acc-hint">
                 The visit is counted as achieved for <b>both</b> task owners.
               </div>

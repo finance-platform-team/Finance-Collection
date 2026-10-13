@@ -1,21 +1,9 @@
+/**
+ * Simple static feature flags — flip the value and redeploy (`pac code push`).
+ * No runtime toggle, no per-user config; that's intentionally as far as this goes
+ * unless a real need for more shows up.
+ */
 
-export const ENABLED_PAGES = [
-  'accounts',
-  'agents',
-  'visits',
-  'high-risk-companies',
-  'visit-plan',
-  'visit-audit',
-  'weekly-targets',
-  'collection-plan',
-  'daily-collection',
-  'dispute-management',
-  'sla',
-] as const;
-
-export function isPageEnabled(key: string): boolean {
-  return (ENABLED_PAGES as readonly string[]).includes(key);
-}
-
-
-export const DEFAULT_PAGE = ENABLED_PAGES[0];
+/** When true, the sidebar (Layout.tsx) shows only the "Visits" nav section —
+ * Collection Plan and Management are hidden entirely, not just collapsed. */
+export const VISITS_ONLY = true;

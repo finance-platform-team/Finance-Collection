@@ -48,6 +48,21 @@ const fmtSar = (n: number): string => Math.round(n || 0).toLocaleString('en-US')
 const fmtDate = (iso: string): string => (iso ? iso.slice(0, 10) : '—');
 const fmtPct = (n: number): string => `${n.toFixed(1)}%`;
 const norm = (s: string | null | undefined): string => (s == null ? '' : String(s)).trim().toUpperCase();
+
+const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+/** "YYYY-MM" key from a plan's start date — the same key used for both the
+ * month filter's options and its default (the current month). */
+function monthKeyOf(iso: string): string {
+  return (iso || '').slice(0, 7);
+}
+function monthLabelOf(key: string): string {
+  const [y, m] = key.split('-');
+  return `${MONTHS[parseInt(m, 10)] || m} ${y}`;
+}
+function currentMonthKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 const KSA_BU_SET = new Set(KSA_BU_CODES);
 
 type Tone = 'ok' | 'warn' | 'bad';
@@ -192,6 +207,8 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
+  // Defaults to the current month; '' means "All months".
+  const [monthFilter, setMonthFilter] = useState(currentMonthKey);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [buSearch, setBuSearch] = useState('');
@@ -336,10 +353,27 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
     return allBuAggregates.filter((b) => (region === 'KSA' ? KSA_BU_SET.has(norm(b.name)) : !KSA_BU_SET.has(norm(b.name))));
   }, [allBuAggregates, region]);
 
-  const groups = useMemo(() => {
+  const regionGroups = useMemo(() => {
     if (!region) return allGroups;
     return allGroups.filter((g) => (region === 'KSA' ? KSA_BU_SET.has(norm(g.buName)) : !KSA_BU_SET.has(norm(g.buName))));
   }, [allGroups, region]);
+
+  /** Options are built from the region-scoped set (before the month filter
+   * itself is applied), so switching regions never leaves a stale month
+   * selected that has no data in the new region. */
+  const monthOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    regionGroups.forEach((g) => {
+      const key = monthKeyOf(g.from);
+      if (key && !map.has(key)) map.set(key, monthLabelOf(key));
+    });
+    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [regionGroups]);
+
+  const groups = useMemo(() => {
+    if (!monthFilter) return regionGroups;
+    return regionGroups.filter((g) => monthKeyOf(g.from) === monthFilter);
+  }, [regionGroups, monthFilter]);
 
   /** BU picker source for the create drawer: union of BUs with AR Aging data
    * (which carry a real Target Plan Auto) and BUs that already have a plan but
@@ -721,7 +755,7 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
                           </div>
                           <div className="kpi-value">{fmtPct(t.achievement)}</div>
                           <div className="kpi-context">
-                            Target {fmtSar(t.targetPlan)} · Collected {fmtSar(t.actualCollected)}
+                            Weekly Target {fmtSar(t.weeklyTarget)} · Collected {fmtSar(t.actualCollected)}
                           </div>
                         </div>
                       );
@@ -730,6 +764,16 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
             )}
 
             <div className="tbl-shell">
+              <div className="tbl-hdr">
+                <select className="acc-f" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
+                  <option value="">All months</option>
+                  {monthOptions.map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="wt-tbl-scroll">
                 <table className="wt-tbl">
                   <thead>
@@ -770,7 +814,9 @@ export default function WeeklyTargetsPage({ region }: WeeklyTargetsPageProps) {
                         <td colSpan={9}>
                           <div className="acc-state">
                             <Icon className="fa-solid fa-inbox" />
-                            No weekly targets yet — use "New" to create one.
+                            {monthFilter
+                              ? `No weekly targets for ${monthLabelOf(monthFilter)} — try "All months" or use "New" to create one.`
+                              : 'No weekly targets yet — use "New" to create one.'}
                           </div>
                         </td>
                       </tr>

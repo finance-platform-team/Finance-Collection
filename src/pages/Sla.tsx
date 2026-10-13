@@ -266,17 +266,24 @@ export default function SlaPage({ region }: SlaPageProps) {
   // This page is Collection-only now (the Tag picker was removed from the create/edit
   // form and every rule saved through it is tagged Collection) — the list matches that,
   // filtering to Collection-tagged rows rather than showing legacy AR/AP/untagged ones.
+  // Folded into regionRows (not just `filtered`) so the "Showing X of Y" count
+  // below reflects Collection-only, region-scoped rows as its denominator —
+  // not inflated by AR/AP/untagged rows the page never shows anyway.
   // App-wide Region toggle (Layout header) — unset region on a rule counts as
   // Egypt, same convention used everywhere else this filter appears.
   const regionRows = useMemo(
-    () => (!region ? rows : rows.filter((r) => (region === 'KSA' ? r.region === 'KSA' : r.region !== 'KSA'))),
+    () =>
+      rows.filter((r) => {
+        if (r.tag !== TAG.COLLECTION) return false;
+        if (region && (region === 'KSA' ? r.region !== 'KSA' : r.region === 'KSA')) return false;
+        return true;
+      }),
     [rows, region]
   );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return regionRows.filter((r) => {
-      if (r.tag !== TAG.COLLECTION) return false;
       if (q && !`${r.action} ${r.department1} ${r.department2} ${r.responsibleName}`.toLowerCase().includes(q)) return false;
       return true;
     });
@@ -441,7 +448,7 @@ export default function SlaPage({ region }: SlaPageProps) {
               </div>
             </div>
             <div className="dm-count">
-              <Icon className="fa-solid fa-table" /> Showing <strong>{filtered.length}</strong> of <strong>{rows.length}</strong>
+              <Icon className="fa-solid fa-table" /> Showing <strong>{filtered.length}</strong> of <strong>{regionRows.length}</strong>
             </div>
           </div>
 

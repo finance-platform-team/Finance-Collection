@@ -10,32 +10,30 @@ function fmt(n: number): string {
   return Math.round(n || 0).toLocaleString('en-US');
 }
 
-/** Company-wide (region-scoped) flag comparing Accounts' total Target Visit
- * against Visit Plan's total planned Target — shown on both Accounts.tsx and
- * VisitPlan.tsx so a mismatch between the two is visible from either page. */
+/** Company-wide (region-scoped) alert banner comparing Accounts' total Target
+ * Visit against Visit Plan's total planned Target. Silent when the two match
+ * (or while still loading) — it's an alert for a real mismatch, not a
+ * permanent stat tile, so it only takes up space when there's something to
+ * flag. */
 export default function TargetFlagCard({ loading, accountTarget, visitPlanTarget }: TargetFlagCardProps) {
-  const ready = !loading && accountTarget != null && visitPlanTarget != null;
-  const diff = ready ? visitPlanTarget! - accountTarget! : 0;
-  const tone = !ready ? 'gold' : diff === 0 ? 'ok' : 'warn';
-  const icon = !ready ? 'fa-spinner fa-spin' : diff === 0 ? 'fa-circle-check' : 'fa-triangle-exclamation';
+  if (loading || accountTarget == null || visitPlanTarget == null) return null;
+  const diff = visitPlanTarget - accountTarget;
+  if (diff === 0) return null;
 
-  let context = 'Loading…';
-  if (ready) {
-    if (diff === 0) context = 'Matched';
-    else if (diff > 0) context = `Visit Plan is ${fmt(diff)} more`;
-    else context = `Account target is ${fmt(-diff)} more`;
-  }
+  const detail =
+    diff > 0
+      ? `Visit Plan totals ${fmt(visitPlanTarget)}, Accounts totals ${fmt(accountTarget)} — Visit Plan is ${fmt(diff)} more.`
+      : `Accounts totals ${fmt(accountTarget)}, Visit Plan totals ${fmt(visitPlanTarget)} — Accounts is ${fmt(-diff)} more.`;
 
   return (
-    <div className={`kpi-card kpi-${tone}`}>
-      <div className="kpi-top">
-        <span className={`kpi-icon kpi-icon-${tone}`}>
-          <Icon className={`fa-solid ${icon}`} />
-        </span>
-        <span className="kpi-label">Account vs Visit Plan target</span>
+    <div className="tf-banner tf-banner-warn">
+      <span className="tf-banner-icon tf-banner-icon-warn">
+        <Icon className="fa-solid fa-triangle-exclamation" />
+      </span>
+      <div className="tf-banner-body">
+        <div className="tf-banner-title">Target mismatch between Accounts and Visit Plan</div>
+        <div className="tf-banner-detail">{detail}</div>
       </div>
-      <div className="kpi-value">{ready ? `${fmt(accountTarget!)} / ${fmt(visitPlanTarget!)}` : '—'}</div>
-      <div className="kpi-context">{context}</div>
     </div>
   );
 }

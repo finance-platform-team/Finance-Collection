@@ -519,10 +519,14 @@ export default function DisputeManagementPage({ region }: DisputeManagementPageP
     setDetailOpen(false);
   }
 
-  const canAddUpdate = !updateSaving && !!detailDispute && updateDesc.trim() !== '';
+  const canAddUpdate = !updateSaving && !!detailDispute;
 
   async function addHistoryEntry() {
     if (updateSaving || !detailDispute) return;
+    if (!updateDesc.trim()) {
+      setUpdateError('What happened is required — enter a description before adding the update.');
+      return;
+    }
     setUpdateSaving(true);
     setUpdateError('');
     try {
@@ -1124,7 +1128,9 @@ export default function DisputeManagementPage({ region }: DisputeManagementPageP
                 </select>
               </div>
               <div className="acc-fld">
-                <label>What happened?</label>
+                <label>
+                  What happened? <span className="dm-req">*</span>
+                </label>
                 <textarea rows={4} placeholder="Free text…" value={updateDesc} onChange={(e) => setUpdateDesc(e.target.value)} />
               </div>
             </>

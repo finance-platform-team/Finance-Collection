@@ -5,21 +5,21 @@ import { Cfm_dailycollectionsService } from '../generated/services/Cfm_dailycoll
 import { Cfm_collectionmonthallocationsService } from '../generated/services/Cfm_collectionmonthallocationsService';
 import { Cfm_aragingsService } from '../generated/services/Cfm_aragingsService';
 import { Cr301_accountsService } from '../generated/services/Cr301_accountsService';
-import { Cr301_agentsService } from '../generated/services/Cr301_agentsService';
+import { Cfm_companymonthlybalancesesService } from '../generated/services/Cfm_companymonthlybalancesesService';
 import { SystemusersService } from '../generated/services/SystemusersService';
 import { Cfm_dailycollectionscfm_paymentmethod } from '../generated/models/Cfm_dailycollectionsModel';
 import type { Cfm_dailycollections, Cfm_dailycollectionsBase } from '../generated/models/Cfm_dailycollectionsModel';
 import type { Cfm_collectionmonthallocations, Cfm_collectionmonthallocationsBase } from '../generated/models/Cfm_collectionmonthallocationsModel';
 import type { Cfm_aragings } from '../generated/models/Cfm_aragingsModel';
 import type { Cr301_accounts } from '../generated/models/Cr301_accountsModel';
+import type { Cfm_companymonthlybalanceses } from '../generated/models/Cfm_companymonthlybalancesesModel';
 import { operationErrorMessage } from '../lib/errors';
 import { fetchAll } from '../lib/dataverse';
 import type { DocFile } from '../lib/docs';
 import { docExt, docIconClass, docIcon, fmtBytes, fileToBase64, docsFlow, listDocs, uploadDoc } from '../lib/docs';
 import { useConfirm } from '../lib/useConfirm';
 import { sanitizeAmountInput, MAX_ENTRY_VALUE } from '../lib/numberEntry';
-import { downloadCsv, escapeForCsv } from '../lib/csvExport';
-import type { Region } from '../lib/useRegion';
+import { KSA_BU_CODES, type Region } from '../lib/useRegion';
 import './DailyCollection.css';
 
 /**
@@ -44,6 +44,7 @@ const ENTRY_SELECT = [
   'cfm_collectiondate',
   'cfm_paymentmethod',
   'cfm_collectedamountnet',
+  'cfm_grossamount',
   'cfm_proof',
   'cfm_note',
   'cfm_paymentreference',
@@ -54,13 +55,47 @@ const ENTRY_SELECT = [
   '_createdby_value',
 ];
 
-const COMPANY_SELECT = ['cfm_aragingid', 'cfm_companycode', 'cfm_companyname', '_cfm_type_value', '_cfm_taskowner_value'];
+const COMPANY_SELECT = ['cfm_aragingid', 'cfm_companycode', 'cfm_companyname', '_cfm_type_value', 'cfm_targetplan'];
 
-// cfm_type (BU) isn't reliably populated on these AR Aging rows — region is
-// derived from the company's Task Owner (cfm_taskowner, a systemuser lookup)
-// instead: matched to that same user's cr301_agents record's cr18c_area, the
-// same source of truth Agents.tsx / Visits.tsx use elsewhere.
-const AREA_KSA = 989230004;
+/**
+ * Same BU+Code join as CollectionPlan.tsx's Company Monthly Balances map: cfm_businessunit
+ * is a lookup, so its display text comes off _cfm_businessunit_value's FormattedValue
+ * annotation rather than the (unselectable) cfm_businessunitname shadow property.
+ */
+const MONTHLY_BALANCE_SELECT = ['cfm_companymonthlybalancesid', 'cfm_companycode', '_cfm_businessunit_value', 'cfm_month', 'cfm_balance'];
+
+interface MonthlyBalanceRecord {
+  sortKey: number;
+  balance: number;
+}
+
+function buildBalanceMap(balRows: Cfm_companymonthlybalanceses[]): Map<string, MonthlyBalanceRecord[]> {
+  const map = new Map<string, MonthlyBalanceRecord[]>();
+  balRows.forEach((b) => {
+    const code = (b.cfm_companycode || '').trim().toUpperCase();
+    const bu = formattedValue(b, '_cfm_businessunit_value').trim().toUpperCase();
+    if (!code || !b.cfm_month) return;
+    const d = new Date(b.cfm_month);
+    if (Number.isNaN(d.getTime())) return;
+    const rec: MonthlyBalanceRecord = { sortKey: d.getUTCFullYear() * 12 + d.getUTCMonth(), balance: N(b.cfm_balance) };
+    const key = `${code}|${bu}`;
+    const list = map.get(key);
+    if (list) list.push(rec);
+    else map.set(key, [rec]);
+  });
+  return map;
+}
+
+// Region comes from the company's Entity/BU code (cfm_type, e.g. "AHJ") against
+// KSA_BU_CODES — same convention as CollectionPlan.tsx / WeeklyTargets.tsx /
+// HighRiskCompanies.tsx. (Was briefly derived from Task Owner instead, on the
+// assumption cfm_type wasn't populated — that assumption was wrong: it
+// produced an inverted KSA/Egypt split, confirmed against the Entity column's
+// real values like "AHJ", which IS in KSA_BU_CODES.)
+const KSA_BU_SET = new Set(KSA_BU_CODES);
+function normBu(s: string): string {
+  return (s || '').trim().toUpperCase();
+}
 
 const BANK_ACCOUNT_SELECT = ['cr301_accountid', 'cr301_acccountname', 'cr301_accountcode'];
 
@@ -169,7 +204,7 @@ interface CompanyOption {
   name: string;
   entityId: string;
   entityName: string;
-  taskOwnerId: string;
+  target: number;
 }
 
 interface BankAccountOption {
@@ -194,6 +229,7 @@ interface EntryRow {
   method: number | null;
   methodLabel: string;
   net: number;
+  gross: number;
   proof: string;
   note: string;
   paymentReference: string;
@@ -219,7 +255,7 @@ interface AllocRow {
 
 type Mode = 'create' | 'edit' | 'reedit';
 
-function normaliseEntry(row: Cfm_dailycollections, companies: CompanyOption[], regionByUserId: Map<string, 'EG' | 'KSA'>): EntryRow {
+function normaliseEntry(row: Cfm_dailycollections, companies: CompanyOption[]): EntryRow {
   const coId = row._cfm_companycode_value || '';
   const co = coId ? companies.find((c) => c.id === coId) : undefined;
   const status = row.cfm_statusaction == null ? null : Number(row.cfm_statusaction);
@@ -231,12 +267,13 @@ function normaliseEntry(row: Cfm_dailycollections, companies: CompanyOption[], r
     companyCode: co ? co.code || '' : '',
     companyName: co ? co.name || '—' : row.cfm_companynamefx || '—',
     companyId: coId,
-    region: (co && regionByUserId.get(co.taskOwnerId)) || '',
+    region: co ? (KSA_BU_SET.has(normBu(co.entityName)) ? 'KSA' : 'EG') : '',
     bankAccountId: row._cfm_bankaccount_value || '',
     date: row.cfm_collectiondate || '',
     method,
     methodLabel: formattedValue(row, 'cfm_paymentmethod') || (method == null ? '—' : PAYMENT_METHOD_OPTIONS.find((o) => o.value === method)?.label || String(method)),
     net: N(row.cfm_collectedamountnet),
+    gross: N(row.cfm_grossamount),
     proof: row.cfm_proof || '',
     note: row.cfm_note || '',
     paymentReference: row.cfm_paymentreference || '',
@@ -353,21 +390,26 @@ async function addCollectedAmountToArAging(dailyCollectionId: string): Promise<s
  * ======================================================================== */
 
 const IMPORT_COLUMNS = [
+  'BU',
   'Company Code',
-  'Bank Account',
-  'Collection Date (YYYY-MM-DD)',
+  'Transfer (Bank Account)',
   'Payment Method (Cheque or Bank transfer)',
-  'Net Amount',
+  'Payment Details (Collected Net Amount)',
+  'Check Instructions (Allocate To Month, YYYY-MM)',
+  'Allocation Amount',
+  'Date Of Check Delivery (Collection Date, YYYY-MM-DD)',
   'Payment Reference',
   'Note',
-  'Allocate To Month (YYYY-MM)',
-  'Allocation Amount',
   'Tax',
   'Volume Discount',
   'Early Payment Discount',
   'Admin Fees',
   'Rejection',
+  'Total Calc (Net minus deductions — reference only, not imported)',
 ] as const;
+
+/** Column letters for IMPORT_COLUMNS, in order — used to address cells/formulas by ref. */
+const IMPORT_COL_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'] as const;
 
 /** Strips a trailing "(hint text)" and normalizes for header matching, so the
  * format hints baked into IMPORT_COLUMNS don't need to survive round-trip. */
@@ -509,10 +551,10 @@ interface DailyCollectionPageProps {
 export default function DailyCollectionPage({ region }: DailyCollectionPageProps) {
   const [entries, setEntries] = useState<EntryRow[]>([]);
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
-  const [regionByTaskOwner, setRegionByTaskOwner] = useState<Map<string, 'EG' | 'KSA'>>(new Map());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [importBusy, setImportBusy] = useState(false);
+  const [templateBusy, setTemplateBusy] = useState(false);
 
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string }>({ id: '', name: '' });
 
@@ -536,6 +578,7 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
   const [selectedCo, setSelectedCo] = useState<CompanyOption | null>(null);
 
   const [bankAccounts, setBankAccounts] = useState<BankAccountOption[]>([]);
+  const [balanceMap, setBalanceMap] = useState<Map<string, MonthlyBalanceRecord[]>>(new Map());
   const [bankQuery, setBankQuery] = useState('');
   const [bankListOpen, setBankListOpen] = useState(false);
 
@@ -543,6 +586,8 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
   const [formMethod, setFormMethod] = useState('');
   const [formNet, setFormNet] = useState('');
   const [formNetError, setFormNetError] = useState<string | null>(null);
+  const [formGross, setFormGross] = useState('');
+  const [formGrossError, setFormGrossError] = useState<string | null>(null);
   const [formPaymentRef, setFormPaymentRef] = useState('');
   const [formBankAccountId, setFormBankAccountId] = useState('');
   const [formNote, setFormNote] = useState('');
@@ -584,31 +629,16 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
       name: r.cfm_companyname || '',
       entityId: r._cfm_type_value || '',
       entityName: formattedValue(r, '_cfm_type_value') || '—',
-      taskOwnerId: r._cfm_taskowner_value || '',
+      target: N(r.cfm_targetplan),
     }));
   }
 
-  /** Task Owner (a systemuser) -> region, via that user's cr301_agents record's
-   * cr18c_area — cfm_type (BU) isn't reliably populated on AR Aging rows, so
-   * it can't be used to scope Daily Collection by region the way other pages do. */
-  async function loadRegionByTaskOwner(): Promise<Map<string, 'EG' | 'KSA'>> {
-    const rows = await fetchAll<{ cr301_agentid: string; cr18c_area?: number; _cr301_agent_value?: string }>(
-      (skipToken) =>
-        Cr301_agentsService.getAll({
-          select: ['cr301_agentid', 'cr18c_area', '_cr301_agent_value'],
-          filter: 'cfm_iscollection eq true',
-          maxPageSize: 5000,
-          skipToken,
-        }),
-      'Could not load agents.'
+  async function loadBalanceMap(): Promise<Map<string, MonthlyBalanceRecord[]>> {
+    const rows = await fetchAll<Cfm_companymonthlybalanceses>(
+      (skipToken) => Cfm_companymonthlybalancesesService.getAll({ select: MONTHLY_BALANCE_SELECT, filter: 'statecode eq 0', maxPageSize: 5000, skipToken }),
+      'Could not load company monthly balances.'
     );
-    const map = new Map<string, 'EG' | 'KSA'>();
-    rows.forEach((a) => {
-      if (a._cr301_agent_value && a.cr18c_area != null) {
-        map.set(a._cr301_agent_value, Number(a.cr18c_area) === AREA_KSA ? 'KSA' : 'EG');
-      }
-    });
-    return map;
+    return buildBalanceMap(rows);
   }
 
   async function loadBankAccounts(): Promise<BankAccountOption[]> {
@@ -644,19 +674,19 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
     setLoading(true);
     setLoadError(null);
     try {
-      const [companyOptions, bankAccountOptions, regionMap, entryRows] = await Promise.all([
+      const [companyOptions, bankAccountOptions, entryRows, balances] = await Promise.all([
         loadCompanies(),
         loadBankAccounts(),
-        loadRegionByTaskOwner(),
         fetchAll<Cfm_dailycollections>(
           (skipToken) => Cfm_dailycollectionsService.getAll({ select: ENTRY_SELECT, filter: 'statecode eq 0', orderBy: ['createdon desc'], maxPageSize: 5000, skipToken }),
           'Could not load daily collection entries.'
         ),
+        loadBalanceMap(),
       ]);
+      setBalanceMap(balances);
       setCompanies(companyOptions);
       setBankAccounts(bankAccountOptions);
-      setRegionByTaskOwner(regionMap);
-      const rows = entryRows.map((r) => normaliseEntry(r, companyOptions, regionMap));
+      const rows = entryRows.map((r) => normaliseEntry(r, companyOptions));
       const counts = await loadAllocCounts(rows.map((r) => r.id));
       rows.forEach((r) => {
         r.allocCount = counts[r.id] || 0;
@@ -691,7 +721,7 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
     try {
       const fresh = await Cfm_dailycollectionsService.get(id, { select: ENTRY_SELECT });
       if (!fresh.success || !fresh.data) return;
-      const row = normaliseEntry(fresh.data, companies, regionByTaskOwner);
+      const row = normaliseEntry(fresh.data, companies);
       row.allocCount = allocCount;
       setEntries((prev) => (isNew ? [row, ...prev] : prev.map((e) => (e.id === id ? row : e))));
     } catch {
@@ -824,6 +854,19 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
     return N(a.amount) + N(a.tax) + N(a.vol) + N(a.early) + N(a.admin) + N(a.reject);
   }
 
+  /** Company Monthly Balances figure for the company currently selected in the form and
+   * one allocation row's month (e.g. "2026-09-01") — null when there's no matching record,
+   * which is treated as "no limit to check" rather than a zero balance. */
+  function getBalanceForMonth(company: CompanyOption | null, monthValue: string): number | null {
+    if (!company || !monthValue) return null;
+    const d = new Date(`${monthValue}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return null;
+    const sortKey = d.getUTCFullYear() * 12 + d.getUTCMonth();
+    const key = `${company.code.trim().toUpperCase()}|${company.entityName.trim().toUpperCase()}`;
+    const rec = balanceMap.get(key)?.find((b) => b.sortKey === sortKey);
+    return rec ? rec.balance : null;
+  }
+
   function addAllocRow(prefill?: Partial<AllocRow>) {
     setAllocs((prev) => [
       ...prev,
@@ -859,21 +902,23 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
   }
 
   const netVal = N(formNet);
+  const grossVal = N(formGross);
   const sumAllocs = useMemo(() => allocs.reduce((t, a) => t + N(a.amount), 0), [allocs]);
+  const sumAllocsGross = useMemo(() => allocs.reduce((t, a) => t + grossOf(a), 0), [allocs]);
   const sumRejection = useMemo(() => allocs.reduce((t, a) => t + N(a.reject), 0), [allocs]);
   const sumOk = netVal > 0 && Math.abs(sumAllocs - netVal) < 0.01;
+  const sumGrossOk = grossVal > 0 && Math.abs(sumAllocsGross - grossVal) < 0.01;
 
   // Allocations are normally read-only once an entry leaves 'create'/'reedit' — but
   // Rejected (reedit) and Pending AR Verification are still open for correction before
   // AR has acted on them, so 'edit' mode also unlocks allocation editing for those.
   const allocsEditable = mode !== 'edit' || editEntry?.status === AR_STATUS.PENDING_VERIFY;
 
-  const canSave = useMemo(() => {
-    if (saving || locked) return false;
-    if (!formDate || formMethod === '' || netVal <= 0) return false;
-    if (!allocsEditable) return true;
-    return !!selectedCo && sumOk;
-  }, [saving, locked, formDate, formMethod, netVal, allocsEditable, selectedCo, sumOk]);
+  // Only disable Save for states that genuinely block it (already saving, or a
+  // locked entry with its own explanatory hint elsewhere in the form) — actual
+  // required-field checks live in saveEntry() so clicking Save always surfaces
+  // *why* it can't proceed instead of silently doing nothing.
+  const canSave = !saving && !locked;
 
   function openDrawerCreate() {
     setMode('create');
@@ -886,6 +931,7 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
     setFormDate(new Date().toISOString().slice(0, 10));
     setFormMethod('');
     setFormNet('');
+    setFormGross('');
     setFormPaymentRef('');
     setFormBankAccountId('');
     setBankQuery('');
@@ -911,7 +957,7 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
     setSelectedCo(
       entry.companyId
         ? companies.find((c) => c.id === entry.companyId) ||
-            { id: entry.companyId, code: entry.companyCode, name: entry.companyName, entityId: '', entityName: entry.entity, taskOwnerId: '' }
+            { id: entry.companyId, code: entry.companyCode, name: entry.companyName, entityId: '', entityName: entry.entity, target: 0 }
         : null
     );
     setCoQuery(entryLocked ? '' : `${entry.companyCode} — ${entry.companyName}`);
@@ -919,6 +965,7 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
     setFormDate(entry.date ? entry.date.slice(0, 10) : '');
     setFormMethod(entry.method == null ? '' : String(entry.method));
     setFormNet(entry.net ? String(entry.net) : '');
+    setFormGross(entry.gross ? String(entry.gross) : '');
     setFormPaymentRef(entry.paymentReference || '');
     setFormBankAccountId(entry.bankAccountId || '');
     const currentBank = entry.bankAccountId ? bankAccounts.find((b) => b.id === entry.bankAccountId) : undefined;
@@ -1058,7 +1105,52 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
   }
 
   async function saveEntry() {
-    if (saving) return;
+    if (saving || locked) return;
+    if (!formDate) {
+      setFormError('Collection date is required.');
+      return;
+    }
+    if (formMethod === '') {
+      setFormError('Payment method is required.');
+      return;
+    }
+    if (netVal <= 0) {
+      setFormError('Collected amount (net) must be greater than zero.');
+      return;
+    }
+    if (grossVal <= 0) {
+      setFormError('Gross amount must be greater than zero.');
+      return;
+    }
+    if (allocsEditable) {
+      if (!selectedCo) {
+        setFormError('Company is required — pick one from AR Aging.');
+        return;
+      }
+      if (!sumOk) {
+        setFormError(`Allocation amounts must add up to the collected net amount (${fmt(netVal)}).`);
+        return;
+      }
+      if (!sumGrossOk) {
+        setFormError(`Allocation gross amounts must add up to the gross amount (${fmt(grossVal)}).`);
+        return;
+      }
+      const overages = allocs
+        .map((a) => ({ a, balance: getBalanceForMonth(selectedCo, a.month) }))
+        .filter((x): x is { a: AllocRow; balance: number } => x.balance != null && N(x.a.amount) > x.balance);
+      if (overages.length) {
+        const monthLabel = (v: string) => MONTH_OPTIONS.find((o) => o.value === v)?.label || v;
+        const lines = overages.map(({ a, balance }) => `${monthLabel(a.month)}: amount ${fmt(N(a.amount))} exceeds balance ${fmt(balance)}`).join('; ');
+        const proceed = await confirm({
+          title: 'Amount exceeds available balance',
+          message: `${lines}. Save anyway?`,
+          danger: true,
+          confirmLabel: 'Save anyway',
+          cancelLabel: 'Cancel',
+        });
+        if (!proceed) return;
+      }
+    }
     setSaving(true);
     setFormError('');
     try {
@@ -1068,6 +1160,7 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
       parentBody.cfm_collectiondate = formDate ? `${formDate}T00:00:00Z` : null;
       parentBody.cfm_paymentmethod = formMethod === '' ? null : parseInt(formMethod, 10);
       parentBody.cfm_collectedamountnet = netVal;
+      parentBody.cfm_grossamount = grossVal;
       parentBody.cfm_totalrejection = sumRejection;
       parentBody.cfm_paymentreference = formPaymentRef.trim() || null;
       parentBody.cfm_note = formNote.trim() || null;
@@ -1194,8 +1287,89 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
     }
   }
 
-  function downloadImportTemplate() {
-    downloadCsv('daily_collection_import_template.csv', [IMPORT_COLUMNS.map(escapeForCsv).join(',')]);
+  /**
+   * Real .xlsx (via ExcelJS, loaded on demand — it's ~1MB, no reason to ship it
+   * in the main bundle for a feature used by one button) so the sheet can be a
+   * genuine Excel Table (header filter arrows on every column) with in-cell
+   * dropdown pick-lists for BU, Company Code and Transfer — sourced from a
+   * hidden "Lists" sheet rather than a separate visible reference block.
+   * Company Code is pre-filled per active AR Aging company in the current
+   * region; BU and Transfer are left for the dropdown. Import still only
+   * reads .csv (see importCsvFile) — filling this in Excel needs a "Save As
+   * CSV" before re-uploading.
+   */
+  async function downloadImportTemplate() {
+    setTemplateBusy(true);
+    try {
+      const regionCompanies = companies
+        .filter((c) => !region || (KSA_BU_SET.has(normBu(c.entityName)) ? region === 'KSA' : region !== 'KSA'))
+        .slice()
+        .sort((a, b) => a.entityName.localeCompare(b.entityName) || a.code.localeCompare(b.code));
+      const buChoices = Array.from(new Set(regionCompanies.map((c) => c.entityName).filter(Boolean))).sort();
+      const bankLabels = bankAccounts.map(bankAccountLabel);
+
+      const ExcelJS = await import('exceljs');
+      const wb = new ExcelJS.Workbook();
+
+      const lists = wb.addWorksheet('Lists', { state: 'hidden' });
+      lists.getColumn(1).values = ['BU', ...buChoices];
+      lists.getColumn(2).values = ['CompanyCode', ...regionCompanies.map((c) => c.code)];
+      lists.getColumn(3).values = ['BankAccount', ...bankLabels];
+
+      const sheet = wb.addWorksheet('Daily Collection Import');
+      const blankRows = 20;
+      const rowCount = regionCompanies.length + blankRows;
+
+      const rows: string[][] = [];
+      for (let i = 0; i < rowCount; i++) {
+        const co = regionCompanies[i];
+        const row = new Array(IMPORT_COLUMNS.length).fill('');
+        if (co) row[1] = co.code;
+        rows.push(row);
+      }
+
+      sheet.addTable({
+        name: 'DailyCollectionImport',
+        ref: 'A1',
+        headerRow: true,
+        style: { theme: 'TableStyleMedium2', showRowStripes: true },
+        columns: IMPORT_COLUMNS.map((label) => ({ name: label, filterButton: true })),
+        rows,
+      });
+      sheet.columns.forEach((col) => {
+        col.width = 24;
+      });
+
+      const listValidation = (letter: string, choiceCount: number, listColLetter: string) => {
+        if (!choiceCount) return;
+        for (let r = 2; r <= rowCount + 1; r++) {
+          sheet.getCell(`${letter}${r}`).dataValidation = {
+            type: 'list',
+            allowBlank: true,
+            formulae: [`Lists!$${listColLetter}$2:$${listColLetter}$${1 + choiceCount}`],
+          };
+        }
+      };
+      listValidation('A', buChoices.length, 'A');
+      listValidation('B', regionCompanies.length, 'B');
+      listValidation('C', bankLabels.length, 'C');
+
+      const [, , , , net, , , , , , tax, vol, early, admin, reject] = IMPORT_COL_LETTERS;
+      for (let r = 2; r <= rowCount + 1; r++) {
+        sheet.getCell(`P${r}`).value = { formula: `${net}${r}-${tax}${r}-${vol}${r}-${early}${r}-${admin}${r}-${reject}${r}` };
+      }
+
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'daily_collection_import_template.xlsx';
+      link.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setTemplateBusy(false);
+    }
   }
 
   async function importCsvFile(file: File) {
@@ -1209,13 +1383,13 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
       const colIndex = (label: string) => headerRow.indexOf(normaliseHeader(label));
       const idx = {
         companyCode: colIndex('Company Code'),
-        bankAccount: colIndex('Bank Account'),
-        date: colIndex('Collection Date'),
+        bankAccount: colIndex('Transfer'),
+        date: colIndex('Date Of Check Delivery'),
         method: colIndex('Payment Method'),
-        net: colIndex('Net Amount'),
+        net: colIndex('Payment Details'),
         paymentRef: colIndex('Payment Reference'),
         note: colIndex('Note'),
-        allocMonth: colIndex('Allocate To Month'),
+        allocMonth: colIndex('Check Instructions'),
         allocAmount: colIndex('Allocation Amount'),
         tax: colIndex('Tax'),
         vol: colIndex('Volume Discount'),
@@ -1326,8 +1500,13 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
             <button className="acc-btn" onClick={load}>
               <Icon className="fa-solid fa-rotate" /> Reload
             </button>
-            <button className="acc-btn" onClick={downloadImportTemplate} title="Download a blank .csv with the columns Import expects">
-              <Icon className="fa-solid fa-file-csv" /> Template
+            <button
+              className="acc-btn"
+              onClick={downloadImportTemplate}
+              disabled={templateBusy}
+              title="Download an .xlsx Table pre-filled with every company's Company Code, with BU/Transfer/Bank Account as in-cell dropdowns. Save As CSV before using Import."
+            >
+              <Icon className={`fa-solid ${templateBusy ? 'fa-spinner fa-spin' : 'fa-file-excel'}`} /> {templateBusy ? 'Preparing…' : 'Template'}
             </button>
             <label className={`acc-btn dc-import-btn${importBusy ? ' dc-import-busy' : ''}`} title="Bulk-create entries from a filled-in template">
               <Icon className={`fa-solid ${importBusy ? 'fa-spinner fa-spin' : 'fa-file-import'}`} /> {importBusy ? 'Importing…' : 'Import CSV'}
@@ -1650,6 +1829,10 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
                   <div className="k">Entity</div>
                   <div className="v">{selectedCo.entityName || '—'}</div>
                 </div>
+                <div>
+                  <div className="k">Target plan</div>
+                  <div className="v">{fmt(selectedCo.target)}</div>
+                </div>
               </>
             ) : (
               <div>
@@ -1701,6 +1884,28 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
               />
               {formNetError && <div className="field-error">{formNetError}</div>}
             </div>
+            <div className="acc-fld">
+              <label>
+                Gross amount <span className="dc-req">*</span>
+              </label>
+              <input
+                type="number"
+                step="any"
+                min={0}
+                placeholder="0.00"
+                value={formGross}
+                disabled={locked}
+                onChange={(e) => {
+                  const { value, message } = sanitizeAmountInput(e.target.value);
+                  setFormGross(value);
+                  setFormGrossError(message);
+                }}
+              />
+              {formGrossError && <div className="field-error">{formGrossError}</div>}
+            </div>
+          </div>
+
+          <div className="dc-fld-row">
             <div className="acc-fld">
               <label>Payment reference #</label>
               <input placeholder="e.g. TT-887421" value={formPaymentRef} disabled={locked} onChange={(e) => setFormPaymentRef(e.target.value)} />
@@ -1771,6 +1976,8 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
               {allocs.map((a, idx) => {
                 const gross = grossOf(a);
                 const readOnlyCard = !allocsEditable;
+                const balance = getBalanceForMonth(selectedCo, a.month);
+                const overBalance = balance != null && N(a.amount) > balance;
                 return (
                   <div key={idx} className="dc-alloc-card">
                     <div className="dc-alloc-card-hdr">
@@ -1781,6 +1988,10 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
                           </option>
                         ))}
                       </select>
+                      <span className={`dc-alloc-balance${overBalance ? ' warn' : ''}`}>
+                        <Icon className="fa-solid fa-scale-balanced" />
+                        {balance == null ? 'No balance data' : `Balance: ${fmt(balance)}`}
+                      </span>
                       {!readOnlyCard && !locked && (
                         <button className="dc-alloc-del" onClick={() => removeAllocRow(idx)} aria-label="Remove">
                           <Icon className="fa-solid fa-trash" />
@@ -1792,6 +2003,11 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
                         <div className="dc-alloc-fg-lbl">Amount</div>
                         <input className="dc-alloc-inp" type="number" step="any" value={a.amount || ''} disabled={readOnlyCard || locked} onChange={(e) => updateAllocRow(idx, 'amount', e.target.value)} />
                         {allocErrors[`${idx}-amount`] && <div className="field-error">{allocErrors[`${idx}-amount`]}</div>}
+                        {!allocErrors[`${idx}-amount`] && overBalance && (
+                          <div className="dc-field-warn">
+                            <Icon className="fa-solid fa-triangle-exclamation" /> Exceeds available balance ({fmt(balance!)}).
+                          </div>
+                        )}
                       </div>
                       <div className="dc-alloc-fg">
                         <div className="dc-alloc-fg-lbl">Tax</div>
@@ -1832,25 +2048,46 @@ export default function DailyCollectionPage({ region }: DailyCollectionPageProps
           )}
 
           {!locked && allocsEditable && (
-            <div className={`dc-sum-pill ${sumOk ? 'ok' : 'bad'}`}>
-              <span>
-                <Icon className={`fa-solid ${sumOk ? 'fa-circle-check' : 'fa-circle-exclamation'}`} />{' '}
-                {sumOk ? 'Σ allocations match collected net' : 'Σ allocations must equal collected net'}
-              </span>
-              <span className="amounts">
-                {fmt(sumAllocs)} / {fmt(netVal)}
-              </span>
-            </div>
+            <>
+              <div className={`dc-sum-pill ${sumOk ? 'ok' : 'bad'}`}>
+                <span>
+                  <Icon className={`fa-solid ${sumOk ? 'fa-circle-check' : 'fa-circle-exclamation'}`} />{' '}
+                  {sumOk ? 'Σ allocations match collected net' : 'Σ allocations must equal collected net'}
+                </span>
+                <span className="amounts">
+                  {fmt(sumAllocs)} / {fmt(netVal)}
+                </span>
+              </div>
+              <div className={`dc-sum-pill ${sumGrossOk ? 'ok' : 'bad'}`}>
+                <span>
+                  <Icon className={`fa-solid ${sumGrossOk ? 'fa-circle-check' : 'fa-circle-exclamation'}`} />{' '}
+                  {sumGrossOk ? 'Σ allocations gross match gross amount' : 'Σ allocations gross must equal gross amount'}
+                </span>
+                <span className="amounts">
+                  {fmt(sumAllocsGross)} / {fmt(grossVal)}
+                </span>
+              </div>
+            </>
           )}
           {!allocsEditable && (
-            <div className="dc-sum-pill ok">
-              <span>
-                <Icon className="fa-solid fa-circle-info" /> Allocations are read-only in this status
-              </span>
-              <span className="amounts">
-                {fmt(sumAllocs)} / {fmt(netVal)}
-              </span>
-            </div>
+            <>
+              <div className="dc-sum-pill ok">
+                <span>
+                  <Icon className="fa-solid fa-circle-info" /> Allocations are read-only in this status
+                </span>
+                <span className="amounts">
+                  {fmt(sumAllocs)} / {fmt(netVal)}
+                </span>
+              </div>
+              <div className="dc-sum-pill ok">
+                <span>
+                  <Icon className="fa-solid fa-circle-info" /> Allocations gross are read-only in this status
+                </span>
+                <span className="amounts">
+                  {fmt(sumAllocsGross)} / {fmt(grossVal)}
+                </span>
+              </div>
+            </>
           )}
 
           {mode === 'create' ? (

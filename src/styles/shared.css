@@ -103,6 +103,19 @@ html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
 .kpi-context{font-size:12px;color:var(--muted);margin-top:4px;min-height:15px}
 @media(max-width:700px){.kpi-grid{grid-template-columns:repeat(2,1fr)}}
 
+/* Alert banner — a real notification (mismatch, out of range) rather than a
+   permanent stat tile: full width, icon badge + headline + detail, silent
+   when there's nothing to flag. */
+.tf-banner{display:flex;align-items:flex-start;gap:14px;padding:14px 18px;border-radius:12px;
+  margin-bottom:20px;border:1px solid var(--line)}
+.tf-banner-warn{background:var(--warnbg);border-color:rgba(219,162,91,.4)}
+.tf-banner-icon{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;font-size:14px;margin-top:1px}
+.tf-banner-icon-warn{background:rgba(219,162,91,.22);color:var(--warn)}
+.tf-banner-body{flex:1;min-width:0}
+.tf-banner-title{font-family:'Outfit',sans-serif;font-weight:700;font-size:13.5px;color:var(--ink)}
+.tf-banner-detail{font-size:12.5px;color:var(--muted);margin-top:3px}
+
 /* Unified container — every page's filter bar lives inside the table's own header
    (one card), not as a separate card floating above it. */
 .tbl-shell{background:var(--card);border:1px solid var(--line);border-radius:12px;
@@ -114,6 +127,12 @@ html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
 .acc-search input{width:100%;padding:9px 12px 9px 34px;border:1px solid var(--line);
   border-radius:9px;font-family:'Inter';font-size:13px;background:#fbf8f2;box-sizing:border-box;color:var(--ink)}
 .acc-search input:focus{outline:none;border-color:var(--gold);background:#fff}
+/* .acc-search nested inside a drawer's .acc-fld (a searchable combobox field,
+   not the page-level filter bar) needs its own icon-padding win — .acc-fld
+   input{padding:10px 12px} below is equal specificity and comes later in the
+   cascade, so without this the icon overlapped the placeholder text. */
+.acc-fld .acc-search input{padding:9px 12px 9px 34px}
+.acc-fld .acc-search input:focus{outline:none;border-color:var(--gold);background:#fff}
 select.acc-f{padding:9px 12px;border:1px solid var(--line);border-radius:9px;
   font-family:'Inter';font-size:13px;background:#fbf8f2;color:var(--ink);cursor:pointer;min-width:150px}
 select.acc-f:hover{border-color:var(--hover-border)}

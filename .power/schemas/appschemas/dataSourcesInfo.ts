@@ -40,6 +40,13 @@ export const dataSourcesInfo = {
     "dataSourceType": "Dataverse",
     "apis": {}
   },
+  "cfm_companymonthlybalanceses": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cfm_companymonthlybalancesid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
   "cfm_dailycollections": {
     "tableId": "",
     "version": "",
@@ -107,6 +114,13 @@ export const dataSourcesInfo = {
     "tableId": "",
     "version": "",
     "primaryKey": "cr301_categoryid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "cr301_salesteams": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "cr301_salesteamid",
     "dataSourceType": "Dataverse",
     "apis": {}
   },

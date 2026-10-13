@@ -91,6 +91,8 @@
   border-radius:8px;font-weight:600;background:#fbf8f2;color:var(--ink);box-sizing:border-box}
 .vp-pair input[readonly]{background:var(--bg);color:var(--muted)}
 .vp-pair input:focus{outline:none;border-color:var(--gold)}
+.vp-actual-detail{font-size:10.5px;color:var(--muted);text-align:center;margin-top:5px}
+.vp-actual-wrong{color:var(--bad)}
 .vp-wbar{height:5px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:10px}
 .vp-wbar>span{display:block;height:100%;background:var(--ok);border-radius:4px}
 .vp-cell-ico{position:absolute;top:10px;right:10px;font-size:11px;color:var(--muted)}

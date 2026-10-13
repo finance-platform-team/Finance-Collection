@@ -133,6 +133,13 @@
           "x-ms-read-only": true,
           "maxLength": 4000
         },
+        "cfm_grossamount": {
+          "type": "string",
+          "title": "Gross Amount",
+          "x-ms-dataverse-attribute": "cfm_grossamount",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "cfm_GrossAmount"
+        },
         "cfm_name": {
           "type": "string",
           "title": "Name",

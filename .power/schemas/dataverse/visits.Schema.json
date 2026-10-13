@@ -10,6 +10,37 @@
       "x-ms-dataverse-primary-id": "cr301_visitid",
       "x-ms-dataverse-primary-name": "cr301_newcolumn",
       "properties": {
+        "and_isnetworkingmodule": {
+          "type": "string",
+          "title": "IS Networking Module",
+          "x-ms-dataverse-attribute": "and_isnetworkingmodule",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "and_ISNetworkingModule",
+          "enum": [
+            "No",
+            "Yes"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "e62c6973-ffb4-f111-aaac-00224882d001",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "IS Networking Module",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "and_isnetworkingmodulename": {
+          "type": "string",
+          "title": "and_isnetworkingmodulename",
+          "x-ms-dataverse-attribute": "and_isnetworkingmodulename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "and_isnetworkingmoduleName",
+          "x-ms-read-only": true
+        },
         "cfm_agent2": {
           "type": "string",
           "title": "Agent 2",
@@ -25,40 +56,6 @@
           "x-ms-schema-name": "cfm_Agent2Name",
           "x-ms-read-only": true,
           "maxLength": 850
-        },
-        "cfm_category": {
-          "type": "string",
-          "title": "Category",
-          "x-ms-dataverse-attribute": "cfm_category",
-          "x-ms-dataverse-type": "PicklistType",
-          "x-ms-schema-name": "cfm_Category",
-          "enum": [
-            "Partially Closed",
-            "Closed",
-            "Open"
-          ],
-          "x-ms-enum-values": [
-            766340000,
-            766340001,
-            766340002
-          ],
-          "Color": [
-            null,
-            null,
-            null
-          ],
-          "x-ms-optionsetmetadataid": "3fea76b7-e193-f111-8075-00224882d001",
-          "x-ms-isGlobal": true,
-          "x-ms-optionsetdisplayname": "Collection Category",
-          "x-ms-optionSetType": "Picklist"
-        },
-        "cfm_categoryname": {
-          "type": "string",
-          "title": "cfm_categoryname",
-          "x-ms-dataverse-attribute": "cfm_categoryname",
-          "x-ms-dataverse-type": "VirtualType",
-          "x-ms-schema-name": "cfm_categoryName",
-          "x-ms-read-only": true
         },
         "cfm_revisitdate": {
           "type": "string",
@@ -76,14 +73,23 @@
           "enum": [
             "Collection",
             "AR",
-            "AP"
+            "AP",
+            "Mediation Request",
+            "Cash Flow",
+            "Not Discharge"
           ],
           "x-ms-enum-values": [
             766340000,
             766340001,
-            766340002
+            766340002,
+            766340003,
+            766340004,
+            752210001
           ],
           "Color": [
+            null,
+            null,
+            null,
             null,
             null,
             null
@@ -720,6 +726,103 @@
           "x-ms-schema-name": "ms_accountneedidentifiedName",
           "x-ms-read-only": true
         },
+        "ms_accounttype": {
+          "type": "string",
+          "title": "Account Type",
+          "x-ms-dataverse-attribute": "ms_accounttype",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "ms_AccountType",
+          "enum": [
+            "Community",
+            "Medical",
+            "Academy",
+            "Africa",
+            "Investment",
+            "Finance",
+            "AHC",
+            "Home Care",
+            "VD",
+            "Ventures",
+            "Insurance ",
+            "Direct ",
+            "Community Cash Card",
+            "Community Cash Account",
+            "Egypt Medical Tourism",
+            "Medical Tourism",
+            "Corporate Sales Check-up",
+            "Community Cash Offers",
+            "Cash deals",
+            "Cash",
+            "Home Care Cash",
+            "Credit",
+            "Cash Account",
+            "Other"
+          ],
+          "x-ms-enum-values": [
+            983080000,
+            983080001,
+            989230001,
+            989230002,
+            989230003,
+            989230004,
+            989230005,
+            989230006,
+            989230007,
+            989230008,
+            983080002,
+            766340001,
+            124700001,
+            124700002,
+            124700003,
+            124700004,
+            124700005,
+            124700006,
+            124700007,
+            124700008,
+            124700009,
+            124700010,
+            124700011,
+            124700012
+          ],
+          "Color": [
+            "#9cbfd6",
+            "#8ef58e",
+            "#d9ccb8",
+            "#907eed",
+            "#d95f5f",
+            "#dcff6b",
+            "#e39696",
+            "#b05a5a",
+            "#9eb2de",
+            "#87e08a",
+            "#8892eb",
+            "#d1ffcf",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "be6fe7ab-898c-f011-b4cc-6045bdf37b46",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Account Type",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "ms_accounttypename": {
+          "type": "string",
+          "title": "ms_accounttypename",
+          "x-ms-dataverse-attribute": "ms_accounttypename",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "ms_accounttypeName",
+          "x-ms-read-only": true
+        },
         "ms_approvalstatus": {
           "type": "string",
           "title": "Approval Status",
@@ -728,16 +831,19 @@
           "x-ms-schema-name": "ms_ApprovalStatus",
           "enum": [
             "Approved",
+            "Need Modifications",
             "Rejected",
             "Waiting For Approval"
           ],
           "x-ms-enum-values": [
             999740000,
+            100000001,
             999740001,
             999740002
           ],
           "Color": [
             "#a7c2b2",
+            "#f7f7d2",
             "#daa1a3",
             "#ffbe8f"
           ],
@@ -753,6 +859,70 @@
           "x-ms-dataverse-type": "VirtualType",
           "x-ms-schema-name": "ms_approvalstatusName",
           "x-ms-read-only": true
+        },
+        "ms_branchname": {
+          "type": "string",
+          "title": "Branch name",
+          "x-ms-dataverse-attribute": "ms_branchname",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "ms_Branchname"
+        },
+        "ms_branchnamename": {
+          "type": "string",
+          "title": "ms_branchnamename",
+          "x-ms-dataverse-attribute": "ms_branchnamename",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ms_BranchnameName",
+          "x-ms-read-only": true,
+          "maxLength": 850
+        },
+        "ms_closeoutlatitude": {
+          "type": "string",
+          "title": "Close-out latitude",
+          "x-ms-dataverse-attribute": "ms_closeoutlatitude",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "ms_Closeoutlatitude"
+        },
+        "ms_closeoutlocationstatus": {
+          "type": "string",
+          "title": "Close-out location status",
+          "x-ms-dataverse-attribute": "ms_closeoutlocationstatus",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "ms_Closeoutlocationstatus",
+          "enum": [
+            "Valid",
+            "Invalid",
+            "Not captured"
+          ],
+          "x-ms-enum-values": [
+            100000000,
+            100000001,
+            100000002
+          ],
+          "Color": [
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "ec290181-79a0-f111-b8dc-00224882d001",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Close-out location status",
+          "x-ms-optionSetType": "Picklist"
+        },
+        "ms_closeoutlocationstatusname": {
+          "type": "string",
+          "title": "ms_closeoutlocationstatusname",
+          "x-ms-dataverse-attribute": "ms_closeoutlocationstatusname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "ms_closeoutlocationstatusName",
+          "x-ms-read-only": true
+        },
+        "ms_closeoutlongitude": {
+          "type": "string",
+          "title": "Close-out longitude",
+          "x-ms-dataverse-attribute": "ms_closeoutlongitude",
+          "x-ms-dataverse-type": "DecimalType",
+          "x-ms-schema-name": "ms_Closeoutlongitude"
         },
         "ms_engagementtype": {
           "type": "string",
@@ -903,19 +1073,61 @@
           "x-ms-schema-name": "ms_ismanagementengagementrequiredName",
           "x-ms-read-only": true
         },
-        "ms_medicalkpi": {
+        "ms_locationapprovalstatus": {
           "type": "string",
-          "title": "Medical KPI",
-          "x-ms-dataverse-attribute": "ms_medicalkpi",
-          "x-ms-dataverse-type": "LookupType",
-          "x-ms-schema-name": "ms_MedicalKPI"
+          "title": "Location approval status",
+          "x-ms-dataverse-attribute": "ms_locationapprovalstatus",
+          "x-ms-dataverse-type": "PicklistType",
+          "x-ms-schema-name": "ms_Locationapprovalstatus",
+          "enum": [
+            "Approved",
+            "Rejected",
+            "Pending"
+          ],
+          "x-ms-enum-values": [
+            620930000,
+            620930001,
+            620930002
+          ],
+          "Color": [
+            null,
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "d9f7c992-9ae1-f011-8407-7ced8d0cef8a",
+          "x-ms-isGlobal": true,
+          "x-ms-optionsetdisplayname": "Approval Status",
+          "x-ms-optionSetType": "Picklist"
         },
-        "ms_medicalkpiname": {
+        "ms_locationapprovalstatusname": {
           "type": "string",
-          "title": "ms_medicalkpiname",
-          "x-ms-dataverse-attribute": "ms_medicalkpiname",
+          "title": "ms_locationapprovalstatusname",
+          "x-ms-dataverse-attribute": "ms_locationapprovalstatusname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "ms_locationapprovalstatusName",
+          "x-ms-read-only": true
+        },
+        "ms_locationrejectreason": {
+          "type": "string",
+          "title": "Location reject reason",
+          "x-ms-dataverse-attribute": "ms_locationrejectreason",
           "x-ms-dataverse-type": "StringType",
-          "x-ms-schema-name": "ms_MedicalKPIName",
+          "x-ms-schema-name": "ms_Locationrejectreason",
+          "maxLength": 100
+        },
+        "ms_nameofemp": {
+          "type": "string",
+          "title": "Name Of Emp",
+          "x-ms-dataverse-attribute": "ms_nameofemp",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "ms_NameOfEmp"
+        },
+        "ms_nameofempname": {
+          "type": "string",
+          "title": "ms_nameofempname",
+          "x-ms-dataverse-attribute": "ms_nameofempname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ms_NameOfEmpName",
           "x-ms-read-only": true,
           "maxLength": 850
         },
@@ -1096,6 +1308,22 @@
           "x-ms-dataverse-type": "VirtualType",
           "x-ms-schema-name": "ms_segmentName",
           "x-ms-read-only": true
+        },
+        "ms_titleofemp": {
+          "type": "string",
+          "title": "Title of EMP",
+          "x-ms-dataverse-attribute": "ms_titleofemp",
+          "x-ms-dataverse-type": "LookupType",
+          "x-ms-schema-name": "ms_TitleofEMP"
+        },
+        "ms_titleofempname": {
+          "type": "string",
+          "title": "ms_titleofempname",
+          "x-ms-dataverse-attribute": "ms_titleofempname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "ms_TitleofEMPName",
+          "x-ms-read-only": true,
+          "maxLength": 850
         },
         "ms_urgency": {
           "type": "string",

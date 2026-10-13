@@ -113,6 +113,16 @@
           "entitySetName": "businessunits",
           "logicalName": "businessunit",
           "isHidden": false
+        },
+        "salesteams": {
+          "entitySetName": "cr301_salesteams",
+          "logicalName": "cr301_salesteam",
+          "isHidden": false
+        },
+        "companymonthlybalances": {
+          "entitySetName": "cfm_companymonthlybalanceses",
+          "logicalName": "cfm_companymonthlybalances",
+          "isHidden": false
         }
       },
       "environmentVariableName": ""

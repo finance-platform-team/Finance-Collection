@@ -83,6 +83,14 @@
 
 .cp-flag-none{color:var(--muted);text-align:left !important}
 
+/* Company Monthly Balance columns — one numeric column per matched month (current year),
+   trailing the table, tinted gold so they read as a distinct group from the columns
+   before them rather than blending into the aging/flag numbers. */
+.cp-tbl thead th.cp-col-month, .cp-tbl tbody td.cp-col-month{background:var(--cp-gold-bg)}
+.cp-tbl thead th.cp-col-month{color:var(--cp-gold-text)}
+.cp-tbl tbody td.cp-col-month{color:var(--cp-gold-text);font-variant-numeric:tabular-nums;font-weight:500}
+.cp-tbl tbody tr.cp-row:hover td.cp-col-month{background:var(--cp-gold-bg)}
+
 .cp-skel-row td{padding:14px 13px}
 
 /* Editable Task Owner / Supervisor — searchable picker trigger */

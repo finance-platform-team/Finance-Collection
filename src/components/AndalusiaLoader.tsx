@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react';
-import brandLogo from '../assets/andalusia-logo-clean.png';
+// Inlined as a base64 data URI rather than an imported file — this boot
+// screen renders before App.tsx's own data/asset loading, and the deployed
+// Power Apps environment's CSP has already been observed (see Icon.tsx)
+// blocking a same-origin bundled asset fetch (the Font Awesome webfont) even
+// though it's technically self-hosted; embedding the logo directly sidesteps
+// that same class of issue rather than risking a second broken asset.
+import { andalusiaLogoDataUri } from '../assets/andalusiaLogo';
 import { readStoredTheme } from '../lib/useTheme';
 
 /**
@@ -143,7 +149,7 @@ export default function AndalusiaLoader({ message, theme = 'auto' }: AndalusiaLo
           className="al-logo-wrap"
           style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         >
-          <img src={brandLogo} alt="" aria-hidden="true" width={74} style={{ height: 'auto', objectFit: 'contain' }} />
+          <img src={andalusiaLogoDataUri} alt="" aria-hidden="true" width={74} style={{ height: 'auto', objectFit: 'contain' }} />
         </div>
       </div>
 

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useTheme } from '../lib/useTheme';
 import type { Region } from '../lib/useRegion';
-import { isPageEnabled } from '../lib/featureFlags';
+import { VISITS_ONLY } from '../lib/featureFlags';
 import Icon from './Icon';
 import './Layout.css';
 
@@ -29,10 +29,8 @@ interface NavGroup {
   items: NavItem[];
 }
 
-// Full set of pages — every page's route/component still exists regardless of the
-// feature flags below. Each group's items are filtered by isPageEnabled() before
-// rendering, so a disabled page just doesn't show a sidebar link; nothing here is
-// removed. A group with zero visible items renders nothing.
+// Every page's route/component/sidebar link is declared here; VISITS_ONLY (below,
+// where the sidebar renders) decides which groups actually show.
 const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Collection Plan',
@@ -134,8 +132,8 @@ export default function Layout({ active, onNavigate, region, onRegionChange, chi
           </button>
         </div>
         <nav className="acc-sb-nav">
-          {NAV_GROUPS.map((group) => {
-            const items = group.items.filter((item) => isPageEnabled(item.key));
+          {(VISITS_ONLY ? NAV_GROUPS.filter((g) => g.title === 'Visits') : NAV_GROUPS).map((group) => {
+            const items = group.items;
             if (items.length === 0) return null;
             const isCollapsed = collapsedGroups.has(group.title);
             return (

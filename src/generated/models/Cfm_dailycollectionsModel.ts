@@ -36,6 +36,7 @@ export interface Cfm_dailycollectionsBase {
   cfm_collectiondate?: string;
   "cfm_CompanyCode@odata.bind"?: string;
   cfm_dailycollectionid: string;
+  cfm_grossamount?: number;
   cfm_name: string;
   cfm_note?: string;
   cfm_paymentmethod?: Cfm_dailycollectionscfm_paymentmethod;

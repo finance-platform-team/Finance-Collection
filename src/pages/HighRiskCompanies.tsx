@@ -151,7 +151,8 @@ export default function HighRiskCompaniesPage({ region }: HighRiskCompaniesPageP
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [query, setQuery] = useState('');
-  const [monthFilter, setMonthFilter] = useState('all');
+  // Defaults to the current month; 'all' means every month.
+  const [monthFilter, setMonthFilter] = useState(() => monthKeyOf(new Date().toISOString()));
   const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage] = useState(1);
   const pageSize = 25;
@@ -278,6 +279,10 @@ export default function HighRiskCompaniesPage({ region }: HighRiskCompaniesPageP
     regionRows.forEach((r) => {
       if (r.monthKey && !seen.has(r.monthKey)) seen.set(r.monthKey, r.month);
     });
+    // Always offer the current month so the default selection shows in the dropdown.
+    const now = new Date();
+    const curKey = monthKeyOf(now.toISOString());
+    if (!seen.has(curKey)) seen.set(curKey, fmtMonth(now.toISOString()));
     return Array.from(seen.entries()).sort((a, b) => b[0].localeCompare(a[0]));
   }, [regionRows]);
 

@@ -1,5 +1,7 @@
 import Icon from '../components/Icon';
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { getClient } from '@microsoft/power-apps/data';
+import { dataSourcesInfo } from '../../.power/schemas/appschemas/dataSourcesInfo';
 import { BusinessunitsService } from '../generated/services/BusinessunitsService';
 import { Pm_kpiachievmentsService } from '../generated/services/Pm_kpiachievmentsService';
 import { Stf_kpiachievmentbreakdownsService } from '../generated/services/Stf_kpiachievmentbreakdownsService';
@@ -7,6 +9,7 @@ import { Cfm_collectionplanweeksService } from '../generated/services/Cfm_collec
 import { Strategy_kpisesService } from '../generated/services/Strategy_kpisesService';
 import { Hr_employeesService } from '../generated/services/Hr_employeesService';
 import { Cr301_agentsService } from '../generated/services/Cr301_agentsService';
+import { Cr301_visitsService } from '../generated/services/Cr301_visitsService';
 import type { Pm_kpiachievments, Pm_kpiachievmentsBase } from '../generated/models/Pm_kpiachievmentsModel';
 import type { Stf_kpiachievmentbreakdowns, Stf_kpiachievmentbreakdownsBase } from '../generated/models/Stf_kpiachievmentbreakdownsModel';
 import type { Cfm_collectionplanweeks, Cfm_collectionplanweeksBase } from '../generated/models/Cfm_collectionplanweeksModel';
@@ -26,17 +29,44 @@ const BU_NAME = 'AHQ';
 
 const FALLBACK_BU_ID = '0e650dd0-5d4f-f011-877a-6045bd9979f4';
 const DEFAULT_KPI_NAME = 'No. of Visits';
+// strategy_kpises can hold more than one KPI named "No. of Visits" across
+// different Function/Department combinations — Function and Department pin
+// down the one this page actually means, instead of grabbing whichever
+// same-named record happens to load first.
+const DEFAULT_KPI_FUNCTION = 'Collection/Finance';
+const DEFAULT_KPI_DEPARTMENT = 'Finance';
+// Function/Department are lookups (strategy_function / strategy_department) —
+// there's no separate "name" text column to filter on, so the display text
+// comes from the same @OData FormattedValue annotation used everywhere else
+// in this codebase for a lookup's label (see formattedValue() below).
+function isDefaultKpi(k: { strategy_newcolumn?: string }): boolean {
+  if ((k.strategy_newcolumn || '').trim().toLowerCase() !== DEFAULT_KPI_NAME.toLowerCase()) return false;
+  const fn = formattedValue(k, '_strategy_function_value').trim().toLowerCase();
+  const dept = formattedValue(k, '_strategy_department_value').trim().toLowerCase();
+  return fn === DEFAULT_KPI_FUNCTION.toLowerCase() && dept === DEFAULT_KPI_DEPARTMENT.toLowerCase();
+}
 const BREAKDOWN_TYPE = 5;
+const BREAKDOWN_TABLE = 'stf_kpiachievmentbreakdowns';
+const WEEK_TABLE = 'cfm_collectionplanweeks';
+const ACHIEVEMENT_TABLE = 'pm_kpiachievments';
 // Same cr18c_area choice on cr301_agents / same Egypt-vs-KSA mapping as
 // Agents.tsx (KSA = the real KSA choice value, Egypt = everything else,
 // including unset — see Agents.tsx's AREA_EGYPT comment for why).
 const AREA_KSA = 989230004;
+// Same cfm_tagename/status conventions Visits.tsx and VisitAudit.tsx use to
+// scope to real collection visits and exclude ones that never happened.
+const TAG_COLLECTION = 766340000;
+const VISIT_STATUS_CANCELLED = 983080002;
 
-// Same tolerant name match Agents.tsx / Visits.tsx use for Agent <-> Employee.
-function firstWords(name: string, n: number): string {
-  return name.trim().toLowerCase().split(/\s+/).slice(0, n).join(' ');
+/**
+ * cfm_agent2 (Task Owner 2, double visits) isn't in the generated Cr301_visits
+ * model — see the same gap documented in Visits.tsx/VisitAudit.tsx. Selected
+ * here as a raw string key for the same reason: it's a real, confirmed
+ * attribute name the SDK will still forward even without typed knowledge of it.
+ */
+interface UnmappedVisitFields {
+  _cfm_agent2_value?: string;
 }
-
 
 async function resolveBuId(): Promise<string> {
   try {
@@ -107,6 +137,15 @@ const MONTH_WEEK_BOUNDS: [number, number][] = [
   [19, 25],
   [26, 31],
 ];
+// Same buckets as MONTH_WEEK_BOUNDS above, expressed the way Visits.tsx's
+// adjustVisitPlanActual / VisitAudit.tsx need them — day-of-month in, week
+// number out — must stay in sync with both.
+function monthDayBucket(day: number): number {
+  if (day <= 10) return 1;
+  if (day <= 18) return 2;
+  if (day <= 25) return 3;
+  return 4;
+}
 function monthWeekRange(year: number, month: number, weekIndex: number): { from: string; to: string } {
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const [fromDay, toDayRaw] = MONTH_WEEK_BOUNDS[weekIndex - 1] || [1, daysInMonth];
@@ -114,6 +153,16 @@ function monthWeekRange(year: number, month: number, weekIndex: number): { from:
   const from = new Date(Date.UTC(year, month - 1, fromDay));
   const to = new Date(Date.UTC(year, month - 1, toDay));
   return { from: from.toISOString(), to: to.toISOString() };
+}
+// Day-of-month label for a week card (e.g. "11–18") — the same boundaries
+// monthWeekRange/monthDayBucket already use to decide which week a visit
+// counts toward, just made visible so it's clear why an actual landed where
+// it did, instead of only living in the bucketing logic.
+function weekRangeLabel(year: number, month: number, weekIndex: number): string {
+  const { from, to } = monthWeekRange(year, month, weekIndex);
+  const fromDay = new Date(from).getUTCDate();
+  const toDay = new Date(to).getUTCDate();
+  return fromDay === toDay ? `Day ${fromDay}` : `${fromDay}–${toDay}`;
 }
 function monthKeyOf(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, '0')}`;
@@ -136,6 +185,12 @@ interface WeekRow {
   number: number;
   plan: number;
   actual: number;
+  /** Breakdown of this week's `actual` count into visits whose Visit Date
+   *  actually falls in this week's own range vs ones that landed here only
+   *  because that's when they were created/logged — same "wrong week" check
+   *  VisitAudit.tsx does, surfaced here so it doesn't take a trip to that page
+   *  to see it. Undefined while still loading. */
+  audit?: { correct: number; wrong: number };
 }
 
 interface OwnerRow {
@@ -162,6 +217,11 @@ interface AchievementOption {
 interface EmployeeOption {
   id: string;
   name: string;
+  region: 'EG' | 'KSA' | '';
+  /** Whether this employee has an active cr301_agents record linked via
+   *  cfm_employee — i.e. is actually a collection agent, not just any
+   *  hr_employees row. Only agents should be pickable as a Task Owner. */
+  isAgent: boolean;
 }
 
 interface KpiOption {
@@ -195,6 +255,7 @@ export default function VisitPlanPage({ region }: VisitPlanPageProps) {
   const [achievements, setAchievements] = useState<AchievementOption[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [kpis, setKpis] = useState<KpiOption[]>([]);
+  const [defaultKpiId, setDefaultKpiId] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [buId, setBuId] = useState('');
@@ -204,7 +265,10 @@ export default function VisitPlanPage({ region }: VisitPlanPageProps) {
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
   // Empty set = "All months". monthKey is `${year}-${month}` so same-named months
   // in different years (e.g. two "August"s a year apart) never collide.
-  const [selectedMonths, setSelectedMonths] = useState<Set<string>>(new Set());
+  // Defaults to the current month (dropped on load if it has no task owners).
+  const [selectedMonths, setSelectedMonths] = useState<Set<string>>(
+    () => new Set([monthKeyOf(new Date().getFullYear(), new Date().getMonth() + 1)])
+  );
   const [monthMenuOpen, setMonthMenuOpen] = useState(false);
   // Empty set = "All owners".
   const [selectedOwners, setSelectedOwners] = useState<Set<string>>(new Set());
@@ -277,7 +341,7 @@ export default function VisitPlanPage({ region }: VisitPlanPageProps) {
         fetchAll<Strategy_kpises>(
           (skipToken) =>
             Strategy_kpisesService.getAll({
-              select: ['strategy_kpisid', 'strategy_newcolumn', 'cr18c_kpicode'],
+              select: ['strategy_kpisid', 'strategy_newcolumn', 'cr18c_kpicode', '_strategy_function_value', '_strategy_department_value'],
               filter: 'statecode eq 0',
               orderBy: ['createdon desc'],
               maxPageSize: 5000,
@@ -289,9 +353,10 @@ export default function VisitPlanPage({ region }: VisitPlanPageProps) {
 
       setBuId(resolvedBuId);
 
-      const defaultKpi = kpiRows.find((k) => (k.strategy_newcolumn || '').trim().toLowerCase() === DEFAULT_KPI_NAME.toLowerCase());
-      if (!defaultKpi) throw new Error(`KPI "${DEFAULT_KPI_NAME}" not found.`);
+      const defaultKpi = kpiRows.find(isDefaultKpi);
+      if (!defaultKpi) throw new Error(`KPI "${DEFAULT_KPI_NAME}" (${DEFAULT_KPI_FUNCTION} / ${DEFAULT_KPI_DEPARTMENT}) not found.`);
       const kpiId = defaultKpi.strategy_kpisid;
+      setDefaultKpiId(kpiId);
 
       const achRows = await fetchAll<Pm_kpiachievments>(
         (skipToken) =>
@@ -310,7 +375,7 @@ export default function VisitPlanPage({ region }: VisitPlanPageProps) {
       // 851-row headcount data), so fetching it unfiltered doesn't scale and risks
       // this class of bug again even with the achievement-id join guard below.
       const achIdFilter = achRows.map((a) => `_stf_total_value eq ${a.pm_kpiachievmentid}`).join(' or ');
-      const [brkRows, weekRows] = await Promise.all([
+      const [brkRows, weekRows, visitRows] = await Promise.all([
         achRows.length === 0
           ? Promise.resolve([])
           : fetchAll<Stf_kpiachievmentbreakdowns>(
@@ -332,27 +397,87 @@ export default function VisitPlanPage({ region }: VisitPlanPageProps) {
             Cfm_collectionplanweeksService.getAll({ select: WEEK_SELECT, filter: 'statecode eq 0', orderBy: ['cfm_weeknumber asc'], maxPageSize: 5000, skipToken }),
           'Could not load collection plan weeks.'
         ),
+        // For the correct-week/wrong-week breakdown under each week's Actual —
+        // same visits adjustVisitPlanActual itself would have counted.
+        fetchAll<{ cr301_visitdate?: string; createdon?: string; cr301_visitstatus?: number; _cr301_agent_value?: string }>(
+          (skipToken) =>
+            Cr301_visitsService.getAll({
+              select: ['cr301_visitid', 'cr301_visitdate', 'createdon', 'cr301_visitstatus', '_cr301_agent_value', '_cfm_agent2_value'],
+              filter: `cfm_tagename eq ${TAG_COLLECTION}`,
+              maxPageSize: 5000,
+              skipToken,
+            }),
+          'Could not load visits for the week audit.'
+        ).catch(() => []),
       ]);
 
-      const employeeOptions: EmployeeOption[] = employeeRows.map((e) => ({ id: e.hr_employeeid, name: e.hr_fullname || '(employee)' }));
-      const employeeMap = new Map(employeeOptions.map((e) => [e.id, e.name]));
-
-      // Region comes from the matching cr301_agents record's cr18c_area — try the
-      // real employee lookup first (_cfm_employee_value, when set), falling back to
-      // the same tolerant name match used elsewhere since Agents.tsx doesn't
-      // currently populate that lookup on save.
+      // Region comes from the matching cr301_agents record's cr18c_area — joined
+      // by the real cfm_employee lookup (a stable id), not by fuzzy name
+      // matching. Agents.tsx now binds that lookup on save; an agent that hasn't
+      // been re-saved since (and so still has no employee link) simply won't
+      // resolve a region here until it is.
       const agentByEmployeeId = new Map<string, (typeof agentRows)[number]>();
-      const agentByNameKey = new Map<string, (typeof agentRows)[number]>();
       agentRows.forEach((a) => {
         if (a._cfm_employee_value) agentByEmployeeId.set(a._cfm_employee_value, a);
-        const key = firstWords(a.cr301_newcolumn || '', 3);
-        if (key) agentByNameKey.set(key, a);
       });
-      function regionFor(employeeId: string, employeeName: string): 'EG' | 'KSA' | '' {
-        const agent = agentByEmployeeId.get(employeeId) || agentByNameKey.get(firstWords(employeeName, 3));
+      function regionFor(employeeId: string): 'EG' | 'KSA' | '' {
+        const agent = agentByEmployeeId.get(employeeId);
         if (!agent || agent.cr18c_area == null) return '';
         return Number(agent.cr18c_area) === AREA_KSA ? 'KSA' : 'EG';
       }
+
+      // employeeId|year|month|weekNumber -> correct-week vs wrong-week counts,
+      // for the same visits adjustVisitPlanActual (Visits.tsx) would have
+      // counted into that week's Actual — "correct" means the visit's own
+      // Visit Date bucket agrees with the createdon bucket it actually landed
+      // under; "wrong" means it doesn't (or landed in a different month
+      // entirely). A visit with no Visit Date yet (allowed while still Open)
+      // can't be judged either way, so it's counted as correct by default
+      // rather than flagged.
+      const agentById = new Map(agentRows.map((a) => [a.cr301_agentid, a]));
+      const visitAuditMap = new Map<string, { correct: number; wrong: number }>();
+      visitRows.forEach((v) => {
+        if (v.cr301_visitstatus === VISIT_STATUS_CANCELLED) return;
+        const createdOnIso = v.createdon;
+        if (!createdOnIso) return;
+        const createdOn = new Date(createdOnIso);
+        if (Number.isNaN(createdOn.getTime())) return;
+        const createdYear = createdOn.getFullYear();
+        const createdMonth = createdOn.getMonth() + 1;
+        const createdWeek = monthDayBucket(createdOn.getDate());
+
+        let isCorrect = true;
+        const visitDateIso = v.cr301_visitdate;
+        if (visitDateIso) {
+          const visitDate = new Date(visitDateIso);
+          if (!Number.isNaN(visitDate.getTime())) {
+            const expectedYear = visitDate.getFullYear();
+            const expectedMonth = visitDate.getMonth() + 1;
+            const expectedWeek = monthDayBucket(visitDate.getDate());
+            isCorrect = expectedYear === createdYear && expectedMonth === createdMonth && expectedWeek === createdWeek;
+          }
+        }
+
+        const extra = v as unknown as UnmappedVisitFields;
+        const agentIds = Array.from(new Set([v._cr301_agent_value, extra._cfm_agent2_value].filter((id): id is string => !!id)));
+        agentIds.forEach((agentId) => {
+          const employeeId = agentById.get(agentId)?._cfm_employee_value;
+          if (!employeeId) return;
+          const key = `${employeeId}|${createdYear}|${createdMonth}|${createdWeek}`;
+          const entry = visitAuditMap.get(key) || { correct: 0, wrong: 0 };
+          if (isCorrect) entry.correct++;
+          else entry.wrong++;
+          visitAuditMap.set(key, entry);
+        });
+      });
+
+      const employeeOptions: EmployeeOption[] = employeeRows.map((e) => ({
+        id: e.hr_employeeid,
+        name: e.hr_fullname || '(employee)',
+        region: regionFor(e.hr_employeeid),
+        isAgent: agentByEmployeeId.has(e.hr_employeeid),
+      }));
+      const employeeMap = new Map(employeeOptions.map((e) => [e.id, e.name]));
 
       const weeksByBrk = new Map<string, WeekRow[]>();
       weekRows.forEach((w) => {
@@ -373,18 +498,24 @@ export default function VisitPlanPage({ region }: VisitPlanPageProps) {
         if (!ach) return;
         const employeeId = b._stf_employee_value || '';
         const name = employeeMap.get(employeeId) || '(owner)';
+        const month = N(ach.pm_month);
+        const year = N(ach.pm_year);
+        const weeks = (weeksByBrk.get(b.stf_kpiachievmentbreakdownid) || []).map((w) => ({
+          ...w,
+          audit: visitAuditMap.get(`${employeeId}|${year}|${month}|${w.number}`) || { correct: w.actual, wrong: 0 },
+        }));
         owners.push({
           breakdownId: b.stf_kpiachievmentbreakdownid,
           achievementId: ach.pm_kpiachievmentid,
-          month: N(ach.pm_month),
-          year: N(ach.pm_year),
+          month,
+          year,
           employeeId,
           name,
           target: N(b.comp_breakdowntarget),
           value: N(b.stf_value),
           active: N(b.statecode) === 0,
-          region: regionFor(employeeId, name),
-          weeks: weeksByBrk.get(b.stf_kpiachievmentbreakdownid) || [],
+          region: regionFor(employeeId),
+          weeks,
         });
       });
 
@@ -481,6 +612,15 @@ export default function VisitPlanPage({ region }: VisitPlanPageProps) {
   const regionOwners = useMemo(
     () => (!region ? statusOwners : statusOwners.filter((o) => (region === 'KSA' ? o.region === 'KSA' : o.region !== 'KSA'))),
     [statusOwners, region]
+  );
+
+  // Task Owner in the "Create KPI achievement" wizard must be an actual
+  // cr301_agents record (cfm_iscollection agent), not just any hr_employees
+  // row — same roster Agents.tsx manages — then scoped by the app-wide Region
+  // toggle the same way Visits.tsx's regionAgentOptions is.
+  const regionEmployees = useMemo(
+    () => employees.filter((e) => e.isAgent && (!region ? true : region === 'KSA' ? e.region === 'KSA' : e.region !== 'KSA')),
+    [employees, region]
   );
 
   const monthOptions = useMemo(() => {
@@ -667,11 +807,15 @@ export default function VisitPlanPage({ region }: VisitPlanPageProps) {
       showToast('Nothing to export.');
       return;
     }
-    const header = ['Task owner', 'Monthly planned', 'Monthly achieved', 'Achievement %', 'Month'];
+    const header = ['Task owner', 'Monthly planned', 'Monthly achieved', 'Correct week', 'Wrong week', 'Achievement %', 'Month'];
     const lines = [header.join(',')];
     view.forEach((o) => {
       const t = ownerTotals(o);
-      lines.push([o.name, Math.round(t.planned), Math.round(t.achieved), t.rate.toFixed(1) + '%', `${MONTHS[o.month] || o.month} ${o.year}`].map(escapeForCsv).join(','));
+      const correct = o.weeks.reduce((s, w) => s + (w.audit?.correct ?? w.actual), 0);
+      const wrong = o.weeks.reduce((s, w) => s + (w.audit?.wrong ?? 0), 0);
+      lines.push(
+        [o.name, Math.round(t.planned), Math.round(t.achieved), correct, wrong, t.rate.toFixed(1) + '%', `${MONTHS[o.month] || o.month} ${o.year}`].map(escapeForCsv).join(',')
+      );
     });
     downloadCsv('visits_planned_actual.csv', lines);
   }
@@ -681,17 +825,29 @@ export default function VisitPlanPage({ region }: VisitPlanPageProps) {
       showToast('Nothing to export.');
       return;
     }
-    const header = ['Task owner', 'Week', 'Plan', 'Actual', 'Achievement %', 'Month'];
+    const header = ['Task owner', 'Week', 'Range', 'Plan', 'Actual', 'Correct week', 'Wrong week', 'Achievement %', 'Month'];
     const lines = [header.join(',')];
     view.forEach((o) => {
       const month = `${MONTHS[o.month] || o.month} ${o.year}`;
       if (o.weeks.length === 0) {
-        lines.push([o.name, '—', 0, 0, '0.0%', month].map(escapeForCsv).join(','));
+        lines.push([o.name, '—', '—', 0, 0, 0, 0, '0.0%', month].map(escapeForCsv).join(','));
         return;
       }
       o.weeks.forEach((w) => {
         const rate = w.plan > 0 ? (w.actual / w.plan) * 100 : 0;
-        lines.push([o.name, `Week ${w.number}`, w.plan, w.actual, rate.toFixed(1) + '%', month].map(escapeForCsv).join(','));
+        lines.push(
+          [
+            o.name,
+            `Week ${w.number}`,
+            weekRangeLabel(o.year, o.month, w.number),
+            w.plan,
+            w.actual,
+            w.audit?.correct ?? w.actual,
+            w.audit?.wrong ?? 0,
+            rate.toFixed(1) + '%',
+            month,
+          ].map(escapeForCsv).join(',')
+        );
       });
     });
     downloadCsv('visits_planned_actual_by_week.csv', lines);
@@ -703,8 +859,7 @@ export default function VisitPlanPage({ region }: VisitPlanPageProps) {
     setWizStep(1);
     setMode('existing');
     setNewMonth(String(new Date().getMonth() + 1));
-    const defaultKpi = kpis.find((k) => k.name.trim().toLowerCase() === DEFAULT_KPI_NAME.toLowerCase());
-    setSelectedKpiId(defaultKpi?.id || kpis[0]?.id || '');
+    setSelectedKpiId(defaultKpiId || kpis[0]?.id || '');
     const defaultAch =
       achievements.find((a) => a.kpiName.trim().toLowerCase() === DEFAULT_KPI_NAME.toLowerCase()) || achievements[0];
     setSelectedAchievementId(defaultAch?.id || '');
@@ -734,15 +889,42 @@ export default function VisitPlanPage({ region }: VisitPlanPageProps) {
     setOwnerCards((prev) => prev.map((c) => (c.key === key ? { ...c, employeeId: employee.id, query: employee.name } : c)));
     setEmployeePickerOpen(null);
   }
+  // Empty query -> no suggestions at all (don't dump the full roster on a bare
+  // click) — the list only appears once the user starts typing, same fix as
+  // Agents.tsx's Employee picker.
   function employeeMatches(query: string): EmployeeOption[] {
     const q = query.trim().toLowerCase();
-    const list = q ? employees.filter((e) => e.name.toLowerCase().includes(q)) : employees;
-    return list.slice(0, 30);
+    if (!q) return [];
+    return regionEmployees.filter((e) => e.name.toLowerCase().includes(q)).slice(0, 30);
   }
   function setCardPlan(key: string, weekIdx: number, value: number) {
     setOwnerCards((prev) => prev.map((c) => (c.key === key ? { ...c, plans: c.plans.map((p, i) => (i === weekIdx ? value : p)) } : c)));
   }
   const totalPlanned = useMemo(() => ownerCards.reduce((s, c) => s + c.plans.reduce((a, b) => a + (Number(b) || 0), 0), 0), [ownerCards]);
+
+  /**
+   * Bind one or more lookups via the raw Dataverse client's @odata.bind form.
+   * Mixing "@odata.bind" keys into the same body as plain fields and sending
+   * it through a generated typed service's create() has been observed
+   * elsewhere in this app (see Accounts.tsx's setClassificationViaClient,
+   * Agents.tsx's setAgentUserViaClient) to make the generated service
+   * silently drop the *whole* write — not just reject the bind key — so
+   * lookups are always set here, separately, after the plain-field create
+   * already landed.
+   */
+  async function bindLookups(table: string, id: string, binds: Record<string, string>): Promise<boolean> {
+    try {
+      const client = getClient(dataSourcesInfo);
+      const body: Record<string, unknown> = {};
+      for (const [nav, targetPath] of Object.entries(binds)) {
+        body[`${nav}@odata.bind`] = targetPath;
+      }
+      const res = await client.updateRecordAsync(table, id, body);
+      return !!res.success;
+    } catch {
+      return false;
+    }
+  }
 
   async function onContinue() {
     setWizError('');
@@ -760,16 +942,25 @@ export default function VisitPlanPage({ region }: VisitPlanPageProps) {
         if (!buId) throw new Error(`Business unit "${BU_NAME}" hasn't loaded yet — try again in a moment.`);
         const month = parseInt(newMonth, 10);
         const year = resolveYear(month);
-        const body: Record<string, unknown> = {
-          pm_month: month,
-          pm_year: year,
-          'pm_kpi@odata.bind': `/strategy_kpises(${selectedKpiId})`,
-          'pm_businessunit@odata.bind': `/businessunits(${buId})`,
-        };
+        // Plain fields only — pm_kpi / pm_businessunit are bound separately
+        // below (see bindLookups' comment for why).
+        const body: Record<string, unknown> = { pm_month: month, pm_year: year };
         const result = await Pm_kpiachievmentsService.create(body as unknown as Omit<Pm_kpiachievmentsBase, 'pm_kpiachievmentid'>);
         if (!result.success) throw new Error(operationErrorMessage(result.error, 'Could not create the KPI achievement.'));
         const id = (result.data as unknown as { pm_kpiachievmentid?: string })?.pm_kpiachievmentid;
         if (!id) throw new Error('KPI achievement was created but no id was returned.');
+
+        const bound = await bindLookups(ACHIEVEMENT_TABLE, id, {
+          pm_kpi: `/strategy_kpises(${selectedKpiId})`,
+          pm_businessunit: `/businessunits(${buId})`,
+        });
+        const verifyRes = bound
+          ? await Pm_kpiachievmentsService.get(id, { select: ['_pm_kpi_value', '_pm_businessunit_value'] })
+          : null;
+        const verified = !!verifyRes?.success && verifyRes.data?._pm_kpi_value === selectedKpiId;
+        if (!verified) {
+          throw new Error(`KPI achievement was created but could not be linked to the KPI — check field permissions and retry (id ${id}).`);
+        }
         achievementId = id;
         setWizContextMonth(month);
         setWizContextYear(year);
@@ -811,20 +1002,43 @@ export default function VisitPlanPage({ region }: VisitPlanPageProps) {
       const rangeMonth = wizContextMonth ?? new Date().getMonth() + 1;
       for (const card of ownerCards) {
         const target = card.plans.reduce((a, b) => a + (Number(b) || 0), 0);
+
+        // 1) Create the breakdown with plain fields only — see bindLookups'
+        //    comment for why the two lookups below are kept out of this call.
         const brkBody: Record<string, unknown> = {
           stf_breakdowntype: BREAKDOWN_TYPE,
           comp_breakdowntarget: target,
           stf_value: 0,
-          'stf_Total@odata.bind': `/pm_kpiachievments(${selectedAchievementId})`,
-          'stf_Employee@odata.bind': `/hr_employees(${card.employeeId})`,
         };
         const brkResult = await Stf_kpiachievmentbreakdownsService.create(brkBody as unknown as Omit<Stf_kpiachievmentbreakdownsBase, 'stf_kpiachievmentbreakdownid'>);
         if (!brkResult.success) throw new Error(operationErrorMessage(brkResult.error, 'Could not create the task owner breakdown.'));
         const breakdownId = (brkResult.data as unknown as { stf_kpiachievmentbreakdownid?: string })?.stf_kpiachievmentbreakdownid;
         if (!breakdownId) throw new Error('Breakdown was created but no id was returned.');
 
+        // 2) Bind Total (the KPI achievement) and Employee separately, then
+        //    verify they actually stuck before trusting the record is real —
+        //    a 200/204 from bindLookups isn't proof by itself.
+        const bound = await bindLookups(BREAKDOWN_TABLE, breakdownId, {
+          stf_Total: `/pm_kpiachievments(${selectedAchievementId})`,
+          stf_Employee: `/hr_employees(${card.employeeId})`,
+        });
+        const verifyRes = bound
+          ? await Stf_kpiachievmentbreakdownsService.get(breakdownId, { select: ['_stf_total_value', '_stf_employee_value'] })
+          : null;
+        const verified =
+          !!verifyRes?.success &&
+          verifyRes.data?._stf_total_value === selectedAchievementId &&
+          verifyRes.data?._stf_employee_value === card.employeeId;
+        if (!verified) {
+          throw new Error(
+            `The breakdown for this task owner saved but its KPI/Employee link could not be confirmed — check field permissions and retry (breakdown id ${breakdownId}).`
+          );
+        }
+
+        // 3) Same split for each week: plain fields first, then bind the
+        //    breakdown lookup separately, then verify by re-reading.
         const weekResults = await Promise.all(
-          card.plans.map((plan, i) => {
+          card.plans.map(async (plan, i) => {
             const w = i + 1;
             const range = monthWeekRange(rangeYear, rangeMonth, w);
             const weekBody: Record<string, unknown> = {
@@ -833,13 +1047,37 @@ export default function VisitPlanPage({ region }: VisitPlanPageProps) {
               cfm_actual: null,
               cfm_weekfrom: range.from,
               cfm_weekto: range.to,
-              'cfm_KPIAchievementBreakdown@odata.bind': `/stf_kpiachievmentbreakdowns(${breakdownId})`,
             };
-            return Cfm_collectionplanweeksService.create(weekBody as unknown as Omit<Cfm_collectionplanweeksBase, 'cfm_collectionplanweekid'>);
+            const weekResult = await Cfm_collectionplanweeksService.create(weekBody as unknown as Omit<Cfm_collectionplanweeksBase, 'cfm_collectionplanweekid'>);
+            if (!weekResult.success) return { success: false };
+            const weekId = (weekResult.data as unknown as { cfm_collectionplanweekid?: string })?.cfm_collectionplanweekid;
+            if (!weekId) return { success: false };
+            const weekBound = await bindLookups(WEEK_TABLE, weekId, {
+              cfm_KPIAchievementBreakdown: `/stf_kpiachievmentbreakdowns(${breakdownId})`,
+            });
+            return { success: weekBound };
           })
         );
         const failed = weekResults.filter((r) => !r.success).length;
         if (failed) throw new Error(`${failed} of ${card.plans.length} week(s) failed to save.`);
+
+        // Verify the weeks actually landed against this breakdown — same
+        // "trust a fresh read, not the write response" reasoning as commitPlan.
+        const savedWeeks = await fetchAll<{ cfm_collectionplanweekid: string }>(
+          (skipToken) =>
+            Cfm_collectionplanweeksService.getAll({
+              select: ['cfm_collectionplanweekid'],
+              filter: `_cfm_kpiachievementbreakdown_value eq ${breakdownId} and statecode eq 0`,
+              maxPageSize: 5000,
+              skipToken,
+            }),
+          'Could not verify saved weeks.'
+        );
+        if (savedWeeks.length < card.plans.length) {
+          throw new Error(
+            `Only ${savedWeeks.length} of ${card.plans.length} week(s) actually linked to this task owner's breakdown — check field permissions and retry.`
+          );
+        }
       }
 
       const createdAchievementId = selectedAchievementId;
@@ -1132,6 +1370,12 @@ export default function VisitPlanPage({ region }: VisitPlanPageProps) {
                                           <div>
                                             <small>Actual</small>
                                             <input type="text" value={w.actual} readOnly />
+                                            {w.audit && w.actual > 0 && (
+                                              <div className="vp-actual-detail">
+                                                {w.audit.correct} correct
+                                                {w.audit.wrong > 0 && <span className="vp-actual-wrong"> · {w.audit.wrong} wrong week</span>}
+                                              </div>
+                                            )}
                                           </div>
                                         </div>
                                         <div className="vp-wbar">
@@ -1316,13 +1560,17 @@ export default function VisitPlanPage({ region }: VisitPlanPageProps) {
                       <input
                         type="text"
                         placeholder="Search task owner…"
-                        autoComplete="off"
+                        name={`cn-owner-search-nofill-${card.key}`}
+                        autoComplete="new-password"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
                         value={card.query}
                         onChange={(e) => setCardQuery(card.key, e.target.value)}
                         onFocus={() => setEmployeePickerOpen(card.key)}
                         onBlur={() => setTimeout(() => setEmployeePickerOpen((open) => (open === card.key ? null : open)), 150)}
                       />
-                      {employeePickerOpen === card.key && (
+                      {employeePickerOpen === card.key && card.query.trim() && (
                         <div className="acc-combo-list">
                           {employeeMatches(card.query).length === 0 ? (
                             <div className="acc-combo-empty">No matches.</div>
@@ -1330,6 +1578,7 @@ export default function VisitPlanPage({ region }: VisitPlanPageProps) {
                             employeeMatches(card.query).map((e) => (
                               <div key={e.id} className="acc-combo-item" onMouseDown={(ev) => ev.preventDefault()} onClick={() => pickCardEmployee(card.key, e)}>
                                 {e.name}
+                                {e.region && <small>{e.region === 'KSA' ? 'KSA' : 'Egypt'}</small>}
                               </div>
                             ))
                           )}

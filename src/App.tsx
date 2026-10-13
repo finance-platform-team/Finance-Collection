@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import Layout, { type PageKey } from './components/Layout';
 import AndalusiaLoader from './components/AndalusiaLoader';
 import { useRegion } from './lib/useRegion';
-import { DEFAULT_PAGE } from './lib/featureFlags';
 import CollectionPlanPage from './pages/CollectionPlan';
 import WeeklyTargetsPage from './pages/WeeklyTargets';
 import DailyCollectionPage from './pages/DailyCollection';
@@ -16,7 +15,7 @@ import VisitPlanPage from './pages/VisitPlan';
 import VisitAuditPage from './pages/VisitAudit';
 
 function App() {
-  const [page, setPage] = useState<PageKey>(DEFAULT_PAGE);
+  const [page, setPage] = useState<PageKey>('visit-plan');
   const [region, setRegion] = useRegion();
   const [booting, setBooting] = useState(true);
 

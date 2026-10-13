@@ -3,9 +3,11 @@ import Icon from '../components/Icon';
 import { createPortal } from 'react-dom';
 import { Cfm_aragingsService } from '../generated/services/Cfm_aragingsService';
 import { Cfm_insurancecompaniesService } from '../generated/services/Cfm_insurancecompaniesService';
+import { Cfm_companymonthlybalancesesService } from '../generated/services/Cfm_companymonthlybalancesesService';
 import { SystemusersService } from '../generated/services/SystemusersService';
 import type { Cfm_aragings, Cfm_aragingsBase } from '../generated/models/Cfm_aragingsModel';
 import type { Cfm_insurancecompanies } from '../generated/models/Cfm_insurancecompaniesModel';
+import type { Cfm_companymonthlybalanceses } from '../generated/models/Cfm_companymonthlybalancesesModel';
 import { operationErrorMessage } from '../lib/errors';
 import { KSA_BU_CODES, type Region } from '../lib/useRegion';
 import { escapeForCsv, downloadCsv } from '../lib/csvExport';
@@ -54,6 +56,14 @@ const ARAGING_SELECT = [
 
 const INSURANCE_SELECT = ['cfm_insurancecompanyid', 'cfm_code', 'cfm_butext', 'cfm_unique', '_cfm_paymentterm_value', 'cfm_customerclass', 'cfm_companytype'];
 
+/**
+ * cfm_businessunit is a lookup (same pattern as cfm_aragings' cfm_type — see the note at the
+ * top of this file): the "cfm_businessunitname" shadow property the generated model advertises
+ * is rejected by Dataverse in $select. Select the real lookup attribute and read the BU text off
+ * its @OData.Community.Display.V1.FormattedValue annotation instead, same as buText below.
+ */
+const MONTHLY_BALANCE_SELECT = ['cfm_companymonthlybalancesid', 'cfm_companycode', '_cfm_businessunit_value', 'cfm_month', 'cfm_balance', 'cfm_totalclaims'];
+
 function formattedValue(record: unknown, attribute: string): string {
   const raw = (record as Record<string, unknown>)[`${attribute}@OData.Community.Display.V1.FormattedValue`];
   return typeof raw === 'string' ? raw : '';
@@ -63,6 +73,14 @@ interface InsuranceRecord {
   paymentTerm: string;
   customerClass: string;
   companyType: string;
+}
+
+interface MonthlyBalanceRecord {
+  monthLabel: string;
+  monthShort: string;
+  sortKey: number;
+  balance: number;
+  totalClaims: number;
 }
 
 interface PlanRow {
@@ -97,6 +115,7 @@ interface PlanRow {
   customerClass: string;
   companyType: string;
   insVia: 'unique' | 'code+bu' | 'code-only' | 'none';
+  balanceRecords: MonthlyBalanceRecord[];
 }
 
 interface UserOption {
@@ -154,6 +173,34 @@ function buildInsuranceMaps(insRows: Cfm_insurancecompanies[]): { byUnique: Map<
   return { byUnique, byCode };
 }
 
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** Keyed by company code + BU text (the Ref.html join rule for this table: cfm_businessunit's
+ * display text + cfm_companycode), one entry per cfm_companymonthlybalanceses row so a code
+ * with several monthly records keeps all of them. */
+function buildMonthlyBalanceMap(balRows: Cfm_companymonthlybalanceses[]): Map<string, MonthlyBalanceRecord[]> {
+  const map = new Map<string, MonthlyBalanceRecord[]>();
+  balRows.forEach((b) => {
+    const code = norm(b.cfm_companycode);
+    const bu = norm(formattedValue(b, '_cfm_businessunit_value'));
+    if (!code || !b.cfm_month) return;
+    const d = new Date(b.cfm_month);
+    if (isNaN(d.getTime())) return;
+    const rec: MonthlyBalanceRecord = {
+      monthLabel: `${MONTH_SHORT[d.getUTCMonth()]} ${d.getUTCFullYear()}`,
+      monthShort: MONTH_SHORT[d.getUTCMonth()],
+      sortKey: d.getUTCFullYear() * 12 + d.getUTCMonth(),
+      balance: N(b.cfm_balance),
+      totalClaims: N(b.cfm_totalclaims),
+    };
+    const key = `${code}|${bu}`;
+    const list = map.get(key);
+    if (list) list.push(rec);
+    else map.set(key, [rec]);
+  });
+  return map;
+}
+
 function resolveInsurance(
   code: string,
   bu: string,
@@ -169,7 +216,12 @@ function resolveInsurance(
   return { rec: null, via: 'none' };
 }
 
-function normaliseRow(row: Cfm_aragings, maps: { byUnique: Map<string, InsuranceRecord>; byCode: Map<string, InsuranceRecord> }): PlanRow {
+function normaliseRow(
+  row: Cfm_aragings,
+  maps: { byUnique: Map<string, InsuranceRecord>; byCode: Map<string, InsuranceRecord> },
+  balanceMap: Map<string, MonthlyBalanceRecord[]>,
+  currentYear: number
+): PlanRow {
   const collected = N(row.cfm_collectedamount);
   const tax = N(row.cfm_tax);
   const rejections = N(row.cfm_rejections);
@@ -180,6 +232,9 @@ function normaliseRow(row: Cfm_aragings, maps: { byUnique: Map<string, Insurance
   const buText = formattedValue(row, '_cfm_type_value');
   const unique = row.cfm_unique || '';
   const { rec, via } = resolveInsurance(code, buText, unique, maps);
+  const balanceRecords = (balanceMap.get(`${norm(code)}|${norm(buText)}`) || [])
+    .filter((b) => Math.floor(b.sortKey / 12) === currentYear)
+    .sort((a, b) => a.sortKey - b.sortKey);
   return {
     id: row.cfm_aragingid,
     code: code || '—',
@@ -212,6 +267,7 @@ function normaliseRow(row: Cfm_aragings, maps: { byUnique: Map<string, Insurance
     customerClass: rec ? rec.customerClass || '—' : '—',
     companyType: rec ? rec.companyType || '—' : '—',
     insVia: via,
+    balanceRecords,
   };
 }
 
@@ -280,7 +336,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
     setLoading(true);
     setLoadError(null);
     try {
-      const [aragingRows, insuranceRows, userRows] = await Promise.all([
+      const [aragingRows, insuranceRows, userRows, balanceRows] = await Promise.all([
         fetchAll<Cfm_aragings>(
           (skipToken) => Cfm_aragingsService.getAll({ select: ARAGING_SELECT, filter: 'statecode eq 0', maxPageSize: 5000, skipToken }),
           'Could not load AR aging.'
@@ -300,10 +356,17 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
             }),
           'Could not load users.'
         ),
+        fetchAll<Cfm_companymonthlybalanceses>(
+          (skipToken) =>
+            Cfm_companymonthlybalancesesService.getAll({ select: MONTHLY_BALANCE_SELECT, filter: 'statecode eq 0', maxPageSize: 5000, skipToken }),
+          'Could not load company monthly balances.'
+        ),
       ]);
 
       const maps = buildInsuranceMaps(insuranceRows);
-      const planRows = aragingRows.map((r) => normaliseRow(r, maps));
+      const balanceMap = buildMonthlyBalanceMap(balanceRows);
+      const currentYear = new Date().getFullYear();
+      const planRows = aragingRows.map((r) => normaliseRow(r, maps, balanceMap, currentYear));
       const userOptions = userRows.filter((u) => u.fullname).map((u) => ({ id: u.systemuserid, name: u.fullname! }));
 
       setRows(planRows);
@@ -359,6 +422,18 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
     return { matched, unmatched: regionRows.length - matched };
   }, [regionRows]);
 
+  /** One trailing table column per distinct month that actually has a matched Company
+   * Monthly Balances record this year — not a fixed Jan–Dec grid, so the table only grows
+   * as many columns as there is real data for. */
+  const monthColumns = useMemo(() => {
+    const byKey = new Map<number, { sortKey: number; monthShort: string; monthLabel: string }>();
+    regionRows.forEach((r) => r.balanceRecords.forEach((b) => {
+      if (!byKey.has(b.sortKey)) byKey.set(b.sortKey, b);
+    }));
+    return Array.from(byKey.values()).sort((a, b) => a.sortKey - b.sortKey);
+  }, [regionRows]);
+  const totalCols = 26 + monthColumns.length;
+
   const buOptions = useMemo(() => uniqueSorted(regionRows, (r) => r.buText), [regionRows]);
   const paymentOptions = useMemo(() => uniqueSorted(regionRows, (r) => r.paymentTerm), [regionRows]);
   const classOptions = useMemo(() => uniqueSorted(regionRows, (r) => r.customerClass), [regionRows]);
@@ -404,6 +479,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
       remDues: 0,
       remTarget: 0,
       notDue: 0,
+      monthTotals: {} as Record<number, number>,
     };
     filtered.forEach((r) => {
       t.early += r.early;
@@ -420,6 +496,9 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
       t.remDues += r.remDues;
       t.remTarget += r.remTarget;
       t.notDue += r.notDue;
+      r.balanceRecords.forEach((b) => {
+        t.monthTotals[b.sortKey] = (t.monthTotals[b.sortKey] || 0) + b.balance;
+      });
     });
     return t;
   }, [filtered]);
@@ -545,6 +624,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
       'Claims Issue',
       'Stopped',
       'Not Due',
+      ...monthColumns.map((c) => `Balance ${c.monthLabel}`),
     ];
     const lines = [header.join(',')].concat(
       filtered.map((r) =>
@@ -575,6 +655,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
           r.claims,
           r.stopped,
           r.notDue,
+          ...monthColumns.map((c) => r.balanceRecords.find((b) => b.sortKey === c.sortKey)?.balance ?? ''),
         ]
           .map(escapeForCsv)
           .join(',')
@@ -702,6 +783,15 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
     ) : (
       <td>
         <span className="cp-chip-miss">— not matched —</span>
+      </td>
+    );
+  }
+
+  function monthCell(r: PlanRow, sortKey: number) {
+    const rec = r.balanceRecords.find((b) => b.sortKey === sortKey);
+    return (
+      <td key={sortKey} className="cp-col-month cp-numeric">
+        {rec ? fmt(rec.balance) : <span className="cp-dim">—</span>}
       </td>
     );
   }
@@ -895,21 +985,26 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
                   <th>Bankruptcy</th>
                   <th>Claims issue</th>
                   <th>Stopped</th>
-                  <th className="cp-numeric">Not due</th>
+                  <th className={`cp-numeric${monthColumns.length ? ' cp-group-end' : ''}`}>Not due</th>
+                  {monthColumns.map((c) => (
+                    <th key={c.sortKey} className="cp-numeric cp-col-month" title={c.monthLabel}>
+                      {c.monthShort}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i} className="cp-skel-row">
-                      <td colSpan={26}>
+                      <td colSpan={totalCols}>
                         <div className="acc-skel" style={{ width: `${55 + ((i * 13) % 35)}%` }}></div>
                       </td>
                     </tr>
                   ))
                 ) : loadError ? (
                   <tr>
-                    <td colSpan={26}>
+                    <td colSpan={totalCols}>
                       <div className="acc-state">
                         <Icon className="fa-solid fa-triangle-exclamation" />
                         Couldn't load Collection Plan.
@@ -920,7 +1015,7 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
                   </tr>
                 ) : pageRows.length === 0 ? (
                   <tr>
-                    <td colSpan={26}>
+                    <td colSpan={totalCols}>
                       <div className="acc-state">
                         <Icon className="fa-solid fa-filter-circle-xmark" />
                         No records match the current filters.
@@ -965,7 +1060,8 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
                       {flagCell(r.bankruptcy)}
                       {flagCell(r.claims)}
                       {flagCell(r.stopped)}
-                      <td className="cp-col-amt cp-numeric">{fmt(r.notDue)}</td>
+                      <td className={`cp-col-amt cp-numeric${monthColumns.length ? ' cp-group-end' : ''}`}>{fmt(r.notDue)}</td>
+                      {monthColumns.map((c) => monthCell(r, c.sortKey))}
                     </tr>
                   ))
                 )}
@@ -994,7 +1090,14 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
                     <td className="cp-col-neg cp-numeric">{totals.remDues.toLocaleString('en-US')}</td>
                     <td className="cp-col-neg cp-numeric cp-group-end">{totals.remTarget.toLocaleString('en-US')}</td>
                     <td colSpan={4}></td>
-                    <td className="cp-col-amt cp-numeric">{totals.notDue.toLocaleString('en-US')}</td>
+                    <td className={`cp-col-amt cp-numeric${monthColumns.length ? ' cp-group-end' : ''}`}>
+                      {totals.notDue.toLocaleString('en-US')}
+                    </td>
+                    {monthColumns.map((c) => (
+                      <td key={c.sortKey} className="cp-col-month cp-numeric">
+                        {(totals.monthTotals[c.sortKey] || 0).toLocaleString('en-US')}
+                      </td>
+                    ))}
                   </tr>
                 </tfoot>
               )}
@@ -1059,6 +1162,12 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
                     <div className="cp-card-field">
                       <span className="cp-card-lbl">Company type</span>
                       <span className="cp-card-val">{r.companyType || '—'}</span>
+                    </div>
+                    <div className="cp-card-field">
+                      <span className="cp-card-lbl">Monthly balance</span>
+                      <span className="cp-card-val">
+                        {r.balanceRecords.length ? r.balanceRecords.map((b) => `${b.monthShort} ${fmt(b.balance)}`).join(' · ') : '—'}
+                      </span>
                     </div>
                     <div className="cp-card-field">
                       <span className="cp-card-lbl">Early payment</span>
@@ -1170,6 +1279,23 @@ export default function CollectionPlanPage({ region }: CollectionPlanPageProps) 
                   {stat('Company type', detailRow.companyType)}
                   {stat('Match status', INS_VIA_LABEL[detailRow.insVia])}
                 </div>
+              </div>
+
+              <div className="cp-detail-section">
+                <div className="cp-detail-section-title">Company monthly balance ({new Date().getFullYear()})</div>
+                {detailRow.balanceRecords.length ? (
+                  <div className="cp-detail-grid cp-detail-grid-3">
+                    {detailRow.balanceRecords.map((b) => (
+                      <div className="cp-stat" key={b.monthLabel}>
+                        <div className="cp-stat-label">{b.monthLabel}</div>
+                        <div className="cp-stat-value">{fmt(b.balance)}</div>
+                        <div className="cp-detail-sub">Total claims: {fmt(b.totalClaims)}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="cp-detail-sub">No matching Company Monthly Balances record (BU + Code) for this year.</div>
+                )}
               </div>
 
               <div className="cp-detail-section">
